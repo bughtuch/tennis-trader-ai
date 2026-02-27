@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAppStore } from "@/lib/store";
 
 /* ─── Reusable styled components ─── */
 
@@ -108,11 +109,10 @@ function Toggle({
 /* ─── Page ─── */
 
 export default function SettingsPage() {
-  /* Betfair connection */
-  const [isConnected, setIsConnected] = useState(false);
+  /* Betfair connection — wired to zustand store + real API */
+  const { isConnected, username: storedUsername, authError, authLoading, login, logout } = useAppStore();
   const [bfUsername, setBfUsername] = useState("");
   const [bfPassword, setBfPassword] = useState("");
-  const [connecting, setConnecting] = useState(false);
 
   /* Trading preferences */
   const [defaultStake, setDefaultStake] = useState("25");
@@ -128,17 +128,13 @@ export default function SettingsPage() {
   const [sessionTimeLimit, setSessionTimeLimit] = useState("4hr");
   const [warningPercent, setWarningPercent] = useState(75);
 
-  function handleConnect() {
+  async function handleConnect() {
     if (!bfUsername || !bfPassword) return;
-    setConnecting(true);
-    setTimeout(() => {
-      setIsConnected(true);
-      setConnecting(false);
-    }, 1500);
+    await login(bfUsername, bfPassword);
   }
 
   function handleDisconnect() {
-    setIsConnected(false);
+    logout();
     setBfUsername("");
     setBfPassword("");
   }
@@ -168,7 +164,7 @@ export default function SettingsPage() {
               <div className="bg-gray-800/30 rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Username</span>
-                  <span className="text-white">{bfUsername}</span>
+                  <span className="text-white">{storedUsername ?? bfUsername}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Session expires</span>
@@ -206,12 +202,17 @@ export default function SettingsPage() {
                   type="password"
                 />
               </div>
+              {authError && (
+                <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                  {authError}
+                </div>
+              )}
               <button
                 onClick={handleConnect}
-                disabled={connecting || !bfUsername || !bfPassword}
+                disabled={authLoading || !bfUsername || !bfPassword}
                 className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
-                {connecting ? (
+                {authLoading ? (
                   <span className="flex items-center justify-center gap-2">
                     <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

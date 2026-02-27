@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { useAppStore, type PriceSize } from "@/lib/store";
 
 /* ─── Mock Data ─── */
 
@@ -70,12 +72,153 @@ const STAKES = [5, 10, 25, 50, 100];
 
 /* ─── Breakpoints: mobile <768  |  tablet 768-1919  |  desktop 1920+ ─── */
 
-export default function TradingPage() {
+export default function TradingPageWrapper() {
+  return (
+    <Suspense fallback={<div className="min-h-screen pt-14 bg-[#030712] flex items-center justify-center"><div className="text-gray-500 text-sm">Loading...</div></div>}>
+      <TradingPage />
+    </Suspense>
+  );
+}
+
+function TradingPage() {
+  const searchParams = useSearchParams();
+  const marketId = searchParams.get("marketId");
+  const p1Name = searchParams.get("p1");
+  const p2Name = searchParams.get("p2");
+
   const [selectedStake, setSelectedStake] = useState(25);
   const [selectedPlayer, setSelectedPlayer] = useState<"player1" | "player2">("player1");
   const [activeTab, setActiveTab] = useState<"ladder" | "ai" | "positions">("ladder");
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const womBack = 62;
+  const {
+    isConnected,
+    marketBook,
+    fetchMarketBook,
+    placeTrade,
+    tradeLoading,
+    tradeError,
+    lastTradeSuccess,
+    clearTradeMessages,
+  } = useAppStore();
+
+  const isLive = isConnected && !!marketId && !!marketBook;
+
+  /* ─── Fetch live prices on 2-second interval ─── */
+  const fetchPrices = useCallback(() => {
+    if (isConnected && marketId) {
+      fetchMarketBook([marketId]);
+    }
+  }, [isConnected, marketId, fetchMarketBook]);
+
+  useEffect(() => {
+    fetchPrices();
+    intervalRef.current = setInterval(fetchPrices, 2000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [fetchPrices]);
+
+  /* ─── Show toast on trade success/error ─── */
+  useEffect(() => {
+    if (lastTradeSuccess) {
+      setToast({ message: lastTradeSuccess, type: "success" });
+      clearTradeMessages();
+      const t = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(t);
+    }
+    if (tradeError) {
+      setToast({ message: tradeError, type: "error" });
+      clearTradeMessages();
+      const t = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [lastTradeSuccess, tradeError, clearTradeMessages]);
+
+  /* ─── Build ladder from live data or mock ─── */
+  const selectedRunner = isLive
+    ? marketBook.runners?.[selectedPlayer === "player1" ? 0 : 1]
+    : null;
+
+  let liveLadder: LadderRow[] | null = null;
+  let livePlayerOdds = { player1: PLAYERS.player1.odds, player2: PLAYERS.player2.odds };
+
+  if (isLive && marketBook.runners) {
+    const r0 = marketBook.runners[0];
+    const r1 = marketBook.runners[1];
+    const bestBack0 = r0?.ex?.availableToBack?.[0]?.price ?? 0;
+    const bestBack1 = r1?.ex?.availableToBack?.[0]?.price ?? 0;
+    livePlayerOdds = { player1: bestBack0, player2: bestBack1 };
+
+    if (selectedRunner?.ex) {
+      const priceMap = new Map<number, { back: number; lay: number }>();
+      const backs = selectedRunner.ex.availableToBack ?? [];
+      const lays = selectedRunner.ex.availableToLay ?? [];
+
+      backs.forEach((ps: PriceSize) => {
+        const entry = priceMap.get(ps.price) ?? { back: 0, lay: 0 };
+        entry.back += ps.size;
+        priceMap.set(ps.price, entry);
+      });
+      lays.forEach((ps: PriceSize) => {
+        const entry = priceMap.get(ps.price) ?? { back: 0, lay: 0 };
+        entry.lay += ps.size;
+        priceMap.set(ps.price, entry);
+      });
+
+      const bestBackPrice = backs[0]?.price ?? 0;
+      const bestLayPrice = lays[0]?.price ?? 0;
+
+      liveLadder = Array.from(priceMap.entries())
+        .map(([price, sizes]) => ({
+          price,
+          backSize: Math.round(sizes.back),
+          laySize: Math.round(sizes.lay),
+          isLastTraded: price === bestBackPrice,
+          isBestBack: price === bestBackPrice,
+          isBestLay: price === bestLayPrice,
+        }))
+        .sort((a, b) => a.price - b.price);
+    }
+  }
+
+  const ladderData = liveLadder ?? LADDER_DATA;
+  const displayPlayers = {
+    player1: {
+      ...PLAYERS.player1,
+      name: p1Name ?? PLAYERS.player1.name,
+      short: p1Name?.split(" ").pop() ?? PLAYERS.player1.short,
+      odds: livePlayerOdds.player1,
+    },
+    player2: {
+      ...PLAYERS.player2,
+      name: p2Name ?? PLAYERS.player2.name,
+      short: p2Name?.split(" ").pop() ?? PLAYERS.player2.short,
+      odds: livePlayerOdds.player2,
+    },
+  };
+
+  /* ─── Handle trade click ─── */
+  async function handleTradeClick(price: number, side: "BACK" | "LAY") {
+    if (!isConnected || !marketId || !selectedRunner) return;
+    await placeTrade({
+      marketId,
+      selectionId: selectedRunner.selectionId,
+      side,
+      price,
+      size: selectedStake,
+    });
+  }
+
+  /* ─── WOM calculation ─── */
+  let womBack = 62;
+  if (isLive && selectedRunner?.ex) {
+    const totalBack = (selectedRunner.ex.availableToBack ?? []).reduce((s: number, p: PriceSize) => s + p.size, 0);
+    const totalLay = (selectedRunner.ex.availableToLay ?? []).reduce((s: number, p: PriceSize) => s + p.size, 0);
+    const total = totalBack + totalLay;
+    womBack = total > 0 ? Math.round((totalBack / total) * 100) : 50;
+  }
 
   /* ─── Shared sub-components rendered inline ─── */
 
@@ -86,13 +229,13 @@ export default function TradingPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold text-white">
-              {PLAYERS[selectedPlayer].flag} {PLAYERS[selectedPlayer].name}
+              {displayPlayers[selectedPlayer].flag} {displayPlayers[selectedPlayer].name}
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">Matched: £142,847</p>
           </div>
           <div className="text-right">
             <div className="text-xl md:text-2xl font-bold font-mono text-white">
-              {PLAYERS[selectedPlayer].odds}
+              {displayPlayers[selectedPlayer].odds.toFixed(2)}
             </div>
             <div className="text-[10px] text-green-400">▲ 0.04</div>
           </div>
@@ -128,7 +271,7 @@ export default function TradingPage() {
 
       {/* Ladder Body */}
       <div className="max-h-[480px] overflow-y-auto">
-        {LADDER_DATA.map((row) => (
+        {ladderData.map((row) => (
           <div
             key={row.price}
             className={`grid grid-cols-3 items-center border-b border-gray-800/20 ${
@@ -136,6 +279,8 @@ export default function TradingPage() {
             }`}
           >
             <button
+              onClick={() => row.backSize > 0 && handleTradeClick(row.price, "BACK")}
+              disabled={tradeLoading}
               className={`py-2 px-3 text-right text-sm font-mono transition-all ${
                 row.backSize > 0
                   ? row.isBestBack
@@ -157,6 +302,8 @@ export default function TradingPage() {
               )}
             </div>
             <button
+              onClick={() => row.laySize > 0 && handleTradeClick(row.price, "LAY")}
+              disabled={tradeLoading}
               className={`py-2 px-3 text-left text-sm font-mono transition-all ${
                 row.laySize > 0
                   ? row.isBestLay
@@ -360,6 +507,27 @@ export default function TradingPage() {
 
   return (
     <main className="min-h-screen pt-14 bg-[#030712] max-w-[100vw] overflow-x-hidden">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-sm font-medium shadow-lg transition-all ${
+          toast.type === "success"
+            ? "bg-green-500/90 text-white"
+            : "bg-red-500/90 text-white"
+        }`}>
+          {toast.message}
+        </div>
+      )}
+
+      {/* Demo Mode Banner */}
+      {!isLive && (
+        <div className="border-b border-amber-500/20 bg-amber-500/5">
+          <div className="px-2 md:px-4 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">DEMO</span>
+            <span className="text-xs text-amber-400/80">Demo mode — connect Betfair in Settings for live trading</span>
+          </div>
+        </div>
+      )}
+
       {/* ─── Top Bar: Player Selector ─── */}
       <div className="border-b border-gray-800/50 bg-gray-900/30 max-w-full overflow-hidden">
         <div className="px-2 md:px-4 py-2 md:py-3">
@@ -389,10 +557,10 @@ export default function TradingPage() {
                     : "bg-gray-900/50 text-gray-400 border border-gray-800/50"
                 }`}
               >
-                <span>{PLAYERS.player1.flag}</span>
-                <span className="hidden md:inline">{PLAYERS.player1.name}</span>
-                <span className="md:hidden">{PLAYERS.player1.short}</span>
-                <span className="font-mono font-bold text-white">{PLAYERS.player1.odds}</span>
+                <span>{displayPlayers.player1.flag}</span>
+                <span className="hidden md:inline">{displayPlayers.player1.name}</span>
+                <span className="md:hidden">{displayPlayers.player1.short}</span>
+                <span className="font-mono font-bold text-white">{displayPlayers.player1.odds.toFixed(2)}</span>
               </button>
               <span className="text-gray-600 text-[10px] md:text-xs font-medium">vs</span>
               <button
@@ -403,10 +571,10 @@ export default function TradingPage() {
                     : "bg-gray-900/50 text-gray-400 border border-gray-800/50"
                 }`}
               >
-                <span>{PLAYERS.player2.flag}</span>
-                <span className="hidden md:inline">{PLAYERS.player2.name}</span>
-                <span className="md:hidden">{PLAYERS.player2.short}</span>
-                <span className="font-mono font-bold text-white">{PLAYERS.player2.odds}</span>
+                <span>{displayPlayers.player2.flag}</span>
+                <span className="hidden md:inline">{displayPlayers.player2.name}</span>
+                <span className="md:hidden">{displayPlayers.player2.short}</span>
+                <span className="font-mono font-bold text-white">{displayPlayers.player2.odds.toFixed(2)}</span>
               </button>
             </div>
           </div>

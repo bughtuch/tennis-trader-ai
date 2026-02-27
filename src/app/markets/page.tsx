@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useAppStore, type MarketCatalogue } from "@/lib/store";
 
 /* ─── Mock Market Data ─── */
 
@@ -117,13 +118,78 @@ const MARKETS: Market[] = [
   },
 ];
 
+/* ─── Map Betfair API data to our Market card shape ─── */
+
+function mapBetfairToMarket(cat: MarketCatalogue): Market | null {
+  const runners = cat.runners;
+  if (!runners || runners.length < 2) return null;
+
+  const eventName = cat.event?.name ?? "";
+  const compName = cat.competition?.name ?? "";
+  const startTime = cat.marketStartTime ?? cat.event?.openDate;
+  const isLive = startTime ? new Date(startTime) <= new Date() : false;
+  const matched = cat.totalMatched ?? 0;
+
+  function formatVolume(v: number) {
+    if (v >= 1_000_000) return `£${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `£${Math.round(v / 1_000)}K`;
+    return `£${Math.round(v)}`;
+  }
+
+  function timeUntil(date: string) {
+    const ms = new Date(date).getTime() - Date.now();
+    if (ms <= 0) return null;
+    const hrs = Math.floor(ms / 3_600_000);
+    const mins = Math.floor((ms % 3_600_000) / 60_000);
+    if (hrs > 24) return `Tomorrow`;
+    if (hrs > 0) return `Starts in ${hrs}h ${mins}m`;
+    return `Starts in ${mins}m`;
+  }
+
+  // Guess tournament color from competition name
+  let tournamentColor = "bg-blue-500/15 text-blue-400";
+  if (/wta/i.test(compName)) tournamentColor = "bg-purple-500/15 text-purple-400";
+  else if (/500/i.test(compName)) tournamentColor = "bg-amber-500/15 text-amber-400";
+  else if (/250/i.test(compName)) tournamentColor = "bg-green-500/15 text-green-400";
+  else if (/1000/i.test(compName)) tournamentColor = "bg-pink-500/15 text-pink-400";
+
+  return {
+    id: cat.marketId,
+    tournament: compName || eventName || "Tennis",
+    tournamentColor,
+    surface: "Hard",
+    surfaceColor: "bg-sky-500/15 text-sky-400",
+    player1: { name: runners[0].runnerName, flag: "", odds: 0 },
+    player2: { name: runners[1].runnerName, flag: "", odds: 0 },
+    isLive,
+    startTime: isLive ? null : (startTime ? timeUntil(startTime) : null),
+    matchedVolume: formatVolume(matched),
+  };
+}
+
 type Filter = "all" | "live" | "upcoming";
 
 export default function MarketsPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
 
-  const filtered = MARKETS.filter((m) => {
+  const { isConnected, markets: liveMarkets, marketsLoading, fetchMarkets } = useAppStore();
+
+  const loadMarkets = useCallback(() => {
+    if (isConnected) fetchMarkets();
+  }, [isConnected, fetchMarkets]);
+
+  useEffect(() => {
+    loadMarkets();
+  }, [loadMarkets]);
+
+  // Use live data if connected and available, otherwise mock
+  const useLive = isConnected && liveMarkets.length > 0;
+  const displayMarkets: Market[] = useLive
+    ? liveMarkets.map(mapBetfairToMarket).filter((m): m is Market => m !== null)
+    : MARKETS;
+
+  const filtered = displayMarkets.filter((m) => {
     if (filter === "live" && !m.isLive) return false;
     if (filter === "upcoming" && m.isLive) return false;
     if (search) {
@@ -152,6 +218,16 @@ export default function MarketsPage() {
           <p className="text-sm text-gray-500">Trade tennis matches on Betfair Exchange</p>
         </div>
       </div>
+
+      {/* Connection Banner */}
+      {!isConnected && (
+        <div className="border-b border-amber-500/20 bg-amber-500/5">
+          <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">DEMO</span>
+            <span className="text-xs text-amber-400/80">Connect Betfair in Settings for live markets</span>
+          </div>
+        </div>
+      )}
 
       {/* Filters + Search */}
       <div className="border-b border-gray-800/50 bg-gray-900/20">
@@ -200,8 +276,22 @@ export default function MarketsPage() {
             />
           </div>
 
-          {/* Count */}
-          <p className="text-xs text-gray-500">{filtered.length} market{filtered.length !== 1 ? "s" : ""} available</p>
+          {/* Count + Refresh */}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-500">{filtered.length} market{filtered.length !== 1 ? "s" : ""} available</p>
+            {isConnected && (
+              <button
+                onClick={loadMarkets}
+                disabled={marketsLoading}
+                className="text-xs text-gray-500 hover:text-white flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <svg className={`w-3.5 h-3.5 ${marketsLoading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
