@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAppStore, type PriceSize } from "@/lib/store";
+import { calculateGreenUp, moveByTicks } from "@/lib/tradingMaths";
 
 /* ─── Mock Data ─── */
 
@@ -83,6 +84,23 @@ function TradingPage() {
   const [activeTab, setActiveTab] = useState<"ladder" | "ai" | "positions">("ladder");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /* ─── Premium feature state ─── */
+  const [sessionStart] = useState(() => Date.now());
+  const [sessionElapsed, setSessionElapsed] = useState(0);
+  const [mockSessionPnl] = useState(84.5);
+  const [shortcutsExpanded, setShortcutsExpanded] = useState(false);
+
+  const scoreData = {
+    set: 2, p1Sets: 1, p2Sets: 0,
+    p1Games: 3, p2Games: 2,
+    p1Points: "40", p2Points: "30",
+    server: "player1" as const,
+    setScores: [{ p1: 6, p2: 4 }],
+    alert: "BREAK PT" as string | null,
+  };
+
+  const last5Points = ["player1", "player1", "player2", "player1", "player2"] as const;
 
   /* AI Signals state */
   const [aiSignal, setAiSignal] = useState<{
@@ -329,6 +347,91 @@ function TradingPage() {
     womBack = total > 0 ? Math.round((totalBack / total) * 100) : 50;
   }
 
+  /* ─── Session timer tick ─── */
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSessionElapsed(Math.floor((Date.now() - sessionStart) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [sessionStart]);
+
+  /* ─── Computed: momentum score (-5 to +5) ─── */
+  const momentumScore = last5Points.reduce(
+    (acc, p) => acc + (p === "player1" ? 1 : -1), 0
+  );
+
+  /* ─── Computed: green-up result for mock position ─── */
+  const currentLayPrice = isLive && selectedRunner?.ex?.availableToLay?.[0]?.price
+    ? selectedRunner.ex.availableToLay[0].price
+    : displayPlayers[selectedPlayer].odds + 0.02;
+  const greenUpResult = calculateGreenUp(1.54, 50, "BACK", currentLayPrice);
+
+  /* ─── Computed: odds prediction (win/lose next game) ─── */
+  const currentOdds = displayPlayers[selectedPlayer].odds;
+  const isFavourite = currentOdds < 2.0;
+  const oddsIfWin = moveByTicks(currentOdds, isFavourite ? -3 : -4);
+  const oddsIfLose = moveByTicks(currentOdds, isFavourite ? 4 : 3);
+
+  /* ─── Computed: session display strings ─── */
+  const sessionMinutes = Math.floor(sessionElapsed / 60);
+  const sessionSeconds = sessionElapsed % 60;
+  const sessionTimeStr = `${sessionMinutes}m ${sessionSeconds.toString().padStart(2, "0")}s`;
+  const sessionRate = sessionMinutes > 0
+    ? (mockSessionPnl / (sessionElapsed / 3600)).toFixed(2)
+    : "—";
+
+  /* ─── Keyboard shortcuts ─── */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const stateRef = useRef<any>(null);
+  stateRef.current = { selectedStake, selectedPlayer, isLive, marketId, selectedRunner, ladderData, placeTrade, setToast, setSelectedStake, greenUpResult, currentLayPrice };
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      const s = stateRef.current;
+      const bestBack = s.ladderData.find((r: LadderRow) => r.isBestBack);
+      const bestLay = s.ladderData.find((r: LadderRow) => r.isBestLay);
+
+      switch (e.key.toLowerCase()) {
+        case "b":
+          if (bestBack) {
+            if (s.isLive && s.marketId && s.selectedRunner) {
+              s.placeTrade({ marketId: s.marketId, selectionId: s.selectedRunner.selectionId, side: "BACK", price: bestBack.price, size: s.selectedStake });
+            } else {
+              s.setToast({ message: `Demo: BACK £${s.selectedStake} @ ${bestBack.price.toFixed(2)}`, type: "success" });
+            }
+          }
+          break;
+        case "l":
+          if (bestLay) {
+            if (s.isLive && s.marketId && s.selectedRunner) {
+              s.placeTrade({ marketId: s.marketId, selectionId: s.selectedRunner.selectionId, side: "LAY", price: bestLay.price, size: s.selectedStake });
+            } else {
+              s.setToast({ message: `Demo: LAY £${s.selectedStake} @ ${bestLay.price.toFixed(2)}`, type: "success" });
+            }
+          }
+          break;
+        case "g":
+          if (s.isLive && s.marketId && s.selectedRunner) {
+            s.placeTrade({ marketId: s.marketId, selectionId: s.selectedRunner.selectionId, side: s.greenUpResult.greenUpSide, price: s.currentLayPrice, size: s.greenUpResult.greenUpStake });
+          } else {
+            s.setToast({ message: `Demo: GREEN UP — lock in £${s.greenUpResult.equalProfit.toFixed(2)}`, type: "success" });
+          }
+          break;
+        case "1": s.setSelectedStake(STAKES[0]); break;
+        case "2": s.setSelectedStake(STAKES[1]); break;
+        case "3": s.setSelectedStake(STAKES[2]); break;
+        case "4": s.setSelectedStake(STAKES[3]); break;
+        case "5": s.setSelectedStake(STAKES[4]); break;
+        case "escape": setShortcutsExpanded(false); break;
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   /* ─── Shared sub-components rendered inline ─── */
 
   const ladderPanel = (
@@ -439,6 +542,65 @@ function TradingPage() {
             <span className="text-green-400 font-mono font-semibold">+£12.50</span>
           </div>
         </div>
+      </div>
+
+      {/* Green Up Button */}
+      <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
+        <button
+          onClick={() => {
+            if (isLive && marketId && selectedRunner) {
+              placeTrade({
+                marketId,
+                selectionId: selectedRunner.selectionId,
+                side: greenUpResult.greenUpSide,
+                price: currentLayPrice,
+                size: greenUpResult.greenUpStake,
+              });
+            } else {
+              setToast({ message: `Demo: Would ${greenUpResult.greenUpSide} £${greenUpResult.greenUpStake.toFixed(2)} @ ${currentLayPrice.toFixed(2)} to lock in £${greenUpResult.equalProfit.toFixed(2)}`, type: "success" });
+            }
+          }}
+          disabled={tradeLoading}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-green-500/20"
+        >
+          GREEN UP: Lock in {greenUpResult.equalProfit >= 0 ? "+" : ""}£{greenUpResult.equalProfit.toFixed(2)}
+        </button>
+        <div className="mt-1.5 text-center text-[10px] text-gray-500">
+          {greenUpResult.greenUpSide} £{greenUpResult.greenUpStake.toFixed(2)} @ {currentLayPrice.toFixed(2)} | Win: £{greenUpResult.profitIfWin.toFixed(2)} / Lose: £{greenUpResult.profitIfLose.toFixed(2)}
+        </div>
+      </div>
+
+      {/* Odds Prediction Chart */}
+      <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
+        <div className="text-[10px] tracking-[0.15em] uppercase text-gray-500 font-medium mb-2">ODDS PREDICTION</div>
+        <svg viewBox="0 0 280 100" className="w-full h-auto">
+          {/* Current odds node (center left) */}
+          <circle cx="60" cy="50" r="20" fill="#1f2937" stroke="#374151" strokeWidth="1.5" />
+          <text x="60" y="47" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold" fontFamily="monospace">
+            {currentOdds.toFixed(2)}
+          </text>
+          <text x="60" y="58" textAnchor="middle" fill="#9ca3af" fontSize="7">NOW</text>
+
+          {/* Win path (upper) */}
+          <path d="M 80 42 C 130 20, 170 20, 200 25" fill="none" stroke="#22c55e" strokeWidth="1.5" strokeDasharray="4 3" />
+          <circle cx="220" cy="25" r="18" fill="#052e16" stroke="#22c55e" strokeWidth="1.5" />
+          <text x="220" y="22" textAnchor="middle" fill="#4ade80" fontSize="10" fontWeight="bold" fontFamily="monospace">
+            {oddsIfWin.toFixed(2)}
+          </text>
+          <text x="220" y="32" textAnchor="middle" fill="#22c55e" fontSize="6.5">WIN GAME</text>
+
+          {/* Lose path (lower) */}
+          <path d="M 80 58 C 130 80, 170 80, 200 75" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4 3" />
+          <circle cx="220" cy="75" r="18" fill="#2a0a0a" stroke="#ef4444" strokeWidth="1.5" />
+          <text x="220" y="72" textAnchor="middle" fill="#f87171" fontSize="10" fontWeight="bold" fontFamily="monospace">
+            {oddsIfLose.toFixed(2)}
+          </text>
+          <text x="220" y="82" textAnchor="middle" fill="#ef4444" fontSize="6.5">LOSE GAME</text>
+
+          {/* Fork arrows */}
+          <polygon points="196,23 200,25 196,27" fill="#22c55e" />
+          <polygon points="196,73 200,75 196,77" fill="#ef4444" />
+        </svg>
       </div>
     </div>
   );
@@ -783,6 +945,24 @@ function TradingPage() {
         </div>
       )}
 
+      {/* ─── Session Timer ─── */}
+      <div className="border-b border-gray-800/50 bg-gray-900/20">
+        <div className="px-2 md:px-4 py-1.5 flex items-center justify-center gap-3 text-xs">
+          <span className="flex items-center gap-1 text-gray-400">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" />
+            </svg>
+            {sessionTimeStr}
+          </span>
+          <span className="text-gray-700">|</span>
+          <span className={`font-mono font-semibold ${mockSessionPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+            {mockSessionPnl >= 0 ? "+" : ""}£{mockSessionPnl.toFixed(2)}
+          </span>
+          <span className="text-gray-700">|</span>
+          <span className="text-gray-500 font-mono">£{sessionRate}/hr</span>
+        </div>
+      </div>
+
       {/* ─── Top Bar: Player Selector ─── */}
       <div className="border-b border-gray-800/50 bg-gray-900/30 max-w-full overflow-hidden">
         <div className="px-2 md:px-4 py-2 md:py-3">
@@ -854,6 +1034,71 @@ function TradingPage() {
         </div>
       </div>
 
+      {/* ─── Momentum Meter ─── */}
+      <div className="border-b border-gray-800/50 bg-gray-900/20">
+        <div className="px-2 md:px-4 py-2 flex items-center justify-center gap-3">
+          <span className="text-[10px] text-blue-400 font-medium shrink-0">{displayPlayers.player1.short}</span>
+          <svg viewBox="0 0 200 60" className="w-40 md:w-48 h-auto shrink-0">
+            <defs>
+              <linearGradient id="momGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#3b82f6" />
+                <stop offset="50%" stopColor="#6b7280" />
+                <stop offset="100%" stopColor="#ec4899" />
+              </linearGradient>
+            </defs>
+            {/* Arc background */}
+            <path d="M 20 55 A 80 80 0 0 1 180 55" fill="none" stroke="#1f2937" strokeWidth="6" strokeLinecap="round" />
+            {/* Arc colored */}
+            <path d="M 20 55 A 80 80 0 0 1 180 55" fill="none" stroke="url(#momGrad)" strokeWidth="6" strokeLinecap="round" opacity="0.6" />
+            {/* Needle: angle maps -5→180° (left/P1) to +5→0° (right/P2) */}
+            {(() => {
+              const angle = 180 - ((momentumScore + 5) / 10) * 180;
+              const rad = (angle * Math.PI) / 180;
+              const cx = 100, cy = 55, len = 65;
+              const nx = cx + len * Math.cos(rad);
+              const ny = cy - len * Math.sin(rad);
+              return (
+                <>
+                  <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="white" strokeWidth="2" strokeLinecap="round" />
+                  <circle cx={cx} cy={cy} r="4" fill="white" />
+                </>
+              );
+            })()}
+            <text x="100" y="54" textAnchor="middle" fill="#9ca3af" fontSize="9" fontFamily="monospace">
+              {momentumScore > 0 ? `+${momentumScore}` : momentumScore}
+            </text>
+          </svg>
+          <span className="text-[10px] text-pink-400 font-medium shrink-0">{displayPlayers.player2.short}</span>
+        </div>
+      </div>
+
+      {/* ─── Live Score Overlay ─── */}
+      <div className="border-b border-gray-800/50 bg-gray-900/30">
+        <div className="px-2 md:px-4 py-2 flex items-center justify-center gap-2 flex-wrap text-xs">
+          <span className="text-gray-400 font-medium">Set {scoreData.set}:</span>
+          <span className="text-white font-semibold">
+            {displayPlayers.player1.short}{" "}
+            {scoreData.setScores.map((s, i) => (
+              <span key={i} className="text-gray-400 font-mono">{s.p1}-{s.p2}{i < scoreData.setScores.length - 1 ? ", " : ""}</span>
+            ))},{" "}
+            <span className="font-mono">{scoreData.p1Games}-{scoreData.p2Games}</span>
+          </span>
+          <span className="text-gray-500">({scoreData.p1Points}-{scoreData.p2Points})</span>
+          <span className="text-gray-700">|</span>
+          <span className="text-yellow-400">
+            🎾 {displayPlayers[scoreData.server].short} serving
+          </span>
+          {scoreData.alert && (
+            <>
+              <span className="text-gray-700">|</span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-[10px] font-semibold animate-pulse">
+                {scoreData.alert}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* ─── Tab Bar (mobile + tablet, hidden on desktop 1920+) ─── */}
       <div className="min-[1920px]:hidden sticky top-14 z-40 border-b border-gray-800/50 bg-gray-900/95 backdrop-blur-sm max-w-full">
         <div className="flex">
@@ -896,6 +1141,36 @@ function TradingPage() {
             {activeTab === "positions" && positionsPanel}
           </div>
         </div>
+      </div>
+      {/* ─── Keyboard Shortcuts Tooltip ─── */}
+      <div
+        className="fixed bottom-4 right-4 z-50"
+        onMouseEnter={() => setShortcutsExpanded(true)}
+        onMouseLeave={() => setShortcutsExpanded(false)}
+      >
+        {shortcutsExpanded ? (
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 shadow-xl min-w-[180px]">
+            <div className="text-[10px] tracking-[0.15em] uppercase text-gray-400 font-medium mb-2">SHORTCUTS</div>
+            <div className="space-y-1.5 text-xs">
+              {[
+                { key: "B", desc: "Back best price" },
+                { key: "L", desc: "Lay best price" },
+                { key: "G", desc: "Green up" },
+                { key: "1-5", desc: "Select stake" },
+                { key: "Esc", desc: "Close" },
+              ].map((s) => (
+                <div key={s.key} className="flex items-center gap-2">
+                  <kbd className="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-[10px] font-mono text-gray-300 min-w-[28px] text-center">{s.key}</kbd>
+                  <span className="text-gray-400">{s.desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-gray-900/90 border border-gray-700/50 rounded-lg px-3 py-1.5 text-xs text-gray-400 cursor-default shadow-lg">
+            ⌨ Shortcuts
+          </div>
+        )}
       </div>
     </main>
   );
