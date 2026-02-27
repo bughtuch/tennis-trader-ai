@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import Footer from "@/components/Footer";
 
 export default function ContactPage() {
   const [name, setName] = useState("");
@@ -95,13 +95,8 @@ export default function ContactPage() {
           </form>
         )}
 
-        {/* Footer link */}
-        <div className="mt-16 pt-8 border-t border-gray-800/50 text-center">
-          <Link href="/" className="text-sm text-gray-500 hover:text-gray-300 transition-colors">
-            &larr; Back to Home
-          </Link>
-        </div>
       </div>
+      <Footer />
     </main>
   );
 }

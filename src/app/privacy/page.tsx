@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Footer from "@/components/Footer";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -117,12 +118,8 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        <div className="mt-16 pt-8 border-t border-gray-800/50 text-center">
-          <Link href="/" className="text-sm text-gray-500 hover:text-gray-300 transition-colors">
-            &larr; Back to Home
-          </Link>
-        </div>
       </div>
+      <Footer />
     </main>
   );
 }
