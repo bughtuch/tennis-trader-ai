@@ -53,14 +53,6 @@ function generateLadderData(): LadderRow[] {
 
 const LADDER_DATA = generateLadderData();
 
-const AI_SIGNALS = [
-  { time: "14:32", signal: "BACK" as const, player: "Djokovic", price: 1.54, confidence: 87, status: "active" as const },
-  { time: "14:28", signal: "LAY" as const, player: "Alcaraz", price: 2.68, confidence: 72, status: "won" as const },
-  { time: "14:15", signal: "BACK" as const, player: "Djokovic", price: 1.62, confidence: 81, status: "won" as const },
-  { time: "14:02", signal: "LAY" as const, player: "Djokovic", price: 1.48, confidence: 68, status: "lost" as const },
-  { time: "13:55", signal: "BACK" as const, player: "Alcaraz", price: 2.8, confidence: 75, status: "won" as const },
-];
-
 const RECENT_TRADES = [
   { time: "14:32", type: "BACK" as const, price: 1.54, stake: 50, pnl: null as number | null },
   { time: "14:28", type: "LAY" as const, price: 2.68, stake: 25, pnl: 18.5 },
@@ -91,6 +83,24 @@ function TradingPage() {
   const [activeTab, setActiveTab] = useState<"ladder" | "ai" | "positions">("ladder");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /* AI Signals state */
+  const [aiSignal, setAiSignal] = useState<{
+    type: string; confidence: number; edgeSize: string;
+    analysis: string; model: string; timestamp: string;
+  } | null>(null);
+  const [aiSignalLoading, setAiSignalLoading] = useState(false);
+  const [aiSignalHistory, setAiSignalHistory] = useState<Array<{
+    type: string; confidence: number; edgeSize: string;
+    analysis: string; timestamp: string;
+  }>>([]);
+  const [signalType, setSignalType] = useState<"pre_match" | "in_play" | "edge_alert">("in_play");
+
+  /* AI Guardian state */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [guardianData, setGuardianData] = useState<any>(null);
+  const [guardianLoading, setGuardianLoading] = useState(false);
+  const [guardianExecuting, setGuardianExecuting] = useState(false);
 
   const {
     isConnected,
@@ -209,6 +219,105 @@ function TradingPage() {
       price,
       size: selectedStake,
     });
+  }
+
+  /* ─── AI Signals fetch ─── */
+  async function fetchAiSignal() {
+    setAiSignalLoading(true);
+    try {
+      const res = await fetch("/api/ai-signals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signalType,
+          matchContext: {
+            player1: displayPlayers.player1.name,
+            player2: displayPlayers.player2.name,
+            odds1: displayPlayers.player1.odds,
+            odds2: displayPlayers.player2.odds,
+            tournament: "ATP Tour",
+            surface: "Hard",
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.signal) {
+        setAiSignal(data.signal);
+        setAiSignalHistory((prev) => [data.signal, ...prev].slice(0, 5));
+      }
+    } catch {
+      /* network error */
+    } finally {
+      setAiSignalLoading(false);
+    }
+  }
+
+  /* ─── AI Guardian fetch ─── */
+  async function fetchGuardianAssessment() {
+    setGuardianLoading(true);
+    try {
+      const bestBack = displayPlayers[selectedPlayer].odds;
+      const bestLay = isLive && selectedRunner?.ex?.availableToLay?.[0]?.price
+        ? selectedRunner.ex.availableToLay[0].price
+        : bestBack + 0.02;
+
+      const res = await fetch("/api/ai-guardian", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "assessPosition",
+          entryPrice: 1.54,
+          entryStake: 50,
+          entrySide: "BACK",
+          currentBackPrice: bestBack,
+          currentLayPrice: bestLay,
+          matchContext: {
+            player: displayPlayers[selectedPlayer].name,
+            score: "6-4, 3-2",
+            server: displayPlayers.player1.name,
+            surface: "Hard",
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGuardianData(data);
+      }
+    } catch {
+      /* network error */
+    } finally {
+      setGuardianLoading(false);
+    }
+  }
+
+  async function executeGuardianOption(option: { hedgeSide: string; hedgePrice: number; hedgeStake: number }) {
+    if (!marketId || !selectedRunner) return;
+    setGuardianExecuting(true);
+    try {
+      const res = await fetch("/api/ai-guardian", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "executeOption",
+          marketId,
+          selectionId: selectedRunner.selectionId,
+          hedgeSide: option.hedgeSide,
+          hedgePrice: option.hedgePrice,
+          hedgeStake: option.hedgeStake,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setToast({ message: `Hedge placed: ${option.hedgeSide} £${option.hedgeStake} @ ${option.hedgePrice}`, type: "success" });
+        setGuardianData(null);
+      } else {
+        setToast({ message: data.error ?? "Failed to execute", type: "error" });
+      }
+    } catch {
+      setToast({ message: "Network error executing hedge", type: "error" });
+    } finally {
+      setGuardianExecuting(false);
+    }
   }
 
   /* ─── WOM calculation ─── */
@@ -339,63 +448,117 @@ function TradingPage() {
       <div className="px-4 py-3 border-b border-gray-800/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
             <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">AI SIGNALS</h2>
           </div>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-medium">LIVE</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 font-medium">CLAUDE</span>
         </div>
       </div>
-      <div className="p-4 border-b border-gray-800/50">
-        <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] tracking-[0.2em] uppercase text-gray-500">CURRENT SIGNAL</span>
-            <span className="text-xs text-gray-500">{AI_SIGNALS[0].time}</span>
-          </div>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-500/20 text-blue-400">{AI_SIGNALS[0].signal}</span>
-            <span className="text-white font-semibold">{AI_SIGNALS[0].player}</span>
-            <span className="text-gray-500">@</span>
-            <span className="font-mono font-bold text-white">{AI_SIGNALS[0].price}</span>
-          </div>
-          <div>
-            <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="text-gray-500">Confidence</span>
-              <span className="text-green-400 font-mono font-medium">{AI_SIGNALS[0].confidence}%</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-green-400 transition-all duration-500" style={{ width: `${AI_SIGNALS[0].confidence}%` }} />
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="p-4">
-        <h3 className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium mb-3">RECENT SIGNALS</h3>
-        <div className="space-y-2">
-          {AI_SIGNALS.slice(1).map((signal, i) => (
-            <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-800/30">
-              <div className="flex items-center gap-2">
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${signal.signal === "BACK" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"}`}>{signal.signal}</span>
-                <span className="text-xs text-gray-300">{signal.player}</span>
-                <span className="text-xs text-gray-500 font-mono">{signal.price}</span>
-              </div>
-              <span className={`text-[10px] font-medium ${signal.status === "won" ? "text-green-400" : signal.status === "lost" ? "text-red-400" : "text-yellow-400"}`}>{signal.status.toUpperCase()}</span>
-            </div>
+
+      {/* Signal type selector + Get Signal button */}
+      <div className="p-4 border-b border-gray-800/50 space-y-3">
+        <div className="flex gap-1.5">
+          {([
+            { id: "pre_match" as const, label: "Pre-Match" },
+            { id: "in_play" as const, label: "In-Play" },
+            { id: "edge_alert" as const, label: "Edge" },
+          ]).map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setSignalType(t.id)}
+              className={`flex-1 px-2 py-1.5 rounded-lg text-[10px] font-medium transition-all ${
+                signalType === t.id
+                  ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
+                  : "bg-gray-800/30 text-gray-500 border border-transparent hover:text-gray-300"
+              }`}
+            >
+              {t.label}
+            </button>
           ))}
         </div>
-        <div className="mt-4 pt-4 border-t border-gray-800/50 grid grid-cols-3 gap-3">
-          <div className="text-center">
-            <div className="text-lg font-bold text-green-400">73%</div>
-            <div className="text-[10px] text-gray-500 uppercase tracking-wider">Win Rate</div>
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-bold text-white">142</div>
-            <div className="text-[10px] text-gray-500 uppercase tracking-wider">Signals</div>
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-bold text-blue-400">+£847</div>
-            <div className="text-[10px] text-gray-500 uppercase tracking-wider">Profit</div>
+        <button
+          onClick={fetchAiSignal}
+          disabled={aiSignalLoading}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          {aiSignalLoading ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Analysing...
+            </span>
+          ) : (
+            "Get AI Signal"
+          )}
+        </button>
+      </div>
+
+      {/* Current signal display */}
+      {aiSignal && (
+        <div className="p-4 border-b border-gray-800/50">
+          <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                  aiSignal.edgeSize === "strong" ? "bg-green-500/20 text-green-400" :
+                  aiSignal.edgeSize === "moderate" ? "bg-blue-500/20 text-blue-400" :
+                  aiSignal.edgeSize === "mild" ? "bg-yellow-500/20 text-yellow-400" :
+                  "bg-gray-500/20 text-gray-400"
+                }`}>
+                  {aiSignal.edgeSize.toUpperCase()}
+                </span>
+                <span className="text-[10px] text-gray-500 uppercase">{aiSignal.type.replace("_", " ")}</span>
+              </div>
+              <span className="text-[10px] text-gray-600">{aiSignal.model.split("-").slice(1, 3).join(" ")}</span>
+            </div>
+            <p className="text-xs text-gray-300 leading-relaxed">{aiSignal.analysis}</p>
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="text-gray-500">Confidence</span>
+                <span className="text-green-400 font-mono font-medium">{aiSignal.confidence}%</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-blue-500 to-green-400 transition-all duration-500"
+                  style={{ width: `${aiSignal.confidence}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* Recent signals history */}
+      <div className="p-4">
+        {aiSignalHistory.length > 0 ? (
+          <>
+            <h3 className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium mb-3">RECENT SIGNALS</h3>
+            <div className="space-y-2">
+              {aiSignalHistory.map((sig, i) => (
+                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-800/30">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                      sig.edgeSize === "strong" ? "bg-green-500/20 text-green-400" :
+                      sig.edgeSize === "moderate" ? "bg-blue-500/20 text-blue-400" :
+                      "bg-yellow-500/20 text-yellow-400"
+                    }`}>
+                      {sig.edgeSize.toUpperCase()}
+                    </span>
+                    <span className="text-xs text-gray-300 uppercase">{sig.type.replace("_", " ")}</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-gray-500">{sig.confidence}%</span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-6">
+            <div className="text-gray-600 text-sm mb-1">No signals yet</div>
+            <div className="text-gray-700 text-xs">Click &quot;Get AI Signal&quot; to analyse this match</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -479,27 +642,119 @@ function TradingPage() {
         <div className="px-4 py-3 border-b border-gray-800/50">
           <div className="flex items-center justify-between">
             <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">AI GUARDIAN</h2>
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              <span className="text-[10px] text-green-400">Active</span>
-            </div>
+            {guardianData ? (
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                guardianData.urgency === "high" ? "bg-red-500/10 text-red-400" :
+                guardianData.urgency === "medium" ? "bg-amber-500/10 text-amber-400" :
+                guardianData.urgency === "low" ? "bg-yellow-500/10 text-yellow-400" :
+                "bg-green-500/10 text-green-400"
+              }`}>
+                {guardianData.urgency === "none" ? "SAFE" : guardianData.urgency.toUpperCase()}
+              </span>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
+                <span className="text-[10px] text-gray-500">Ready</span>
+              </div>
+            )}
           </div>
         </div>
         <div className="p-4 space-y-3">
-          {[
-            { label: "Stop Loss", value: "-£50.00" },
-            { label: "Take Profit", value: "+£200.00" },
-            { label: "Max Exposure", value: "£500.00" },
-          ].map((item) => (
-            <div key={item.label} className="flex items-center justify-between">
-              <span className="text-xs text-gray-400">{item.label}</span>
-              <span className="text-xs text-white font-mono">{item.value}</span>
+          {!guardianData ? (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-500">Assess your current position for AI-powered exit strategies.</p>
+              <button
+                onClick={fetchGuardianAssessment}
+                disabled={guardianLoading}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                {guardianLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Assessing...
+                  </span>
+                ) : (
+                  "Assess Position"
+                )}
+              </button>
             </div>
-          ))}
-          <div className="w-full h-1.5 rounded-full bg-gray-800 overflow-hidden mt-2">
-            <div className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-400" style={{ width: "25%" }} />
-          </div>
-          <div className="text-[10px] text-gray-500 text-center">25% of session limit used</div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-300">{guardianData.statusMessage}</p>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Current P&amp;L</span>
+                <span className={`font-mono font-semibold ${guardianData.currentPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {guardianData.currentPnl >= 0 ? "+" : ""}£{guardianData.currentPnl.toFixed(2)}
+                </span>
+              </div>
+              {(["A", "B", "C", "D"] as const).map((key) => {
+                const opt = guardianData.options?.[key];
+                if (!opt) return null;
+                const isRecommended = guardianData.aiRecommendation === key;
+                const canExecute = key !== "D" && (key === "A" || key === "C" || (key === "B" && opt.canBreakEven));
+                return (
+                  <div
+                    key={key}
+                    className={`rounded-xl p-3 border ${
+                      isRecommended ? "border-blue-500/40 bg-blue-500/5" : "border-gray-800/50 bg-gray-800/20"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-bold text-gray-500">{key}</span>
+                      <span className="text-xs font-medium text-white">{opt.label}</span>
+                      {isRecommended && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-semibold">AI PICK</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-400 mb-2">{opt.description}</p>
+                    {key === "A" && opt.equalProfit !== undefined && (
+                      <div className="text-[11px] text-gray-500">
+                        Lock in: <span className={`font-mono ${opt.equalProfit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {opt.equalProfit >= 0 ? "+" : ""}£{opt.equalProfit.toFixed(2)}
+                        </span>
+                        {" "}({opt.greenUpSide} £{opt.greenUpStake?.toFixed(2)} @ {opt.greenUpPrice?.toFixed(2)})
+                      </div>
+                    )}
+                    {key === "C" && (
+                      <div className="text-[11px] text-gray-500">
+                        Best: <span className="text-green-400 font-mono">+£{opt.bestCase?.toFixed(2)}</span>
+                        {" / "}Worst: <span className="text-red-400 font-mono">-£{Math.abs(opt.worstCase ?? 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {key === "D" && opt.available && (
+                      <div className="text-[11px] text-gray-500">
+                        Recovery: <span className="text-blue-400 font-mono">{opt.recoveryChance}%</span>
+                        {opt.waitGames !== undefined && <span> · Wait {opt.waitGames} games</span>}
+                      </div>
+                    )}
+                    {canExecute && isConnected && marketId && (
+                      <button
+                        onClick={() => executeGuardianOption({
+                          hedgeSide: opt.greenUpSide ?? opt.hedgeSide,
+                          hedgePrice: opt.greenUpPrice ?? opt.hedgePrice,
+                          hedgeStake: opt.greenUpStake ?? opt.hedgeStake,
+                        })}
+                        disabled={guardianExecuting}
+                        className="mt-2 w-full py-1.5 rounded-lg text-[11px] font-medium text-white bg-blue-500/20 border border-blue-500/30 hover:bg-blue-500/30 disabled:opacity-40 transition-all"
+                      >
+                        {guardianExecuting ? "Placing..." : "Execute"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <button
+                onClick={() => { setGuardianData(null); fetchGuardianAssessment(); }}
+                disabled={guardianLoading}
+                className="w-full py-2 rounded-xl text-xs font-medium text-gray-400 bg-gray-800/30 border border-gray-700/50 hover:bg-gray-800/50 hover:text-gray-300 disabled:opacity-40 transition-all"
+              >
+                Re-assess Position
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
