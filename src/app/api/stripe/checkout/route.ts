@@ -1,0 +1,58 @@
+import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
+import { createServerClient } from "@/lib/supabase-server";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2026-02-25.clover",
+});
+
+export async function POST(req: NextRequest) {
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Not authenticated" },
+        { status: 401 }
+      );
+    }
+
+    const origin = req.headers.get("origin") ?? "http://localhost:3000";
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [
+        {
+          price: process.env.STRIPE_PRICE_ID!,
+          quantity: 1,
+        },
+      ],
+      success_url: `${origin}/settings?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/settings`,
+      customer_email: user.email,
+      metadata: {
+        userId: user.id,
+        tier: "founding_member",
+      },
+      subscription_data: {
+        metadata: {
+          userId: user.id,
+          tier: "founding_member",
+        },
+      },
+    });
+
+    return NextResponse.json({ url: session.url });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to create checkout",
+      },
+      { status: 500 }
+    );
+  }
+}

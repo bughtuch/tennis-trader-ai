@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAppStore } from "@/lib/store";
 import { createClient } from "@/lib/supabase";
 
@@ -109,7 +110,15 @@ function Toggle({
 
 /* ─── Page ─── */
 
-export default function SettingsPage() {
+export default function SettingsPageWrapper() {
+  return (
+    <Suspense fallback={<div className="min-h-screen pt-14 bg-[#030712] flex items-center justify-center"><div className="text-gray-500 text-sm">Loading...</div></div>}>
+      <SettingsPage />
+    </Suspense>
+  );
+}
+
+function SettingsPage() {
   /* Betfair connection — wired to zustand store + real API */
   const { isConnected, username: storedUsername, authError, authLoading, login, logout } = useAppStore();
   const [bfUsername, setBfUsername] = useState("");
@@ -128,6 +137,12 @@ export default function SettingsPage() {
   const [maxSingleTrade, setMaxSingleTrade] = useState("100");
   const [sessionTimeLimit, setSessionTimeLimit] = useState("4hr");
   const [warningPercent, setWarningPercent] = useState(75);
+
+  /* Subscription */
+  const searchParams = useSearchParams();
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string>("inactive");
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const showSubscribePrompt = searchParams.get("subscribe") === "true";
 
   /* Save status */
   const [saving, setSaving] = useState(false);
@@ -155,6 +170,7 @@ export default function SettingsPage() {
       setAiSignals(data.ai_signals_enabled ?? true);
       setDailyLossLimit(String(data.daily_loss_limit ?? 100));
       setMaxSingleTrade(String(data.max_single_trade ?? 100));
+      setSubscriptionStatus(data.subscription_status ?? "inactive");
       setProfileLoaded(true);
     }
   }, []);
@@ -217,6 +233,23 @@ export default function SettingsPage() {
     setSaving(false);
     setSaveMessage(error ? error.message : "Risk limits saved");
     if (!error) setTimeout(() => setSaveMessage(null), 3000);
+  }
+
+  async function handleSubscribe() {
+    setCheckoutLoading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", { method: "POST" });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setSaveMessage(data.error ?? "Failed to start checkout");
+        setCheckoutLoading(false);
+      }
+    } catch {
+      setSaveMessage("Network error starting checkout");
+      setCheckoutLoading(false);
+    }
   }
 
   async function handleConnect() {
@@ -336,39 +369,76 @@ export default function SettingsPage() {
         </Card>
 
         {/* ─── Section 2: Subscription ─── */}
-        <Card title="Subscription">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-medium text-white">Founding Member</div>
-                <div className="text-xs text-gray-500 mt-0.5">£37/month</div>
-              </div>
-              <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
-                Active
-              </span>
-            </div>
-            <div className="bg-gray-800/30 rounded-xl p-3 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-500">Plan</span>
-                <span className="text-white">Founding Member</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-500">Price</span>
-                <span className="text-white">£37/month <span className="text-gray-600 line-through ml-1">£47</span></span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-500">Next billing</span>
-                <span className="text-gray-300">27 March 2026</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-500">Member since</span>
-                <span className="text-gray-300">15 January 2026</span>
-              </div>
-            </div>
-            <button className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-300 bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800 hover:text-white transition-all">
-              Manage Subscription
-            </button>
+        {showSubscribePrompt && subscriptionStatus !== "active" && (
+          <div className="px-4 py-3 rounded-xl text-sm font-medium bg-amber-500/10 border border-amber-500/20 text-amber-400">
+            Subscribe to access Markets and Trading.
           </div>
+        )}
+        <Card title="Subscription">
+          {subscriptionStatus === "active" ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-white">Founding Member</div>
+                  <div className="text-xs text-gray-500 mt-0.5">£37/month</div>
+                </div>
+                <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+                  Active
+                </span>
+              </div>
+              <div className="bg-gray-800/30 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Plan</span>
+                  <span className="text-white">Founding Member</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Price</span>
+                  <span className="text-white">£37/month <span className="text-gray-600 line-through ml-1">£47</span></span>
+                </div>
+              </div>
+              <button className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-300 bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800 hover:text-white transition-all">
+                Manage Subscription
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-white">No active subscription</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Subscribe to unlock all features</div>
+                </div>
+                <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-gray-700/50 text-gray-400 border border-gray-600/30">
+                  {subscriptionStatus === "cancelled" ? "Cancelled" : "Inactive"}
+                </span>
+              </div>
+              <div className="bg-gray-800/30 rounded-xl p-4 text-center space-y-2">
+                <div className="flex items-center justify-center gap-3 mb-1">
+                  <span className="text-lg text-gray-500 line-through">£47</span>
+                  <span className="text-3xl font-bold text-white">£37</span>
+                  <span className="text-gray-400 text-sm">/month</span>
+                </div>
+                <p className="text-xs text-gray-500">Founding member pricing — locked in forever</p>
+              </div>
+              <div className="space-y-2 text-xs text-gray-400">
+                {["AI-powered trade signals", "Professional trading ladder", "Real-time Betfair data", "AI Guardian risk management", "7-day free trial"].map((f) => (
+                  <div key={f} className="flex items-center gap-2">
+                    <svg className="w-3.5 h-3.5 text-green-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    {f}
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={handleSubscribe}
+                disabled={checkoutLoading}
+                className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 transition-all hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]"
+              >
+                {checkoutLoading ? "Redirecting to Stripe..." : "Subscribe — £37/month"}
+              </button>
+              <p className="text-center text-[11px] text-gray-600">7-day free trial. Cancel anytime.</p>
+            </div>
+          )}
         </Card>
 
         {/* ─── Section 3: Trading Preferences ─── */}
