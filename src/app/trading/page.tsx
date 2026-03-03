@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAppStore, type PriceSize } from "@/lib/store";
 import { calculateGreenUp, moveByTicks } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
@@ -62,12 +63,48 @@ export default function TradingPageWrapper() {
 
 function TradingPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const marketId = searchParams.get("marketId");
   const p1Name = searchParams.get("p1");
   const p2Name = searchParams.get("p2");
   const p1Flag = searchParams.get("p1Flag") ?? "";
   const p2Flag = searchParams.get("p2Flag") ?? "";
   const tournament = searchParams.get("tournament") ?? "Tennis";
+
+  /* ─── Restore last market from localStorage if no URL params ─── */
+  const [noMarket, setNoMarket] = useState(false);
+  useEffect(() => {
+    if (!marketId) {
+      try {
+        const saved = localStorage.getItem("lastMarket");
+        if (saved) {
+          const m = JSON.parse(saved);
+          const params = new URLSearchParams();
+          if (m.marketId) params.set("marketId", m.marketId);
+          if (m.p1) params.set("p1", m.p1);
+          if (m.p2) params.set("p2", m.p2);
+          if (m.p1Flag) params.set("p1Flag", m.p1Flag);
+          if (m.p2Flag) params.set("p2Flag", m.p2Flag);
+          if (m.tournament) params.set("tournament", m.tournament);
+          router.replace(`/trading?${params.toString()}`);
+          return;
+        }
+      } catch { /* invalid JSON or SSR */ }
+      setNoMarket(true);
+    }
+  }, [marketId, router]);
+
+  /* ─── Save market to localStorage when market data is present ─── */
+  useEffect(() => {
+    if (marketId && p1Name && p2Name) {
+      try {
+        localStorage.setItem(
+          "lastMarket",
+          JSON.stringify({ marketId, p1: p1Name, p2: p2Name, p1Flag, p2Flag, tournament })
+        );
+      } catch { /* SSR guard */ }
+    }
+  }, [marketId, p1Name, p2Name, p1Flag, p2Flag, tournament]);
 
   const [selectedStake, setSelectedStake] = useState(25);
   const [selectedPlayer, setSelectedPlayer] = useState<"player1" | "player2">("player1");
@@ -1400,6 +1437,23 @@ function TradingPage() {
 
   const p1Pnl = getUnrealizedPnl("player1");
   const p2Pnl = getUnrealizedPnl("player2");
+
+  /* ─── No market selected ─── */
+  if (noMarket) {
+    return (
+      <main className="min-h-screen pt-14 bg-[#030712] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="text-gray-500 text-sm">No market selected</div>
+          <Link
+            href="/markets"
+            className="inline-block px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 transition-all"
+          >
+            Browse Markets
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen pt-14 bg-[#030712] max-w-[100vw] overflow-x-hidden">

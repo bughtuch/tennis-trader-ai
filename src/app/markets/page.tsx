@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 
 /* ─── Types ─── */
@@ -133,12 +134,31 @@ function mapBetfairToMarket(
 
 type Filter = "all" | "live" | "upcoming";
 
+interface LastMarket {
+  marketId: string;
+  p1: string;
+  p2: string;
+  p1Flag?: string;
+  p2Flag?: string;
+  tournament?: string;
+}
+
 export default function MarketsPage() {
+  const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [markets, setMarkets] = useState<Market[]>([]);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [lastMarket, setLastMarket] = useState<LastMarket | null>(null);
+
+  // Check for saved market on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("lastMarket");
+      if (saved) setLastMarket(JSON.parse(saved));
+    } catch { /* ignore */ }
+  }, []);
 
   const loadMarkets = useCallback(async () => {
     setLoading(true);
@@ -276,6 +296,39 @@ export default function MarketsPage() {
             <span className="text-xs text-amber-400/80">
               Connect Betfair in Settings for live markets
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Resume Last Market */}
+      {lastMarket && (
+        <div className="border-b border-gray-800/50 bg-gray-900/20">
+          <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-2">
+            <button
+              onClick={() => {
+                const params = new URLSearchParams();
+                params.set("marketId", lastMarket.marketId);
+                params.set("p1", lastMarket.p1);
+                params.set("p2", lastMarket.p2);
+                if (lastMarket.p1Flag) params.set("p1Flag", lastMarket.p1Flag);
+                if (lastMarket.p2Flag) params.set("p2Flag", lastMarket.p2Flag);
+                if (lastMarket.tournament) params.set("tournament", lastMarket.tournament);
+                router.push(`/trading?${params.toString()}`);
+              }}
+              className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/15 transition-all group"
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span className="text-blue-400 font-medium">
+                  Resume: {lastMarket.p1} vs {lastMarket.p2}
+                </span>
+              </div>
+              <svg className="w-4 h-4 text-blue-400/60 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </div>
       )}

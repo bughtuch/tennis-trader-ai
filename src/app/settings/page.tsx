@@ -120,9 +120,39 @@ export default function SettingsPageWrapper() {
 
 function SettingsPage() {
   /* Betfair connection — wired to zustand store + real API */
-  const { isConnected, username: storedUsername, authError, authLoading, login, logout } = useAppStore();
+  const { isConnected, username: storedUsername, authError, authLoading, login, logout, sessionExpiry, restoreSession } = useAppStore();
   const [bfUsername, setBfUsername] = useState("");
   const [bfPassword, setBfPassword] = useState("");
+
+  /* Session expiry countdown */
+  const [expiryText, setExpiryText] = useState<string | null>(null);
+  const [isExpired, setIsExpired] = useState(false);
+
+  useEffect(() => {
+    restoreSession();
+  }, [restoreSession]);
+
+  useEffect(() => {
+    if (!sessionExpiry) {
+      setExpiryText(null);
+      return;
+    }
+    function updateCountdown() {
+      const ms = new Date(sessionExpiry!).getTime() - Date.now();
+      if (ms <= 0) {
+        setExpiryText("Session expired");
+        setIsExpired(true);
+        return;
+      }
+      setIsExpired(false);
+      const hrs = Math.floor(ms / 3_600_000);
+      const mins = Math.floor((ms % 3_600_000) / 60_000);
+      setExpiryText(`${hrs}h ${mins}m remaining`);
+    }
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 30_000);
+    return () => clearInterval(timer);
+  }, [sessionExpiry]);
 
   /* Trading preferences */
   const [defaultStake, setDefaultStake] = useState("25");
@@ -257,8 +287,8 @@ function SettingsPage() {
     await login(bfUsername, bfPassword);
   }
 
-  function handleDisconnect() {
-    logout();
+  async function handleDisconnect() {
+    await logout();
     setBfUsername("");
     setBfPassword("");
   }
@@ -308,7 +338,9 @@ function SettingsPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Session expires</span>
-                  <span className="text-gray-300">8 hours</span>
+                  <span className={isExpired ? "text-red-400 font-medium" : "text-gray-300"}>
+                    {expiryText ?? "Unknown"}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">API status</span>

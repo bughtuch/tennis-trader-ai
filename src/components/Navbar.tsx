@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { useAppStore } from "@/lib/store";
 import type { User } from "@supabase/supabase-js";
 
 const navLinks = [
@@ -16,6 +17,9 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const { isConnected, restoreSession } = useAppStore();
+  const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionRestored = useRef(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -32,6 +36,44 @@ export default function Navbar() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Restore Betfair session on mount (once)
+  useEffect(() => {
+    if (!sessionRestored.current && user) {
+      sessionRestored.current = true;
+      restoreSession();
+    }
+  }, [user, restoreSession]);
+
+  // Keep-alive interval (every 20 minutes) when connected
+  const runKeepAlive = useCallback(async () => {
+    try {
+      const res = await fetch("/api/betfair/keep-alive", { method: "POST" });
+      const data = await res.json();
+      if (!data.success) {
+        useAppStore.getState().restoreSession();
+      }
+    } catch {
+      // Network error — will retry next interval
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isConnected) {
+      keepAliveRef.current = setInterval(runKeepAlive, 20 * 60 * 1000);
+    } else {
+      if (keepAliveRef.current) {
+        clearInterval(keepAliveRef.current);
+        keepAliveRef.current = null;
+      }
+    }
+    return () => {
+      if (keepAliveRef.current) {
+        clearInterval(keepAliveRef.current);
+        keepAliveRef.current = null;
+      }
+    };
+  }, [isConnected, runKeepAlive]);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -87,9 +129,18 @@ export default function Navbar() {
 
           {/* Right Side */}
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span>Live</span>
+            <div className="hidden sm:flex items-center gap-2 text-xs">
+              {isConnected ? (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-green-400">Betfair</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-gray-500" />
+                  <span className="text-gray-500">Offline</span>
+                </>
+              )}
             </div>
 
             {user ? (

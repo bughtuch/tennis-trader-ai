@@ -92,6 +92,7 @@ export async function POST(req: NextRequest) {
           .update({
             betfair_connected: true,
             betfair_session_token: data.token,
+            betfair_connected_at: new Date().toISOString(),
           })
           .eq("id", user.id);
       }

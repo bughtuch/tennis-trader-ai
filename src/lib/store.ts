@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { createClient } from "@/lib/supabase";
 
 /* ─── Types ─── */
 
@@ -56,8 +57,11 @@ interface AppState {
   username: string | null;
   authError: string | null;
   authLoading: boolean;
+  sessionExpiry: string | null;
+  sessionLoading: boolean;
   login: (username: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  restoreSession: () => Promise<void>;
 
   // Markets
   markets: MarketCatalogue[];
@@ -90,6 +94,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   username: null,
   authError: null,
   authLoading: false,
+  sessionExpiry: null,
+  sessionLoading: false,
 
   login: async (username, password) => {
     set({ authLoading: true, authError: null });
@@ -101,7 +107,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       const data = await res.json();
       if (data.success) {
-        set({ isConnected: true, username, authLoading: false });
+        const expiry = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+        set({ isConnected: true, username, authLoading: false, sessionExpiry: expiry });
         return true;
       }
       set({ authError: data.error ?? "Authentication failed", authLoading: false });
@@ -112,14 +119,85 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  logout: () => {
+  restoreSession: async () => {
+    set({ sessionLoading: true });
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        set({ sessionLoading: false });
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("betfair_connected, betfair_session_token, betfair_connected_at, betfair_username")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.betfair_connected || !profile?.betfair_session_token) {
+        set({ isConnected: false, sessionLoading: false });
+        return;
+      }
+
+      // Check if session is expired (8 hours from connected_at)
+      const connectedAt = profile.betfair_connected_at
+        ? new Date(profile.betfair_connected_at).getTime()
+        : 0;
+      const expiresAt = connectedAt + 8 * 60 * 60 * 1000;
+      const now = Date.now();
+
+      if (connectedAt > 0 && now > expiresAt) {
+        // Session expired — clear it
+        set({ isConnected: false, sessionExpiry: null, sessionLoading: false });
+        await supabase
+          .from("profiles")
+          .update({ betfair_connected: false, betfair_session_token: null, betfair_connected_at: null })
+          .eq("id", user.id);
+        return;
+      }
+
+      set({
+        isConnected: true,
+        username: profile.betfair_username ?? "Connected",
+        sessionExpiry: connectedAt > 0 ? new Date(expiresAt).toISOString() : null,
+        sessionLoading: false,
+      });
+    } catch {
+      set({ sessionLoading: false });
+    }
+  },
+
+  logout: async () => {
     set({
       isConnected: false,
       username: null,
       authError: null,
+      sessionExpiry: null,
       markets: [],
       marketBook: null,
     });
+    // Clear localStorage market
+    try { localStorage.removeItem("lastMarket"); } catch { /* SSR guard */ }
+    // Clear Supabase profile fields
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from("profiles")
+          .update({
+            betfair_connected: false,
+            betfair_session_token: null,
+            betfair_connected_at: null,
+          })
+          .eq("id", user.id);
+      }
+    } catch { /* non-critical */ }
+    // Delete betfair_session cookie via API
+    try {
+      await fetch("/api/betfair/keep-alive", { method: "DELETE" });
+    } catch { /* non-critical */ }
   },
 
   // ─── Markets ───
