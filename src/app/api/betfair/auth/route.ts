@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    console.log(`[Betfair Auth] APP_KEY length: ${appKey.length}`);
+
     const body = new URLSearchParams({ username, password }).toString();
 
     const res = await fetch(
@@ -29,10 +31,25 @@ export async function POST(req: NextRequest) {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
           "X-Application": appKey,
+          "Accept": "application/json",
         },
         body,
       }
     );
+
+    const contentType = res.headers.get("content-type") ?? "";
+
+    if (!contentType.includes("json")) {
+      const text = await res.text();
+      console.error(`[Betfair Auth] Non-JSON response (${res.status}):`, text.slice(0, 500));
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Betfair returned non-JSON response (HTTP ${res.status}). Check app key and credentials.`,
+        },
+        { status: 502 }
+      );
+    }
 
     const data = await res.json();
 
