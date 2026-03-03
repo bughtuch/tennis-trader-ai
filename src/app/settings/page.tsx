@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "@/lib/store";
+import { createClient } from "@/lib/supabase";
 
 /* ─── Reusable styled components ─── */
 
@@ -123,10 +124,100 @@ export default function SettingsPage() {
   const [aiSignals, setAiSignals] = useState(true);
 
   /* Risk management */
-  const [dailyLossLimit, setDailyLossLimit] = useState("200");
+  const [dailyLossLimit, setDailyLossLimit] = useState("100");
   const [maxSingleTrade, setMaxSingleTrade] = useState("100");
   const [sessionTimeLimit, setSessionTimeLimit] = useState("4hr");
   const [warningPercent, setWarningPercent] = useState(75);
+
+  /* Save status */
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+
+  /* Load profile from Supabase */
+  const loadProfile = useCallback(async () => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (data) {
+      setDefaultStake(String(data.default_stake ?? 25));
+      setMaxExposure(String(data.max_exposure ?? 500));
+      setStopLoss(String(data.stop_loss ?? 50));
+      setAutoGreenUp(String(data.auto_green_up_target ?? 0));
+      setAiGuardian(data.ai_guardian_enabled ?? true);
+      setAiSignals(data.ai_signals_enabled ?? true);
+      setDailyLossLimit(String(data.daily_loss_limit ?? 100));
+      setMaxSingleTrade(String(data.max_single_trade ?? 100));
+      setProfileLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  /* Save settings to Supabase */
+  async function handleSaveSettings() {
+    setSaving(true);
+    setSaveMessage(null);
+
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setSaveMessage("Not signed in");
+      setSaving(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        default_stake: Number(defaultStake),
+        max_exposure: Number(maxExposure),
+        stop_loss: Number(stopLoss),
+        auto_green_up_target: Number(autoGreenUp),
+        ai_guardian_enabled: aiGuardian,
+        ai_signals_enabled: aiSignals,
+      })
+      .eq("id", user.id);
+
+    setSaving(false);
+    setSaveMessage(error ? error.message : "Settings saved");
+    if (!error) setTimeout(() => setSaveMessage(null), 3000);
+  }
+
+  /* Save risk limits to Supabase */
+  async function handleSaveRiskLimits() {
+    setSaving(true);
+    setSaveMessage(null);
+
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setSaveMessage("Not signed in");
+      setSaving(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        daily_loss_limit: Number(dailyLossLimit),
+        max_single_trade: Number(maxSingleTrade),
+      })
+      .eq("id", user.id);
+
+    setSaving(false);
+    setSaveMessage(error ? error.message : "Risk limits saved");
+    if (!error) setTimeout(() => setSaveMessage(null), 3000);
+  }
 
   async function handleConnect() {
     if (!bfUsername || !bfPassword) return;
@@ -150,6 +241,22 @@ export default function SettingsPage() {
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-4 space-y-4">
+        {/* Save feedback */}
+        {saveMessage && (
+          <div className={`px-4 py-3 rounded-xl text-sm font-medium ${
+            saveMessage.includes("saved")
+              ? "bg-green-500/10 border border-green-500/20 text-green-400"
+              : "bg-red-500/10 border border-red-500/20 text-red-400"
+          }`}>
+            {saveMessage}
+          </div>
+        )}
+
+        {/* Loading indicator */}
+        {!profileLoaded && (
+          <div className="text-center text-xs text-gray-500 py-2">Loading profile...</div>
+        )}
+
         {/* ─── Section 1: Betfair Connection ─── */}
         <Card title="Betfair Account">
           {isConnected ? (
@@ -311,8 +418,12 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <button className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 transition-all">
-              Save Settings
+            <button
+              onClick={handleSaveSettings}
+              disabled={saving}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 transition-all"
+            >
+              {saving ? "Saving..." : "Save Settings"}
             </button>
           </div>
         </Card>
@@ -358,8 +469,12 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <button className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 transition-all">
-              Save Risk Limits
+            <button
+              onClick={handleSaveRiskLimits}
+              disabled={saving}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 transition-all"
+            >
+              {saving ? "Saving..." : "Save Risk Limits"}
             </button>
           </div>
         </Card>

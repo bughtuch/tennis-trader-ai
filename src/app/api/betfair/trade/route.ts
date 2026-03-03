@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@/lib/supabase-server";
 
 const BETTING_API = "https://api.betfair.com/exchange/betting/rest/v1.0";
 
@@ -89,6 +90,28 @@ export async function POST(req: NextRequest) {
       const betIds = (data.instructionReports ?? []).map(
         (r: { betId: string }) => r.betId
       );
+
+      // Save trades to Supabase
+      try {
+        const supabase = await createServerClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const tradeRows = instructions.map(
+            (inst: { selectionId: number; side: string; price: number; size: number }) => ({
+              user_id: user.id,
+              market_id: marketId,
+              selection_id: String(inst.selectionId),
+              side: inst.side,
+              entry_price: inst.price,
+              stake: inst.size,
+              status: "open",
+            })
+          );
+          await supabase.from("trades").insert(tradeRows);
+        }
+      } catch {
+        // Trade recording is non-critical — don't block the response
+      }
 
       return NextResponse.json({ success: true, betIds, result: data });
     }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,6 +41,23 @@ export async function POST(req: NextRequest) {
         { success: false, error: data.error ?? "Authentication failed" },
         { status: 401 }
       );
+    }
+
+    // Save Betfair session to the user's Supabase profile
+    try {
+      const supabase = await createServerClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from("profiles")
+          .update({
+            betfair_connected: true,
+            betfair_session_token: data.token,
+          })
+          .eq("id", user.id);
+      }
+    } catch {
+      // Profile update is non-critical — don't block the login
     }
 
     const response = NextResponse.json({
