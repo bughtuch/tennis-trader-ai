@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "edge";
 
-const BETTING_API = "https://api.betfair.com/exchange/betting/rest/v1.0";
+const JSONRPC_URL = "https://api.betfair.com/exchange/betting/json-rpc/v1";
 
 function getHeaders(sessionToken: string, appKey: string) {
   return {
     "X-Authentication": sessionToken,
     "X-Application": appKey,
     "Content-Type": "application/json",
+    "Accept": "application/json",
   };
 }
 
@@ -63,33 +64,57 @@ export async function POST(req: NextRequest) {
         })
       );
 
-      const res = await fetch(`${BETTING_API}/placeOrders/`, {
-        method: "POST",
-        headers: getHeaders(sessionToken, appKey),
-        body: JSON.stringify({
+      const rpcBody = {
+        jsonrpc: "2.0",
+        method: "SportsAPING/v1.0/placeOrders",
+        params: {
           marketId,
           instructions: formattedInstructions,
-        }),
+        },
+        id: 1,
+      };
+
+      const res = await fetch(JSONRPC_URL, {
+        method: "POST",
+        headers: getHeaders(sessionToken, appKey),
+        body: JSON.stringify(rpcBody),
       });
 
+      const responseText = await res.text();
       if (!res.ok) {
-        const text = await res.text();
         return NextResponse.json(
-          { success: false, error: `Betfair API error: ${res.status} ${text}` },
+          { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}` },
           { status: res.status }
         );
       }
 
-      const data = await res.json();
+      let parsed;
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {
+        return NextResponse.json(
+          { success: false, error: `Betfair returned non-JSON: ${responseText.slice(0, 300)}` },
+          { status: 502 }
+        );
+      }
 
-      if (data.status === "FAILURE") {
+      if (parsed.error) {
+        return NextResponse.json(
+          { success: false, error: parsed.error?.data?.exceptionname ?? parsed.error?.message ?? "Betfair error" },
+          { status: 400 }
+        );
+      }
+
+      const data = parsed.result;
+
+      if (data?.status === "FAILURE") {
         return NextResponse.json(
           { success: false, error: data.errorCode ?? "Order placement failed" },
           { status: 400 }
         );
       }
 
-      const betIds = (data.instructionReports ?? []).map(
+      const betIds = (data?.instructionReports ?? []).map(
         (r: { betId: string }) => r.betId
       );
 
@@ -120,30 +145,53 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "cancelOrder") {
-      const body: Record<string, unknown> = {};
-      if (marketId) body.marketId = marketId;
+      const cancelParams: Record<string, unknown> = {};
+      if (marketId) cancelParams.marketId = marketId;
       if (betId) {
-        body.instructions = [{ betId }];
+        cancelParams.instructions = [{ betId }];
       }
-      if (marketIds) body.marketIds = marketIds;
+      if (marketIds) cancelParams.marketIds = marketIds;
 
-      const res = await fetch(`${BETTING_API}/cancelOrders/`, {
+      const rpcBody = {
+        jsonrpc: "2.0",
+        method: "SportsAPING/v1.0/cancelOrders",
+        params: cancelParams,
+        id: 1,
+      };
+
+      const res = await fetch(JSONRPC_URL, {
         method: "POST",
         headers: getHeaders(sessionToken, appKey),
-        body: JSON.stringify(body),
+        body: JSON.stringify(rpcBody),
       });
 
+      const responseText = await res.text();
       if (!res.ok) {
-        const text = await res.text();
         return NextResponse.json(
-          { success: false, error: `Betfair API error: ${res.status} ${text}` },
+          { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}` },
           { status: res.status }
         );
       }
 
-      const data = await res.json();
+      let parsed;
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {
+        return NextResponse.json(
+          { success: false, error: `Betfair returned non-JSON: ${responseText.slice(0, 300)}` },
+          { status: 502 }
+        );
+      }
 
-      if (data.status === "FAILURE") {
+      if (parsed.error) {
+        return NextResponse.json(
+          { success: false, error: parsed.error?.data?.exceptionname ?? parsed.error?.message ?? "Betfair error" },
+          { status: 400 }
+        );
+      }
+
+      const data = parsed.result;
+      if (data?.status === "FAILURE") {
         return NextResponse.json(
           {
             success: false,

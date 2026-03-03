@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "edge";
 
-const BETTING_API = "https://api.betfair.com/exchange/betting/rest/v1.0";
+const JSONRPC_URL = "https://api.betfair.com/exchange/betting/json-rpc/v1";
 
 function getHeaders(sessionToken: string, appKey: string) {
   return {
     "X-Authentication": sessionToken,
     "X-Application": appKey,
     "Content-Type": "application/json",
+    "Accept": "application/json",
   };
 }
 
@@ -16,12 +17,11 @@ export async function POST(req: NextRequest) {
   const debug: string[] = [];
 
   try {
-    debug.push("1. Markets API called");
+    debug.push("1. Markets API called (JSON-RPC)");
 
     const body = await req.json();
     const { action, marketIds, sessionToken: bodyToken } = body;
 
-    // Accept session token from request body or cookie
     const cookieToken = req.cookies.get("betfair_session")?.value;
     debug.push(`2. bodyToken: ${bodyToken ? `yes (${bodyToken.slice(0, 8)}...)` : "no"}`);
     debug.push(`2. cookieToken: ${cookieToken ? `yes (${cookieToken.slice(0, 8)}...)` : "no"}`);
@@ -49,26 +49,33 @@ export async function POST(req: NextRequest) {
     debug.push(`4. APP_KEY: yes (${appKey.slice(0, 4)}..., len=${appKey.length})`);
 
     if (action === "listMarkets") {
-      debug.push("5. Calling Betfair listMarketCatalogue...");
+      debug.push("5. Calling Betfair JSON-RPC listMarketCatalogue...");
+
+      const rpcBody = {
+        jsonrpc: "2.0",
+        method: "SportsAPING/v1.0/listMarketCatalogue",
+        params: {
+          filter: {
+            eventTypeIds: ["2"],
+            marketTypeCodes: ["MATCH_ODDS"],
+          },
+          maxResults: 50,
+          marketProjection: [
+            "EVENT",
+            "COMPETITION",
+            "MARKET_START_TIME",
+            "RUNNER_DESCRIPTION",
+          ],
+        },
+        id: 1,
+      };
 
       let res: Response;
       try {
-        res = await fetch(`${BETTING_API}/listMarketCatalogue/`, {
+        res = await fetch(JSONRPC_URL, {
           method: "POST",
           headers: getHeaders(sessionToken, appKey),
-          body: JSON.stringify({
-            filter: {
-              eventTypeIds: ["2"],
-              marketTypeCodes: ["MATCH_ODDS"],
-            },
-            maxResults: 50,
-            marketProjection: [
-              "EVENT",
-              "COMPETITION",
-              "MARKET_START_TIME",
-              "RUNNER_DESCRIPTION",
-            ],
-          }),
+          body: JSON.stringify(rpcBody),
         });
       } catch (fetchErr) {
         debug.push(`5. FAIL: Fetch error: ${fetchErr instanceof Error ? fetchErr.message : "unknown"}`);
@@ -79,23 +86,43 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      debug.push(`6. Betfair response: HTTP ${res.status}, content-type: ${res.headers.get("content-type")}`);
+      const responseText = await res.text();
+      debug.push(`6. Betfair HTTP ${res.status}, content-type: ${res.headers.get("content-type")}, body (first 500): ${responseText.slice(0, 500)}`);
 
       if (!res.ok) {
-        const text = await res.text();
-        debug.push(`6. FAIL: Betfair error body (first 200): ${text.slice(0, 200)}`);
         console.log("[Markets Debug]", debug.join(" | "));
         return NextResponse.json(
-          { success: false, error: `Betfair API error: ${res.status} ${text.slice(0, 200)}`, debug },
+          { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}`, debug },
           { status: res.status }
         );
       }
 
-      const data = await res.json();
-      const count = Array.isArray(data) ? data.length : 0;
+      let parsed;
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {
+        debug.push("7. FAIL: Could not parse response as JSON");
+        console.log("[Markets Debug]", debug.join(" | "));
+        return NextResponse.json(
+          { success: false, error: `Betfair returned non-JSON (HTTP ${res.status}): ${responseText.slice(0, 300)}`, debug },
+          { status: 502 }
+        );
+      }
+
+      if (parsed.error) {
+        debug.push(`7. FAIL: JSON-RPC error: ${JSON.stringify(parsed.error).slice(0, 200)}`);
+        console.log("[Markets Debug]", debug.join(" | "));
+        return NextResponse.json(
+          { success: false, error: `Betfair error: ${parsed.error?.data?.exceptionname ?? parsed.error?.message ?? "Unknown"}`, debug },
+          { status: 400 }
+        );
+      }
+
+      const markets = parsed.result ?? [];
+      const count = Array.isArray(markets) ? markets.length : 0;
       debug.push(`7. SUCCESS: ${count} markets returned`);
       console.log("[Markets Debug]", debug.join(" | "));
-      return NextResponse.json({ success: true, markets: data, debug });
+      return NextResponse.json({ success: true, markets, debug });
     }
 
     if (action === "getMarketBook") {
@@ -108,12 +135,12 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      debug.push(`5. Calling Betfair listMarketBook for ${marketIds.length} markets...`);
+      debug.push(`5. Calling Betfair JSON-RPC listMarketBook for ${marketIds.length} markets...`);
 
-      const res = await fetch(`${BETTING_API}/listMarketBook/`, {
-        method: "POST",
-        headers: getHeaders(sessionToken, appKey),
-        body: JSON.stringify({
+      const rpcBody = {
+        jsonrpc: "2.0",
+        method: "SportsAPING/v1.0/listMarketBook",
+        params: {
           marketIds,
           priceProjection: {
             priceData: ["EX_BEST_OFFERS", "EX_TRADED"],
@@ -121,25 +148,63 @@ export async function POST(req: NextRequest) {
               bestPricesDepth: 10,
             },
           },
-        }),
-      });
+        },
+        id: 2,
+      };
 
-      debug.push(`6. Betfair response: HTTP ${res.status}`);
-
-      if (!res.ok) {
-        const text = await res.text();
-        debug.push(`6. FAIL: ${text.slice(0, 200)}`);
+      let res: Response;
+      try {
+        res = await fetch(JSONRPC_URL, {
+          method: "POST",
+          headers: getHeaders(sessionToken, appKey),
+          body: JSON.stringify(rpcBody),
+        });
+      } catch (fetchErr) {
+        debug.push(`5. FAIL: Fetch error: ${fetchErr instanceof Error ? fetchErr.message : "unknown"}`);
         console.log("[Markets Debug]", debug.join(" | "));
         return NextResponse.json(
-          { success: false, error: `Betfair API error: ${res.status} ${text.slice(0, 200)}`, debug },
+          { success: false, error: `Network error calling Betfair: ${fetchErr instanceof Error ? fetchErr.message : "unknown"}`, debug },
+          { status: 502 }
+        );
+      }
+
+      const responseText = await res.text();
+      debug.push(`6. Betfair HTTP ${res.status}, content-type: ${res.headers.get("content-type")}`);
+
+      if (!res.ok) {
+        debug.push(`6. FAIL: ${responseText.slice(0, 300)}`);
+        console.log("[Markets Debug]", debug.join(" | "));
+        return NextResponse.json(
+          { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}`, debug },
           { status: res.status }
         );
       }
 
-      const data = await res.json();
-      debug.push(`7. SUCCESS: ${Array.isArray(data) ? data.length : 0} market books returned`);
+      let parsed;
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {
+        debug.push("7. FAIL: Could not parse response as JSON");
+        console.log("[Markets Debug]", debug.join(" | "));
+        return NextResponse.json(
+          { success: false, error: `Betfair returned non-JSON: ${responseText.slice(0, 300)}`, debug },
+          { status: 502 }
+        );
+      }
+
+      if (parsed.error) {
+        debug.push(`7. FAIL: JSON-RPC error: ${JSON.stringify(parsed.error).slice(0, 200)}`);
+        console.log("[Markets Debug]", debug.join(" | "));
+        return NextResponse.json(
+          { success: false, error: `Betfair error: ${parsed.error?.data?.exceptionname ?? parsed.error?.message ?? "Unknown"}`, debug },
+          { status: 400 }
+        );
+      }
+
+      const marketBooks = parsed.result ?? [];
+      debug.push(`7. SUCCESS: ${Array.isArray(marketBooks) ? marketBooks.length : 0} market books returned`);
       console.log("[Markets Debug]", debug.join(" | "));
-      return NextResponse.json({ success: true, marketBooks: data, debug });
+      return NextResponse.json({ success: true, marketBooks, debug });
     }
 
     debug.push(`5. FAIL: Unknown action: ${action}`);
