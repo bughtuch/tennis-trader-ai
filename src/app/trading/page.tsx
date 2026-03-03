@@ -25,13 +25,6 @@ interface SupabaseTrade {
   closed_at: string | null;
 }
 
-/* ─── Mock Data ─── */
-
-const PLAYERS = {
-  player1: { name: "Novak Djokovic", short: "Djokovic", odds: 1.54, flag: "🇷🇸" },
-  player2: { name: "Carlos Alcaraz", short: "Alcaraz", odds: 2.72, flag: "🇪🇸" },
-};
-
 interface LadderRow {
   price: number;
   backSize: number;
@@ -41,46 +34,27 @@ interface LadderRow {
   isBestLay: boolean;
 }
 
-function generateLadderData(): LadderRow[] {
-  const rows: LadderRow[] = [];
-  const bestBack = 1.54;
-  const bestLay = 1.56;
-
-  const fixedSizes: Record<number, { back?: number; lay?: number }> = {
-    1.34: { back: 1820 }, 1.36: { back: 2105 }, 1.38: { back: 1540 },
-    1.40: { back: 2890 }, 1.42: { back: 1675 }, 1.44: { back: 3210 },
-    1.46: { back: 1950 }, 1.48: { back: 4120 }, 1.50: { back: 3198 },
-    1.52: { back: 4321 }, 1.54: { back: 8547 },
-    1.56: { lay: 6234 }, 1.58: { lay: 5123 }, 1.60: { lay: 2987 },
-    1.62: { lay: 3456 }, 1.64: { lay: 1890 }, 1.66: { lay: 2340 },
-    1.68: { lay: 1567 }, 1.70: { lay: 2120 }, 1.72: { lay: 980 },
-    1.74: { lay: 1450 }, 1.76: { lay: 875 }, 1.78: { lay: 1230 },
-    1.80: { lay: 640 }, 1.82: { lay: 920 }, 1.84: { lay: 510 },
-  };
-
-  for (const [priceStr, sizes] of Object.entries(fixedSizes)) {
-    const price = parseFloat(priceStr);
-    rows.push({
-      price,
-      backSize: sizes.back ?? 0,
-      laySize: sizes.lay ?? 0,
-      isLastTraded: price === bestBack,
-      isBestBack: price === bestBack,
-      isBestLay: price === bestLay,
-    });
-  }
-  return rows.sort((a, b) => a.price - b.price);
-}
-
-const LADDER_DATA = generateLadderData();
-
 const STAKES = [5, 10, 25, 50, 100];
+
+/* ─── Helpers ─── */
+
+function formatVolume(v: number) {
+  if (v >= 1_000_000) return `£${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `£${Math.round(v / 1_000)}K`;
+  return `£${Math.round(v)}`;
+}
 
 /* ─── Breakpoints: mobile <768  |  tablet 768-1919  |  desktop 1920+ ─── */
 
 export default function TradingPageWrapper() {
   return (
-    <Suspense fallback={<div className="min-h-screen pt-14 bg-[#030712] flex items-center justify-center"><div className="text-gray-500 text-sm">Loading...</div></div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen pt-14 bg-[#030712] flex items-center justify-center">
+          <div className="text-gray-500 text-sm">Loading...</div>
+        </div>
+      }
+    >
       <TradingPage />
     </Suspense>
   );
@@ -91,6 +65,9 @@ function TradingPage() {
   const marketId = searchParams.get("marketId");
   const p1Name = searchParams.get("p1");
   const p2Name = searchParams.get("p2");
+  const p1Flag = searchParams.get("p1Flag") ?? "";
+  const p2Flag = searchParams.get("p2Flag") ?? "";
+  const tournament = searchParams.get("tournament") ?? "Tennis";
 
   const [selectedStake, setSelectedStake] = useState(25);
   const [selectedPlayer, setSelectedPlayer] = useState<"player1" | "player2">("player1");
@@ -98,33 +75,30 @@ function TradingPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /* ─── Premium feature state ─── */
+  /* ─── Session timer state ─── */
   const [sessionStart] = useState(() => Date.now());
   const [sessionElapsed, setSessionElapsed] = useState(0);
-  const [mockSessionPnl] = useState(84.5);
   const [shortcutsExpanded, setShortcutsExpanded] = useState(false);
-
-  const scoreData = {
-    set: 2, p1Sets: 1, p2Sets: 0,
-    p1Games: 3, p2Games: 2,
-    p1Points: "40", p2Points: "30",
-    server: "player1" as const,
-    setScores: [{ p1: 6, p2: 4 }],
-    alert: "BREAK PT" as string | null,
-  };
-
-  const last5Points = ["player1", "player1", "player2", "player1", "player2"] as const;
 
   /* AI Signals state */
   const [aiSignal, setAiSignal] = useState<{
-    type: string; confidence: number; edgeSize: string;
-    analysis: string; model: string; timestamp: string;
+    type: string;
+    confidence: number;
+    edgeSize: string;
+    analysis: string;
+    model: string;
+    timestamp: string;
   } | null>(null);
   const [aiSignalLoading, setAiSignalLoading] = useState(false);
-  const [aiSignalHistory, setAiSignalHistory] = useState<Array<{
-    type: string; confidence: number; edgeSize: string;
-    analysis: string; timestamp: string;
-  }>>([]);
+  const [aiSignalHistory, setAiSignalHistory] = useState<
+    Array<{
+      type: string;
+      confidence: number;
+      edgeSize: string;
+      analysis: string;
+      timestamp: string;
+    }>
+  >([]);
   const [signalType, setSignalType] = useState<"pre_match" | "in_play" | "edge_alert">("in_play");
 
   /* AI Guardian state */
@@ -139,7 +113,9 @@ function TradingPage() {
 
   const fetchTrades = useCallback(async () => {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data: open } = await supabase
@@ -160,7 +136,9 @@ function TradingPage() {
     if (closed) setTradeHistory(closed);
   }, []);
 
-  useEffect(() => { fetchTrades(); }, [fetchTrades]);
+  useEffect(() => {
+    fetchTrades();
+  }, [fetchTrades]);
 
   async function closeTradeAsGreenUp(tradeId: string, exitPrice: number, pnl: number) {
     const supabase = createClient();
@@ -210,7 +188,7 @@ function TradingPage() {
     if (lastTradeSuccess) {
       setToast({ message: lastTradeSuccess, type: "success" });
       clearTradeMessages();
-      fetchTrades(); // Refresh positions after trade
+      fetchTrades();
       const t = setTimeout(() => setToast(null), 4000);
       return () => clearTimeout(t);
     }
@@ -222,13 +200,11 @@ function TradingPage() {
     }
   }, [lastTradeSuccess, tradeError, clearTradeMessages, fetchTrades]);
 
-  /* ─── Build ladder from live data or mock ─── */
-  const selectedRunner = isLive
-    ? marketBook.runners?.[selectedPlayer === "player1" ? 0 : 1]
-    : null;
+  /* ─── Build ladder from live data only ─── */
+  const selectedRunner = isLive ? marketBook.runners?.[selectedPlayer === "player1" ? 0 : 1] : null;
 
   let liveLadder: LadderRow[] | null = null;
-  let livePlayerOdds = { player1: PLAYERS.player1.odds, player2: PLAYERS.player2.odds };
+  let livePlayerOdds = { player1: 0, player2: 0 };
 
   if (isLive && marketBook.runners) {
     const r0 = marketBook.runners[0];
@@ -269,21 +245,43 @@ function TradingPage() {
     }
   }
 
-  const ladderData = liveLadder ?? LADDER_DATA;
+  const ladderData = liveLadder;
+
   const displayPlayers = {
     player1: {
-      ...PLAYERS.player1,
-      name: p1Name ?? PLAYERS.player1.name,
-      short: p1Name?.split(" ").pop() ?? PLAYERS.player1.short,
+      name: p1Name ?? "Player 1",
+      short: p1Name?.split(" ").pop() ?? "P1",
       odds: livePlayerOdds.player1,
+      flag: p1Flag,
     },
     player2: {
-      ...PLAYERS.player2,
-      name: p2Name ?? PLAYERS.player2.name,
-      short: p2Name?.split(" ").pop() ?? PLAYERS.player2.short,
+      name: p2Name ?? "Player 2",
+      short: p2Name?.split(" ").pop() ?? "P2",
       odds: livePlayerOdds.player2,
+      flag: p2Flag,
     },
   };
+
+  /* ─── Unrealized P&L per player (from open positions) ─── */
+  function getUnrealizedPnl(playerKey: "player1" | "player2"): number | null {
+    const playerName = displayPlayers[playerKey].name;
+    const playerPositions = openPositions.filter((p) => p.player === playerName);
+    if (playerPositions.length === 0) return null;
+    const currentOddsForPlayer = displayPlayers[playerKey].odds;
+    if (!currentOddsForPlayer || currentOddsForPlayer <= 0) return null;
+    let total = 0;
+    for (const pos of playerPositions) {
+      if (!pos.entry_price || !pos.stake) continue;
+      if (pos.side === "BACK") {
+        const greenStake = (pos.stake * pos.entry_price) / currentOddsForPlayer;
+        total += (greenStake - pos.stake);
+      } else {
+        const greenStake = (pos.stake * pos.entry_price) / currentOddsForPlayer;
+        total += (pos.stake - greenStake);
+      }
+    }
+    return Math.round(total * 100) / 100;
+  }
 
   /* ─── Handle trade click ─── */
   async function handleTradeClick(price: number, side: "BACK" | "LAY") {
@@ -311,7 +309,7 @@ function TradingPage() {
             player2: displayPlayers.player2.name,
             odds1: displayPlayers.player1.odds,
             odds2: displayPlayers.player2.odds,
-            tournament: "ATP Tour",
+            tournament,
             surface: "Hard",
           },
         }),
@@ -333,24 +331,23 @@ function TradingPage() {
     setGuardianLoading(true);
     try {
       const bestBack = displayPlayers[selectedPlayer].odds;
-      const bestLay = isLive && selectedRunner?.ex?.availableToLay?.[0]?.price
-        ? selectedRunner.ex.availableToLay[0].price
-        : bestBack + 0.02;
+      const bestLay =
+        isLive && selectedRunner?.ex?.availableToLay?.[0]?.price
+          ? selectedRunner.ex.availableToLay[0].price
+          : bestBack + 0.02;
 
       const res = await fetch("/api/ai-guardian", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "assessPosition",
-          entryPrice: 1.54,
-          entryStake: 50,
-          entrySide: "BACK",
+          entryPrice: openPositions[0]?.entry_price ?? 1.54,
+          entryStake: openPositions[0]?.stake ?? 50,
+          entrySide: openPositions[0]?.side ?? "BACK",
           currentBackPrice: bestBack,
           currentLayPrice: bestLay,
           matchContext: {
             player: displayPlayers[selectedPlayer].name,
-            score: "6-4, 3-2",
-            server: displayPlayers.player1.name,
             surface: "Hard",
           },
         }),
@@ -384,7 +381,10 @@ function TradingPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setToast({ message: `Hedge placed: ${option.hedgeSide} £${option.hedgeStake} @ ${option.hedgePrice}`, type: "success" });
+        setToast({
+          message: `Hedge placed: ${option.hedgeSide} £${option.hedgeStake} @ ${option.hedgePrice}`,
+          type: "success",
+        });
         setGuardianData(null);
       } else {
         setToast({ message: data.error ?? "Failed to execute", type: "error" });
@@ -396,11 +396,17 @@ function TradingPage() {
     }
   }
 
-  /* ─── WOM calculation ─── */
-  let womBack = 62;
+  /* ─── WOM calculation from real ladder data ─── */
+  let womBack = 50;
   if (isLive && selectedRunner?.ex) {
-    const totalBack = (selectedRunner.ex.availableToBack ?? []).reduce((s: number, p: PriceSize) => s + p.size, 0);
-    const totalLay = (selectedRunner.ex.availableToLay ?? []).reduce((s: number, p: PriceSize) => s + p.size, 0);
+    const totalBack = (selectedRunner.ex.availableToBack ?? []).reduce(
+      (s: number, p: PriceSize) => s + p.size,
+      0
+    );
+    const totalLay = (selectedRunner.ex.availableToLay ?? []).reduce(
+      (s: number, p: PriceSize) => s + p.size,
+      0
+    );
     const total = totalBack + totalLay;
     womBack = total > 0 ? Math.round((totalBack / total) * 100) : 50;
   }
@@ -413,35 +419,62 @@ function TradingPage() {
     return () => clearInterval(id);
   }, [sessionStart]);
 
-  /* ─── Computed: momentum score (-5 to +5) ─── */
-  const momentumScore = last5Points.reduce(
-    (acc, p) => acc + (p === "player1" ? 1 : -1), 0
-  );
-
-  /* ─── Computed: green-up result for mock position ─── */
-  const currentLayPrice = isLive && selectedRunner?.ex?.availableToLay?.[0]?.price
-    ? selectedRunner.ex.availableToLay[0].price
-    : displayPlayers[selectedPlayer].odds + 0.02;
-  const greenUpResult = calculateGreenUp(1.54, 50, "BACK", currentLayPrice);
+  /* ─── Computed: green-up result for first open position (or fallback) ─── */
+  const firstOpenPos = openPositions[0];
+  const entryPrice = firstOpenPos?.entry_price ?? 1.54;
+  const entryStake = firstOpenPos?.stake ?? 50;
+  const entrySide: "BACK" | "LAY" = (firstOpenPos?.side as "BACK" | "LAY") ?? "BACK";
+  const currentLayPrice =
+    isLive && selectedRunner?.ex?.availableToLay?.[0]?.price
+      ? selectedRunner.ex.availableToLay[0].price
+      : displayPlayers[selectedPlayer].odds > 0
+        ? displayPlayers[selectedPlayer].odds + 0.02
+        : 1.56;
+  const greenUpResult = calculateGreenUp(entryPrice, entryStake, entrySide, currentLayPrice);
 
   /* ─── Computed: odds prediction (win/lose next game) ─── */
   const currentOdds = displayPlayers[selectedPlayer].odds;
-  const isFavourite = currentOdds < 2.0;
-  const oddsIfWin = moveByTicks(currentOdds, isFavourite ? -3 : -4);
-  const oddsIfLose = moveByTicks(currentOdds, isFavourite ? 4 : 3);
+  const isFavourite = currentOdds > 0 && currentOdds < 2.0;
+  const oddsIfWin = currentOdds > 0 ? moveByTicks(currentOdds, isFavourite ? -3 : -4) : 0;
+  const oddsIfLose = currentOdds > 0 ? moveByTicks(currentOdds, isFavourite ? 4 : 3) : 0;
+
+  /* ─── Computed: session P&L from real closed trades ─── */
+  const sessionPnl = tradeHistory.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+  const winCount = tradeHistory.filter((t) => (t.pnl ?? 0) > 0).length;
+  const winRate = tradeHistory.length > 0 ? Math.round((winCount / tradeHistory.length) * 100) : 0;
+  const bestTrade = tradeHistory.length > 0 ? Math.max(...tradeHistory.map((t) => t.pnl ?? 0)) : 0;
+  const worstTrade = tradeHistory.length > 0 ? Math.min(...tradeHistory.map((t) => t.pnl ?? 0)) : 0;
 
   /* ─── Computed: session display strings ─── */
   const sessionMinutes = Math.floor(sessionElapsed / 60);
   const sessionSeconds = sessionElapsed % 60;
   const sessionTimeStr = `${sessionMinutes}m ${sessionSeconds.toString().padStart(2, "0")}s`;
-  const sessionRate = sessionMinutes > 0
-    ? (mockSessionPnl / (sessionElapsed / 3600)).toFixed(2)
-    : "—";
+  const sessionRate =
+    sessionMinutes > 0 ? (sessionPnl / (sessionElapsed / 3600)).toFixed(2) : "--";
+
+  /* ─── Computed: max size for depth bars ─── */
+  const maxSize = ladderData
+    ? Math.max(...ladderData.map((r) => Math.max(r.backSize, r.laySize)), 1)
+    : 1;
 
   /* ─── Keyboard shortcuts ─── */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stateRef = useRef<any>(null);
-  stateRef.current = { selectedStake, selectedPlayer, isLive, marketId, selectedRunner, ladderData, placeTrade, setToast, setSelectedStake, greenUpResult, currentLayPrice, openPositions, closeTradeAsGreenUp };
+  stateRef.current = {
+    selectedStake,
+    selectedPlayer,
+    isLive,
+    marketId,
+    selectedRunner,
+    ladderData,
+    placeTrade,
+    setToast,
+    setSelectedStake,
+    greenUpResult,
+    currentLayPrice,
+    openPositions,
+    closeTradeAsGreenUp,
+  };
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -449,6 +482,7 @@ function TradingPage() {
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
       const s = stateRef.current;
+      if (!s.ladderData) return;
       const bestBack = s.ladderData.find((r: LadderRow) => r.isBestBack);
       const bestLay = s.ladderData.find((r: LadderRow) => r.isBestLay);
 
@@ -456,49 +490,92 @@ function TradingPage() {
         case "b":
           if (bestBack) {
             if (s.isLive && s.marketId && s.selectedRunner) {
-              s.placeTrade({ marketId: s.marketId, selectionId: s.selectedRunner.selectionId, side: "BACK", price: bestBack.price, size: s.selectedStake });
+              s.placeTrade({
+                marketId: s.marketId,
+                selectionId: s.selectedRunner.selectionId,
+                side: "BACK",
+                price: bestBack.price,
+                size: s.selectedStake,
+              });
             } else {
-              s.setToast({ message: `Demo: BACK £${s.selectedStake} @ ${bestBack.price.toFixed(2)}`, type: "success" });
+              s.setToast({
+                message: `Demo: BACK £${s.selectedStake} @ ${bestBack.price.toFixed(2)}`,
+                type: "success",
+              });
             }
           }
           break;
         case "l":
           if (bestLay) {
             if (s.isLive && s.marketId && s.selectedRunner) {
-              s.placeTrade({ marketId: s.marketId, selectionId: s.selectedRunner.selectionId, side: "LAY", price: bestLay.price, size: s.selectedStake });
+              s.placeTrade({
+                marketId: s.marketId,
+                selectionId: s.selectedRunner.selectionId,
+                side: "LAY",
+                price: bestLay.price,
+                size: s.selectedStake,
+              });
             } else {
-              s.setToast({ message: `Demo: LAY £${s.selectedStake} @ ${bestLay.price.toFixed(2)}`, type: "success" });
+              s.setToast({
+                message: `Demo: LAY £${s.selectedStake} @ ${bestLay.price.toFixed(2)}`,
+                type: "success",
+              });
             }
           }
           break;
         case "g":
           if (s.isLive && s.marketId && s.selectedRunner) {
-            s.placeTrade({ marketId: s.marketId, selectionId: s.selectedRunner.selectionId, side: s.greenUpResult.greenUpSide, price: s.currentLayPrice, size: s.greenUpResult.greenUpStake }).then((ok: boolean) => {
+            s.placeTrade({
+              marketId: s.marketId,
+              selectionId: s.selectedRunner.selectionId,
+              side: s.greenUpResult.greenUpSide,
+              price: s.currentLayPrice,
+              size: s.greenUpResult.greenUpStake,
+            }).then((ok: boolean) => {
               if (ok) {
                 for (const pos of s.openPositions.filter(
-                  (p: SupabaseTrade) => p.market_id === s.marketId && p.selection_id === String(s.selectedRunner.selectionId)
+                  (p: SupabaseTrade) =>
+                    p.market_id === s.marketId &&
+                    p.selection_id === String(s.selectedRunner.selectionId)
                 )) {
                   s.closeTradeAsGreenUp(pos.id, s.currentLayPrice, s.greenUpResult.equalProfit);
                 }
               }
             });
           } else {
-            s.setToast({ message: `Demo: GREEN UP — lock in £${s.greenUpResult.equalProfit.toFixed(2)}`, type: "success" });
+            s.setToast({
+              message: `Demo: GREEN UP -- lock in £${s.greenUpResult.equalProfit.toFixed(2)}`,
+              type: "success",
+            });
           }
           break;
-        case "1": s.setSelectedStake(STAKES[0]); break;
-        case "2": s.setSelectedStake(STAKES[1]); break;
-        case "3": s.setSelectedStake(STAKES[2]); break;
-        case "4": s.setSelectedStake(STAKES[3]); break;
-        case "5": s.setSelectedStake(STAKES[4]); break;
-        case "escape": setShortcutsExpanded(false); break;
+        case "1":
+          s.setSelectedStake(STAKES[0]);
+          break;
+        case "2":
+          s.setSelectedStake(STAKES[1]);
+          break;
+        case "3":
+          s.setSelectedStake(STAKES[2]);
+          break;
+        case "4":
+          s.setSelectedStake(STAKES[3]);
+          break;
+        case "5":
+          s.setSelectedStake(STAKES[4]);
+          break;
+        case "escape":
+          setShortcutsExpanded(false);
+          break;
       }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  /* ─── Shared sub-components rendered inline ─── */
+  /* ─────────────────────────────────────────────────────────── */
+  /* ─── LADDER PANEL ─── */
+  /* ─────────────────────────────────────────────────────────── */
 
   const ladderPanel = (
     <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden max-w-md mx-auto">
@@ -507,23 +584,31 @@ function TradingPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold text-white">
-              {displayPlayers[selectedPlayer].flag} {displayPlayers[selectedPlayer].name}
+              {displayPlayers[selectedPlayer].flag}{" "}
+              {displayPlayers[selectedPlayer].name}
             </h2>
-            <p className="text-xs text-gray-500 mt-0.5">Matched: £142,847</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {isLive && marketBook?.totalMatched
+                ? `Matched: ${formatVolume(marketBook.totalMatched)}`
+                : "Awaiting connection"}
+            </p>
           </div>
           <div className="text-right">
             <div className="text-xl md:text-2xl font-bold font-mono text-white">
-              {displayPlayers[selectedPlayer].odds.toFixed(2)}
+              {displayPlayers[selectedPlayer].odds > 0
+                ? displayPlayers[selectedPlayer].odds.toFixed(2)
+                : "--"}
             </div>
-            <div className="text-[10px] text-green-400">▲ 0.04</div>
           </div>
         </div>
       </div>
 
-      {/* Stake Selector - scrollable on mobile */}
+      {/* Stake Selector */}
       <div className="px-3 md:px-4 py-2.5 border-b border-gray-800/50 overflow-x-auto">
         <div className="flex items-center gap-2 flex-nowrap">
-          <span className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium shrink-0">STAKE</span>
+          <span className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium shrink-0">
+            STAKE
+          </span>
           {STAKES.map((stake) => (
             <button
               key={stake}
@@ -542,58 +627,114 @@ function TradingPage() {
 
       {/* Grid Header */}
       <div className="grid grid-cols-3 py-2 border-b border-gray-800/50">
-        <div className="text-[11px] tracking-[0.15em] uppercase text-blue-400 font-medium pl-3">BACK</div>
-        <div className="text-[11px] tracking-[0.15em] uppercase text-gray-400 font-medium text-center">PRICE</div>
-        <div className="text-[11px] tracking-[0.15em] uppercase text-pink-400 font-medium text-right pr-3">LAY</div>
+        <div className="text-[11px] tracking-[0.15em] uppercase text-blue-400 font-medium pl-3">
+          BACK
+        </div>
+        <div className="text-[11px] tracking-[0.15em] uppercase text-gray-400 font-medium text-center">
+          PRICE
+        </div>
+        <div className="text-[11px] tracking-[0.15em] uppercase text-pink-400 font-medium text-right pr-3">
+          LAY
+        </div>
       </div>
 
       {/* Ladder Body */}
-      <div className="max-h-[480px] overflow-y-auto">
-        {ladderData.map((row) => (
-          <div
-            key={row.price}
-            className={`grid grid-cols-3 items-center border-b border-gray-800/20 ${
-              row.isLastTraded ? "bg-green-500/5" : ""
-            }`}
-          >
-            <button
-              onClick={() => row.backSize > 0 && handleTradeClick(row.price, "BACK")}
-              disabled={tradeLoading}
-              className={`py-2 px-3 text-right text-sm font-mono transition-all ${
-                row.backSize > 0
-                  ? row.isBestBack
-                    ? "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 active:bg-blue-500/40"
-                    : "bg-blue-500/10 text-blue-400/80 hover:bg-blue-500/20 active:bg-blue-500/30"
-                  : "text-gray-700 hover:bg-blue-500/5"
-              }`}
-            >
-              {row.backSize > 0 ? `£${row.backSize.toLocaleString()}` : ""}
-            </button>
+      <div className="max-h-[640px] overflow-y-auto">
+        {ladderData && ladderData.length > 0 ? (
+          ladderData.map((row) => (
             <div
-              className={`py-2 flex items-center justify-center font-mono font-bold text-sm ${
-                row.isLastTraded ? "text-green-400" : "text-white"
+              key={row.price}
+              className={`grid grid-cols-3 items-center border-b border-gray-800/20 min-h-[48px] md:min-h-0 transition-colors hover:brightness-125 ${
+                row.isLastTraded ? "bg-green-400/10 border-l-2 border-l-green-400" : ""
               }`}
             >
-              {row.price.toFixed(2)}
-              {row.isLastTraded && (
-                <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              )}
+              {/* Back cell */}
+              <button
+                onClick={() => row.backSize > 0 && handleTradeClick(row.price, "BACK")}
+                disabled={tradeLoading}
+                className={`relative py-1.5 px-3 text-right text-sm font-mono transition-all overflow-hidden ${
+                  row.backSize > 0
+                    ? row.isBestBack
+                      ? "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 active:bg-blue-500/40"
+                      : "bg-blue-500/8 text-blue-400/80 hover:bg-blue-500/15 active:bg-blue-500/25"
+                    : "text-gray-700 hover:bg-blue-500/5"
+                }`}
+              >
+                {/* Depth bar */}
+                {row.backSize > 0 && (
+                  <div
+                    className="absolute inset-y-0 right-0 bg-blue-400 opacity-20 pointer-events-none"
+                    style={{ width: `${Math.min((row.backSize / maxSize) * 100, 100)}%` }}
+                  />
+                )}
+                <span className="relative z-10">
+                  {row.backSize > 0 ? `£${row.backSize.toLocaleString()}` : ""}
+                </span>
+              </button>
+
+              {/* Price cell */}
+              <div
+                className={`py-1.5 flex items-center justify-center font-mono font-bold text-sm ${
+                  row.isLastTraded ? "text-green-400" : "text-white"
+                }`}
+              >
+                {row.price.toFixed(2)}
+                {row.isLastTraded && (
+                  <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                )}
+              </div>
+
+              {/* Lay cell */}
+              <button
+                onClick={() => row.laySize > 0 && handleTradeClick(row.price, "LAY")}
+                disabled={tradeLoading}
+                className={`relative py-1.5 px-3 text-left text-sm font-mono transition-all overflow-hidden ${
+                  row.laySize > 0
+                    ? row.isBestLay
+                      ? "bg-pink-500/20 text-pink-300 hover:bg-pink-500/30 active:bg-pink-500/40"
+                      : "bg-pink-500/8 text-pink-400/80 hover:bg-pink-500/15 active:bg-pink-500/25"
+                    : "text-gray-700 hover:bg-pink-500/5"
+                }`}
+              >
+                {/* Depth bar */}
+                {row.laySize > 0 && (
+                  <div
+                    className="absolute inset-y-0 left-0 bg-pink-400 opacity-20 pointer-events-none"
+                    style={{ width: `${Math.min((row.laySize / maxSize) * 100, 100)}%` }}
+                  />
+                )}
+                <span className="relative z-10">
+                  {row.laySize > 0 ? `£${row.laySize.toLocaleString()}` : ""}
+                </span>
+              </button>
             </div>
-            <button
-              onClick={() => row.laySize > 0 && handleTradeClick(row.price, "LAY")}
-              disabled={tradeLoading}
-              className={`py-2 px-3 text-left text-sm font-mono transition-all ${
-                row.laySize > 0
-                  ? row.isBestLay
-                    ? "bg-pink-500/20 text-pink-300 hover:bg-pink-500/30 active:bg-pink-500/40"
-                    : "bg-pink-500/10 text-pink-400/80 hover:bg-pink-500/20 active:bg-pink-500/30"
-                  : "text-gray-700 hover:bg-pink-500/5"
-              }`}
-            >
-              {row.laySize > 0 ? `£${row.laySize.toLocaleString()}` : ""}
-            </button>
+          ))
+        ) : (
+          /* Empty state when no live data */
+          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-gray-800/50 flex items-center justify-center mb-4">
+              <svg
+                className="w-6 h-6 text-gray-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3 4h18M3 8h18M3 12h18M3 16h18M3 20h18"
+                />
+              </svg>
+            </div>
+            <p className="text-sm text-gray-400 font-medium mb-1">
+              Connect Betfair to see live prices
+            </p>
+            <p className="text-xs text-gray-600">
+              Go to Settings to link your Betfair account
+            </p>
           </div>
-        ))}
+        )}
       </div>
 
       {/* Position Summary */}
@@ -603,7 +744,8 @@ function TradingPage() {
             <span className="text-gray-500">Position: </span>
             {openPositions.length > 0 ? (
               <span className="text-blue-400 font-semibold">
-                {openPositions[0].side} £{openPositions[0].stake} @ {openPositions[0].entry_price}
+                {openPositions[0].side} £{openPositions[0].stake} @{" "}
+                {openPositions[0].entry_price}
               </span>
             ) : (
               <span className="text-gray-600">No position</span>
@@ -611,7 +753,9 @@ function TradingPage() {
           </div>
           <div>
             <span className="text-gray-500">Open: </span>
-            <span className="text-gray-300 font-mono font-semibold">{openPositions.length}</span>
+            <span className="text-gray-300 font-mono font-semibold">
+              {openPositions.length}
+            </span>
           </div>
         </div>
       </div>
@@ -629,61 +773,127 @@ function TradingPage() {
                 size: greenUpResult.greenUpStake,
               });
               if (success) {
-                // Close matching open positions in Supabase
                 for (const pos of openPositions.filter(
-                  (p) => p.market_id === marketId && p.selection_id === String(selectedRunner.selectionId)
+                  (p) =>
+                    p.market_id === marketId &&
+                    p.selection_id === String(selectedRunner.selectionId)
                 )) {
-                  await closeTradeAsGreenUp(pos.id, currentLayPrice, greenUpResult.equalProfit);
+                  await closeTradeAsGreenUp(
+                    pos.id,
+                    currentLayPrice,
+                    greenUpResult.equalProfit
+                  );
                 }
               }
             } else {
-              setToast({ message: `Demo: Would ${greenUpResult.greenUpSide} £${greenUpResult.greenUpStake.toFixed(2)} @ ${currentLayPrice.toFixed(2)} to lock in £${greenUpResult.equalProfit.toFixed(2)}`, type: "success" });
+              setToast({
+                message: `Demo: Would ${greenUpResult.greenUpSide} £${greenUpResult.greenUpStake.toFixed(2)} @ ${currentLayPrice.toFixed(2)} to lock £${greenUpResult.equalProfit.toFixed(2)}`,
+                type: "success",
+              });
             }
           }}
           disabled={tradeLoading}
-          className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-green-500/20"
+          className={`w-full py-3.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+            greenUpResult.equalProfit >= 0
+              ? "bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 shadow-[0_0_20px_rgba(34,197,94,0.3)] animate-pulse-subtle"
+              : "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 shadow-[0_0_20px_rgba(239,68,68,0.3)]"
+          }`}
         >
-          GREEN UP: Lock in {greenUpResult.equalProfit >= 0 ? "+" : ""}£{greenUpResult.equalProfit.toFixed(2)}
+          {greenUpResult.greenUpSide} £{greenUpResult.greenUpStake.toFixed(2)} @{" "}
+          {currentLayPrice.toFixed(2)} → Lock{" "}
+          {greenUpResult.equalProfit >= 0 ? "+" : ""}£
+          {greenUpResult.equalProfit.toFixed(2)}
         </button>
-        <div className="mt-1.5 text-center text-[10px] text-gray-500">
-          {greenUpResult.greenUpSide} £{greenUpResult.greenUpStake.toFixed(2)} @ {currentLayPrice.toFixed(2)} | Win: £{greenUpResult.profitIfWin.toFixed(2)} / Lose: £{greenUpResult.profitIfLose.toFixed(2)}
+        <div className="mt-1.5 text-center text-[10px] text-gray-500 font-mono">
+          Win: £{greenUpResult.profitIfWin.toFixed(2)} / Lose: £
+          {greenUpResult.profitIfLose.toFixed(2)}
         </div>
       </div>
 
       {/* Odds Prediction Chart */}
-      <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
-        <div className="text-[10px] tracking-[0.15em] uppercase text-gray-500 font-medium mb-2">ODDS PREDICTION</div>
-        <svg viewBox="0 0 280 100" className="w-full h-auto">
-          {/* Current odds node (center left) */}
-          <circle cx="60" cy="50" r="20" fill="#1f2937" stroke="#374151" strokeWidth="1.5" />
-          <text x="60" y="47" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold" fontFamily="monospace">
-            {currentOdds.toFixed(2)}
-          </text>
-          <text x="60" y="58" textAnchor="middle" fill="#9ca3af" fontSize="7">NOW</text>
+      {currentOdds > 0 && (
+        <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
+          <div className="text-[10px] tracking-[0.15em] uppercase text-gray-500 font-medium mb-2">
+            ODDS PREDICTION
+          </div>
+          <svg viewBox="0 0 280 100" className="w-full h-auto">
+            {/* Current odds node (center left) */}
+            <circle cx="60" cy="50" r="20" fill="#1f2937" stroke="#374151" strokeWidth="1.5" />
+            <text
+              x="60"
+              y="47"
+              textAnchor="middle"
+              fill="white"
+              fontSize="11"
+              fontWeight="bold"
+              fontFamily="monospace"
+            >
+              {currentOdds.toFixed(2)}
+            </text>
+            <text x="60" y="58" textAnchor="middle" fill="#9ca3af" fontSize="7">
+              NOW
+            </text>
 
-          {/* Win path (upper) */}
-          <path d="M 80 42 C 130 20, 170 20, 200 25" fill="none" stroke="#22c55e" strokeWidth="1.5" strokeDasharray="4 3" />
-          <circle cx="220" cy="25" r="18" fill="#052e16" stroke="#22c55e" strokeWidth="1.5" />
-          <text x="220" y="22" textAnchor="middle" fill="#4ade80" fontSize="10" fontWeight="bold" fontFamily="monospace">
-            {oddsIfWin.toFixed(2)}
-          </text>
-          <text x="220" y="32" textAnchor="middle" fill="#22c55e" fontSize="6.5">WIN GAME</text>
+            {/* Win path (upper) */}
+            <path
+              d="M 80 42 C 130 20, 170 20, 200 25"
+              fill="none"
+              stroke="#22c55e"
+              strokeWidth="1.5"
+              strokeDasharray="4 3"
+            />
+            <circle cx="220" cy="25" r="18" fill="#052e16" stroke="#22c55e" strokeWidth="1.5" />
+            <text
+              x="220"
+              y="22"
+              textAnchor="middle"
+              fill="#4ade80"
+              fontSize="10"
+              fontWeight="bold"
+              fontFamily="monospace"
+            >
+              {oddsIfWin.toFixed(2)}
+            </text>
+            <text x="220" y="32" textAnchor="middle" fill="#22c55e" fontSize="6.5">
+              WIN GAME
+            </text>
 
-          {/* Lose path (lower) */}
-          <path d="M 80 58 C 130 80, 170 80, 200 75" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4 3" />
-          <circle cx="220" cy="75" r="18" fill="#2a0a0a" stroke="#ef4444" strokeWidth="1.5" />
-          <text x="220" y="72" textAnchor="middle" fill="#f87171" fontSize="10" fontWeight="bold" fontFamily="monospace">
-            {oddsIfLose.toFixed(2)}
-          </text>
-          <text x="220" y="82" textAnchor="middle" fill="#ef4444" fontSize="6.5">LOSE GAME</text>
+            {/* Lose path (lower) */}
+            <path
+              d="M 80 58 C 130 80, 170 80, 200 75"
+              fill="none"
+              stroke="#ef4444"
+              strokeWidth="1.5"
+              strokeDasharray="4 3"
+            />
+            <circle cx="220" cy="75" r="18" fill="#2a0a0a" stroke="#ef4444" strokeWidth="1.5" />
+            <text
+              x="220"
+              y="72"
+              textAnchor="middle"
+              fill="#f87171"
+              fontSize="10"
+              fontWeight="bold"
+              fontFamily="monospace"
+            >
+              {oddsIfLose.toFixed(2)}
+            </text>
+            <text x="220" y="82" textAnchor="middle" fill="#ef4444" fontSize="6.5">
+              LOSE GAME
+            </text>
 
-          {/* Fork arrows */}
-          <polygon points="196,23 200,25 196,27" fill="#22c55e" />
-          <polygon points="196,73 200,75 196,77" fill="#ef4444" />
-        </svg>
-      </div>
+            {/* Fork arrows */}
+            <polygon points="196,23 200,25 196,27" fill="#22c55e" />
+            <polygon points="196,73 200,75 196,77" fill="#ef4444" />
+          </svg>
+        </div>
+      )}
     </div>
   );
+
+  /* ─────────────────────────────────────────────────────────── */
+  /* ─── AI PANEL ─── */
+  /* ─────────────────────────────────────────────────────────── */
 
   const aiPanel = (
     <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden max-w-md mx-auto">
@@ -691,20 +901,24 @@ function TradingPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-            <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">AI SIGNALS</h2>
+            <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">
+              AI SIGNALS
+            </h2>
           </div>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 font-medium">CLAUDE</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 font-medium">
+            CLAUDE
+          </span>
         </div>
       </div>
 
       {/* Signal type selector + Get Signal button */}
       <div className="p-4 border-b border-gray-800/50 space-y-3">
         <div className="flex gap-1.5">
-          {([
+          {[
             { id: "pre_match" as const, label: "Pre-Match" },
             { id: "in_play" as const, label: "In-Play" },
             { id: "edge_alert" as const, label: "Edge" },
-          ]).map((t) => (
+          ].map((t) => (
             <button
               key={t.id}
               onClick={() => setSignalType(t.id)}
@@ -726,8 +940,19 @@ function TradingPage() {
           {aiSignalLoading ? (
             <span className="flex items-center justify-center gap-2">
               <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
               </svg>
               Analysing...
             </span>
@@ -743,23 +968,34 @@ function TradingPage() {
           <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                  aiSignal.edgeSize === "strong" ? "bg-green-500/20 text-green-400" :
-                  aiSignal.edgeSize === "moderate" ? "bg-blue-500/20 text-blue-400" :
-                  aiSignal.edgeSize === "mild" ? "bg-yellow-500/20 text-yellow-400" :
-                  "bg-gray-500/20 text-gray-400"
-                }`}>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                    aiSignal.edgeSize === "strong"
+                      ? "bg-green-500/20 text-green-400"
+                      : aiSignal.edgeSize === "moderate"
+                        ? "bg-blue-500/20 text-blue-400"
+                        : aiSignal.edgeSize === "mild"
+                          ? "bg-yellow-500/20 text-yellow-400"
+                          : "bg-gray-500/20 text-gray-400"
+                  }`}
+                >
                   {aiSignal.edgeSize.toUpperCase()}
                 </span>
-                <span className="text-[10px] text-gray-500 uppercase">{aiSignal.type.replace("_", " ")}</span>
+                <span className="text-[10px] text-gray-500 uppercase">
+                  {aiSignal.type.replace("_", " ")}
+                </span>
               </div>
-              <span className="text-[10px] text-gray-600">{aiSignal.model.split("-").slice(1, 3).join(" ")}</span>
+              <span className="text-[10px] text-gray-600">
+                {aiSignal.model.split("-").slice(1, 3).join(" ")}
+              </span>
             </div>
             <p className="text-xs text-gray-300 leading-relaxed">{aiSignal.analysis}</p>
             <div>
               <div className="flex items-center justify-between text-xs mb-1.5">
                 <span className="text-gray-500">Confidence</span>
-                <span className="text-green-400 font-mono font-medium">{aiSignal.confidence}%</span>
+                <span className="text-green-400 font-mono font-medium">
+                  {aiSignal.confidence}%
+                </span>
               </div>
               <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
                 <div
@@ -776,21 +1012,34 @@ function TradingPage() {
       <div className="p-4">
         {aiSignalHistory.length > 0 ? (
           <>
-            <h3 className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium mb-3">RECENT SIGNALS</h3>
+            <h3 className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium mb-3">
+              RECENT SIGNALS
+            </h3>
             <div className="space-y-2">
               {aiSignalHistory.map((sig, i) => (
-                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-800/30">
+                <div
+                  key={i}
+                  className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-800/30"
+                >
                   <div className="flex items-center gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                      sig.edgeSize === "strong" ? "bg-green-500/20 text-green-400" :
-                      sig.edgeSize === "moderate" ? "bg-blue-500/20 text-blue-400" :
-                      "bg-yellow-500/20 text-yellow-400"
-                    }`}>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                        sig.edgeSize === "strong"
+                          ? "bg-green-500/20 text-green-400"
+                          : sig.edgeSize === "moderate"
+                            ? "bg-blue-500/20 text-blue-400"
+                            : "bg-yellow-500/20 text-yellow-400"
+                      }`}
+                    >
                       {sig.edgeSize.toUpperCase()}
                     </span>
-                    <span className="text-xs text-gray-300 uppercase">{sig.type.replace("_", " ")}</span>
+                    <span className="text-xs text-gray-300 uppercase">
+                      {sig.type.replace("_", " ")}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-mono text-gray-500">{sig.confidence}%</span>
+                  <span className="text-[10px] font-mono text-gray-500">
+                    {sig.confidence}%
+                  </span>
                 </div>
               ))}
             </div>
@@ -798,28 +1047,34 @@ function TradingPage() {
         ) : (
           <div className="text-center py-6">
             <div className="text-gray-600 text-sm mb-1">No signals yet</div>
-            <div className="text-gray-700 text-xs">Click &quot;Get AI Signal&quot; to analyse this match</div>
+            <div className="text-gray-700 text-xs">
+              Click &quot;Get AI Signal&quot; to analyse this match
+            </div>
           </div>
         )}
       </div>
     </div>
   );
 
-  const sessionPnl = tradeHistory.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
-  const winCount = tradeHistory.filter((t) => (t.pnl ?? 0) > 0).length;
-  const winRate = tradeHistory.length > 0 ? Math.round((winCount / tradeHistory.length) * 100) : 0;
-  const bestTrade = tradeHistory.length > 0 ? Math.max(...tradeHistory.map((t) => t.pnl ?? 0)) : 0;
-  const worstTrade = tradeHistory.length > 0 ? Math.min(...tradeHistory.map((t) => t.pnl ?? 0)) : 0;
+  /* ─────────────────────────────────────────────────────────── */
+  /* ─── POSITIONS PANEL ─── */
+  /* ─────────────────────────────────────────────────────────── */
 
   const positionsPanel = (
     <div className="space-y-3 max-w-md mx-auto">
       {/* Session P&L */}
       <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/50">
-          <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">SESSION P&amp;L</h2>
+          <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">
+            SESSION P&amp;L
+          </h2>
         </div>
         <div className="p-4">
-          <div className={`text-2xl font-bold font-mono mb-1 ${sessionPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+          <div
+            className={`text-2xl font-bold font-mono mb-1 ${
+              sessionPnl >= 0 ? "text-green-400" : "text-red-400"
+            }`}
+          >
             {sessionPnl >= 0 ? "+" : "-"}£{Math.abs(sessionPnl).toFixed(2)}
           </div>
           <div className="text-xs text-gray-500">Profit from closed trades</div>
@@ -827,11 +1082,21 @@ function TradingPage() {
             {[
               { label: "TRADES", value: String(tradeHistory.length), color: "text-white" },
               { label: "WIN RATE", value: `${winRate}%`, color: "text-green-400" },
-              { label: "BEST", value: bestTrade > 0 ? `+£${bestTrade.toFixed(2)}` : "—", color: "text-green-400 font-mono" },
-              { label: "WORST", value: worstTrade < 0 ? `-£${Math.abs(worstTrade).toFixed(2)}` : "—", color: "text-red-400 font-mono" },
+              {
+                label: "BEST",
+                value: bestTrade > 0 ? `+£${bestTrade.toFixed(2)}` : "--",
+                color: "text-green-400 font-mono",
+              },
+              {
+                label: "WORST",
+                value: worstTrade < 0 ? `-£${Math.abs(worstTrade).toFixed(2)}` : "--",
+                color: "text-red-400 font-mono",
+              },
             ].map((s) => (
               <div key={s.label} className="bg-gray-800/30 rounded-lg p-2.5">
-                <div className="text-[10px] tracking-wider uppercase text-gray-500 mb-0.5">{s.label}</div>
+                <div className="text-[10px] tracking-wider uppercase text-gray-500 mb-0.5">
+                  {s.label}
+                </div>
                 <div className={`text-base font-bold ${s.color}`}>{s.value}</div>
               </div>
             ))}
@@ -843,8 +1108,12 @@ function TradingPage() {
       <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/50">
           <div className="flex items-center justify-between">
-            <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">OPEN POSITIONS</h2>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-medium">{openPositions.length} OPEN</span>
+            <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">
+              OPEN POSITIONS
+            </h2>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-medium">
+              {openPositions.length} OPEN
+            </span>
           </div>
         </div>
         <div className="p-4 space-y-2">
@@ -852,17 +1121,37 @@ function TradingPage() {
             <p className="text-xs text-gray-500 text-center py-2">No open positions</p>
           ) : (
             openPositions.map((pos) => (
-              <div key={pos.id} className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3">
+              <div
+                key={pos.id}
+                className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3"
+              >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${pos.side === "BACK" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"}`}>{pos.side}</span>
-                    <span className="text-xs text-white font-medium">{pos.player ?? pos.selection_id}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                        pos.side === "BACK"
+                          ? "bg-blue-500/20 text-blue-400"
+                          : "bg-pink-500/20 text-pink-400"
+                      }`}
+                    >
+                      {pos.side}
+                    </span>
+                    <span className="text-xs text-white font-medium">
+                      {pos.player ?? pos.selection_id}
+                    </span>
                   </div>
                   <span className="text-gray-500 font-mono text-xs">Open</span>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-gray-500">
-                  <span>£{pos.stake} @ {pos.entry_price}</span>
-                  <span className="text-gray-600">{new Date(pos.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                  <span>
+                    £{pos.stake} @ {pos.entry_price}
+                  </span>
+                  <span className="text-gray-600">
+                    {new Date(pos.created_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
                 </div>
               </div>
             ))
@@ -873,26 +1162,55 @@ function TradingPage() {
       {/* Trade History */}
       <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/50">
-          <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">TRADE HISTORY</h2>
+          <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">
+            TRADE HISTORY
+          </h2>
         </div>
         <div className="divide-y divide-gray-800/30">
           {tradeHistory.length === 0 ? (
-            <div className="px-4 py-4 text-xs text-gray-500 text-center">No closed trades yet</div>
+            <div className="px-4 py-4 text-xs text-gray-500 text-center">
+              No closed trades yet
+            </div>
           ) : (
             tradeHistory.map((trade) => (
-              <div key={trade.id} className="px-4 py-2.5 flex items-center justify-between">
+              <div
+                key={trade.id}
+                className="px-4 py-2.5 flex items-center justify-between"
+              >
                 <div className="flex items-center gap-2">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${trade.side === "BACK" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"}`}>{trade.side}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                      trade.side === "BACK"
+                        ? "bg-blue-500/20 text-blue-400"
+                        : "bg-pink-500/20 text-pink-400"
+                    }`}
+                  >
+                    {trade.side}
+                  </span>
                   <div>
-                    <div className="text-[11px] text-gray-300 font-mono">{trade.entry_price} → {trade.exit_price ?? "—"} × £{trade.stake}</div>
+                    <div className="text-[11px] text-gray-300 font-mono">
+                      {trade.entry_price} → {trade.exit_price ?? "--"} x £{trade.stake}
+                    </div>
                     <div className="text-[10px] text-gray-600">
-                      {trade.closed_at ? new Date(trade.closed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
-                      {trade.greened_up && <span className="ml-1 text-green-500">● green</span>}
+                      {trade.closed_at
+                        ? new Date(trade.closed_at).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "--"}
+                      {trade.greened_up && (
+                        <span className="ml-1 text-green-500">● green</span>
+                      )}
                     </div>
                   </div>
                 </div>
-                <span className={`text-xs font-mono font-semibold ${(trade.pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
-                  {(trade.pnl ?? 0) >= 0 ? "+" : "-"}£{Math.abs(trade.pnl ?? 0).toFixed(2)}
+                <span
+                  className={`text-xs font-mono font-semibold ${
+                    (trade.pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {(trade.pnl ?? 0) >= 0 ? "+" : "-"}£
+                  {Math.abs(trade.pnl ?? 0).toFixed(2)}
                 </span>
               </div>
             ))
@@ -904,14 +1222,21 @@ function TradingPage() {
       <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/50">
           <div className="flex items-center justify-between">
-            <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">AI GUARDIAN</h2>
+            <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">
+              AI GUARDIAN
+            </h2>
             {guardianData ? (
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                guardianData.urgency === "high" ? "bg-red-500/10 text-red-400" :
-                guardianData.urgency === "medium" ? "bg-amber-500/10 text-amber-400" :
-                guardianData.urgency === "low" ? "bg-yellow-500/10 text-yellow-400" :
-                "bg-green-500/10 text-green-400"
-              }`}>
+              <span
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                  guardianData.urgency === "high"
+                    ? "bg-red-500/10 text-red-400"
+                    : guardianData.urgency === "medium"
+                      ? "bg-amber-500/10 text-amber-400"
+                      : guardianData.urgency === "low"
+                        ? "bg-yellow-500/10 text-yellow-400"
+                        : "bg-green-500/10 text-green-400"
+                }`}
+              >
                 {guardianData.urgency === "none" ? "SAFE" : guardianData.urgency.toUpperCase()}
               </span>
             ) : (
@@ -925,7 +1250,9 @@ function TradingPage() {
         <div className="p-4 space-y-3">
           {!guardianData ? (
             <div className="space-y-3">
-              <p className="text-xs text-gray-500">Assess your current position for AI-powered exit strategies.</p>
+              <p className="text-xs text-gray-500">
+                Assess your current position for AI-powered exit strategies.
+              </p>
               <button
                 onClick={fetchGuardianAssessment}
                 disabled={guardianLoading}
@@ -934,8 +1261,19 @@ function TradingPage() {
                 {guardianLoading ? (
                   <span className="flex items-center justify-center gap-2">
                     <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
                     </svg>
                     Assessing...
                   </span>
@@ -949,57 +1287,87 @@ function TradingPage() {
               <p className="text-xs text-gray-300">{guardianData.statusMessage}</p>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Current P&amp;L</span>
-                <span className={`font-mono font-semibold ${guardianData.currentPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-                  {guardianData.currentPnl >= 0 ? "+" : ""}£{guardianData.currentPnl.toFixed(2)}
+                <span
+                  className={`font-mono font-semibold ${
+                    guardianData.currentPnl >= 0 ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {guardianData.currentPnl >= 0 ? "+" : ""}£
+                  {guardianData.currentPnl.toFixed(2)}
                 </span>
               </div>
               {(["A", "B", "C", "D"] as const).map((key) => {
                 const opt = guardianData.options?.[key];
                 if (!opt) return null;
                 const isRecommended = guardianData.aiRecommendation === key;
-                const canExecute = key !== "D" && (key === "A" || key === "C" || (key === "B" && opt.canBreakEven));
+                const canExecute =
+                  key !== "D" &&
+                  (key === "A" || key === "C" || (key === "B" && opt.canBreakEven));
                 return (
                   <div
                     key={key}
                     className={`rounded-xl p-3 border ${
-                      isRecommended ? "border-blue-500/40 bg-blue-500/5" : "border-gray-800/50 bg-gray-800/20"
+                      isRecommended
+                        ? "border-blue-500/40 bg-blue-500/5"
+                        : "border-gray-800/50 bg-gray-800/20"
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[10px] font-bold text-gray-500">{key}</span>
                       <span className="text-xs font-medium text-white">{opt.label}</span>
                       {isRecommended && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-semibold">AI PICK</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-semibold">
+                          AI PICK
+                        </span>
                       )}
                     </div>
                     <p className="text-[11px] text-gray-400 mb-2">{opt.description}</p>
                     {key === "A" && opt.equalProfit !== undefined && (
                       <div className="text-[11px] text-gray-500">
-                        Lock in: <span className={`font-mono ${opt.equalProfit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        Lock in:{" "}
+                        <span
+                          className={`font-mono ${
+                            opt.equalProfit >= 0 ? "text-green-400" : "text-red-400"
+                          }`}
+                        >
                           {opt.equalProfit >= 0 ? "+" : ""}£{opt.equalProfit.toFixed(2)}
-                        </span>
-                        {" "}({opt.greenUpSide} £{opt.greenUpStake?.toFixed(2)} @ {opt.greenUpPrice?.toFixed(2)})
+                        </span>{" "}
+                        ({opt.greenUpSide} £{opt.greenUpStake?.toFixed(2)} @{" "}
+                        {opt.greenUpPrice?.toFixed(2)})
                       </div>
                     )}
                     {key === "C" && (
                       <div className="text-[11px] text-gray-500">
-                        Best: <span className="text-green-400 font-mono">+£{opt.bestCase?.toFixed(2)}</span>
-                        {" / "}Worst: <span className="text-red-400 font-mono">-£{Math.abs(opt.worstCase ?? 0).toFixed(2)}</span>
+                        Best:{" "}
+                        <span className="text-green-400 font-mono">
+                          +£{opt.bestCase?.toFixed(2)}
+                        </span>
+                        {" / "}Worst:{" "}
+                        <span className="text-red-400 font-mono">
+                          -£{Math.abs(opt.worstCase ?? 0).toFixed(2)}
+                        </span>
                       </div>
                     )}
                     {key === "D" && opt.available && (
                       <div className="text-[11px] text-gray-500">
-                        Recovery: <span className="text-blue-400 font-mono">{opt.recoveryChance}%</span>
-                        {opt.waitGames !== undefined && <span> · Wait {opt.waitGames} games</span>}
+                        Recovery:{" "}
+                        <span className="text-blue-400 font-mono">
+                          {opt.recoveryChance}%
+                        </span>
+                        {opt.waitGames !== undefined && (
+                          <span> · Wait {opt.waitGames} games</span>
+                        )}
                       </div>
                     )}
                     {canExecute && isConnected && marketId && (
                       <button
-                        onClick={() => executeGuardianOption({
-                          hedgeSide: opt.greenUpSide ?? opt.hedgeSide,
-                          hedgePrice: opt.greenUpPrice ?? opt.hedgePrice,
-                          hedgeStake: opt.greenUpStake ?? opt.hedgeStake,
-                        })}
+                        onClick={() =>
+                          executeGuardianOption({
+                            hedgeSide: opt.greenUpSide ?? opt.hedgeSide,
+                            hedgePrice: opt.greenUpPrice ?? opt.hedgePrice,
+                            hedgeStake: opt.greenUpStake ?? opt.hedgeStake,
+                          })
+                        }
                         disabled={guardianExecuting}
                         className="mt-2 w-full py-1.5 rounded-lg text-[11px] font-medium text-white bg-blue-500/20 border border-blue-500/30 hover:bg-blue-500/30 disabled:opacity-40 transition-all"
                       >
@@ -1010,7 +1378,10 @@ function TradingPage() {
                 );
               })}
               <button
-                onClick={() => { setGuardianData(null); fetchGuardianAssessment(); }}
+                onClick={() => {
+                  setGuardianData(null);
+                  fetchGuardianAssessment();
+                }}
                 disabled={guardianLoading}
                 className="w-full py-2 rounded-xl text-xs font-medium text-gray-400 bg-gray-800/30 border border-gray-700/50 hover:bg-gray-800/50 hover:text-gray-300 disabled:opacity-40 transition-all"
               >
@@ -1023,15 +1394,22 @@ function TradingPage() {
     </div>
   );
 
+  /* ─────────────────────────────────────────────────────────── */
+  /* ─── MAIN RENDER ─── */
+  /* ─────────────────────────────────────────────────────────── */
+
+  const p1Pnl = getUnrealizedPnl("player1");
+  const p2Pnl = getUnrealizedPnl("player2");
+
   return (
     <main className="min-h-screen pt-14 bg-[#030712] max-w-[100vw] overflow-x-hidden">
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-sm font-medium shadow-lg transition-all ${
-          toast.type === "success"
-            ? "bg-green-500/90 text-white"
-            : "bg-red-500/90 text-white"
-        }`}>
+        <div
+          className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-sm font-medium shadow-lg transition-all ${
+            toast.type === "success" ? "bg-green-500/90 text-white" : "bg-red-500/90 text-white"
+          }`}
+        >
           {toast.message}
         </div>
       )}
@@ -1040,174 +1418,187 @@ function TradingPage() {
       {!isLive && (
         <div className="border-b border-amber-500/20 bg-amber-500/5">
           <div className="px-2 md:px-4 py-1.5 flex items-center gap-2">
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">DEMO</span>
-            <span className="text-xs text-amber-400/80">Demo mode — connect Betfair in Settings for live trading</span>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">
+              DEMO
+            </span>
+            <span className="text-xs text-amber-400/80">
+              Demo mode -- connect Betfair in Settings for live trading
+            </span>
           </div>
         </div>
       )}
 
-      {/* ─── Session Timer ─── */}
+      {/* ─── Top Match Info Bar ─── */}
+      <div className="border-b border-gray-800/50 bg-gray-900/30">
+        <div className="px-2 md:px-4 py-2 flex items-center justify-center gap-2 md:gap-3 flex-wrap text-xs">
+          <span className="text-gray-400 font-medium">{tournament}</span>
+          <span className="text-gray-700">|</span>
+          {isLive && marketBook ? (
+            <>
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                  marketBook.inplay
+                    ? "bg-green-500/15 text-green-400"
+                    : "bg-blue-500/15 text-blue-400"
+                }`}
+              >
+                {marketBook.inplay ? "IN-PLAY" : "PRE-MATCH"}
+              </span>
+              <span className="text-gray-700">|</span>
+              <span className="text-gray-400 font-mono">
+                {formatVolume(marketBook.totalMatched)} matched
+              </span>
+            </>
+          ) : (
+            <span className="text-gray-500">Awaiting connection</span>
+          )}
+          <span className="text-gray-700">|</span>
+          <span className="flex items-center gap-1 text-gray-400">
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v6l4 2" />
+            </svg>
+            {sessionTimeStr}
+          </span>
+        </div>
+      </div>
+
+      {/* ─── Session Timer Bar ─── */}
       <div className="border-b border-gray-800/50 bg-gray-900/20">
         <div className="px-2 md:px-4 py-1.5 flex items-center justify-center gap-3 text-xs">
           <span className="flex items-center gap-1 text-gray-400">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" />
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v6l4 2" />
             </svg>
             {sessionTimeStr}
           </span>
           <span className="text-gray-700">|</span>
-          <span className={`font-mono font-semibold ${mockSessionPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-            {mockSessionPnl >= 0 ? "+" : ""}£{mockSessionPnl.toFixed(2)}
+          <span
+            className={`font-mono font-semibold ${
+              sessionPnl >= 0 ? "text-green-400" : "text-red-400"
+            }`}
+          >
+            {sessionPnl >= 0 ? "+" : ""}£{sessionPnl.toFixed(2)}
           </span>
           <span className="text-gray-700">|</span>
           <span className="text-gray-500 font-mono">£{sessionRate}/hr</span>
         </div>
       </div>
 
-      {/* ─── Top Bar: Player Selector ─── */}
+      {/* ─── Player Selector ─── */}
       <div className="border-b border-gray-800/50 bg-gray-900/30 max-w-full overflow-hidden">
         <div className="px-2 md:px-4 py-2 md:py-3">
-          <div className="flex items-center justify-between gap-2 max-w-full">
-            {/* Match info - hidden on mobile, shown on tablet+ */}
-            <div className="hidden md:flex items-center gap-2 text-xs text-gray-500 shrink-0">
-              <span className="px-2 py-0.5 rounded bg-green-500/10 text-green-400 font-medium">LIVE</span>
-              <span>ATP Finals</span>
-              <span className="text-gray-700">·</span>
-              <span>Semi-Final</span>
-              <span className="text-gray-700">·</span>
-              <span>Set 2, Game 4</span>
-            </div>
-
-            {/* Mobile: compact live badge */}
-            <div className="flex md:hidden items-center gap-1.5 shrink-0">
-              <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 text-[10px] font-medium">LIVE</span>
-            </div>
-
-            {/* Players - always visible */}
-            <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
-              <button
-                onClick={() => setSelectedPlayer("player1")}
-                className={`flex items-center gap-1 md:gap-2 min-h-[44px] md:min-h-0 px-2.5 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-all ${
-                  selectedPlayer === "player1"
-                    ? "bg-blue-500/10 text-blue-400 border border-blue-500/30"
-                    : "bg-gray-900/50 text-gray-400 border border-gray-800/50"
-                }`}
-              >
+          <div className="flex items-center justify-center gap-2 md:gap-3 max-w-full">
+            {/* Player 1 */}
+            <button
+              onClick={() => setSelectedPlayer("player1")}
+              className={`flex items-center gap-1.5 md:gap-2 min-h-[44px] md:min-h-0 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium transition-all ${
+                selectedPlayer === "player1"
+                  ? "border-blue-500/50 bg-blue-500/10 text-blue-400 border"
+                  : "border-gray-800/50 bg-gray-900/50 text-gray-400 border opacity-70 hover:opacity-100"
+              }`}
+            >
+              {displayPlayers.player1.flag && (
                 <span>{displayPlayers.player1.flag}</span>
-                <span className="hidden md:inline">{displayPlayers.player1.name}</span>
-                <span className="md:hidden">{displayPlayers.player1.short}</span>
-                <span className="font-mono font-bold text-white">{displayPlayers.player1.odds.toFixed(2)}</span>
-              </button>
-              <span className="text-gray-600 text-[10px] md:text-xs font-medium">vs</span>
-              <button
-                onClick={() => setSelectedPlayer("player2")}
-                className={`flex items-center gap-1 md:gap-2 min-h-[44px] md:min-h-0 px-2.5 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-all ${
-                  selectedPlayer === "player2"
-                    ? "bg-blue-500/10 text-blue-400 border border-blue-500/30"
-                    : "bg-gray-900/50 text-gray-400 border border-gray-800/50"
-                }`}
-              >
+              )}
+              <span className="hidden md:inline">{displayPlayers.player1.name}</span>
+              <span className="md:hidden">{displayPlayers.player1.short}</span>
+              <span className="font-mono font-bold text-white">
+                {displayPlayers.player1.odds > 0
+                  ? displayPlayers.player1.odds.toFixed(2)
+                  : "--"}
+              </span>
+              {p1Pnl !== null && (
+                <span
+                  className={`text-[10px] font-mono font-semibold ${
+                    p1Pnl >= 0 ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {p1Pnl >= 0 ? "+" : ""}£{p1Pnl.toFixed(2)}
+                </span>
+              )}
+            </button>
+
+            <span className="text-gray-600 text-[10px] md:text-xs font-medium">vs</span>
+
+            {/* Player 2 */}
+            <button
+              onClick={() => setSelectedPlayer("player2")}
+              className={`flex items-center gap-1.5 md:gap-2 min-h-[44px] md:min-h-0 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium transition-all ${
+                selectedPlayer === "player2"
+                  ? "border-blue-500/50 bg-blue-500/10 text-blue-400 border"
+                  : "border-gray-800/50 bg-gray-900/50 text-gray-400 border opacity-70 hover:opacity-100"
+              }`}
+            >
+              {displayPlayers.player2.flag && (
                 <span>{displayPlayers.player2.flag}</span>
-                <span className="hidden md:inline">{displayPlayers.player2.name}</span>
-                <span className="md:hidden">{displayPlayers.player2.short}</span>
-                <span className="font-mono font-bold text-white">{displayPlayers.player2.odds.toFixed(2)}</span>
-              </button>
-            </div>
+              )}
+              <span className="hidden md:inline">{displayPlayers.player2.name}</span>
+              <span className="md:hidden">{displayPlayers.player2.short}</span>
+              <span className="font-mono font-bold text-white">
+                {displayPlayers.player2.odds > 0
+                  ? displayPlayers.player2.odds.toFixed(2)
+                  : "--"}
+              </span>
+              {p2Pnl !== null && (
+                <span
+                  className={`text-[10px] font-mono font-semibold ${
+                    p2Pnl >= 0 ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {p2Pnl >= 0 ? "+" : ""}£{p2Pnl.toFixed(2)}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       </div>
 
-      {/* ─── WOM Bar ─── */}
+      {/* ─── Weight of Money Bar ─── */}
       <div className="border-b border-gray-800/50 bg-gray-900/20 max-w-full">
         <div className="px-2 md:px-4 py-1.5 md:py-2">
           <div className="flex items-center gap-2 md:gap-3 max-w-full">
-            <span className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium shrink-0">WOM</span>
-            <div className="flex-1 h-1.5 md:h-2 rounded-full overflow-hidden bg-gray-800 flex min-w-0">
-              <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500" style={{ width: `${womBack}%` }} />
-              <div className="h-full bg-gradient-to-r from-pink-400 to-pink-500 transition-all duration-500" style={{ width: `${100 - womBack}%` }} />
+            <span className="text-[10px] text-blue-400 font-mono font-medium shrink-0">
+              {womBack}% BACK
+            </span>
+            <div className="flex-1 h-2 md:h-2.5 rounded-full overflow-hidden bg-gray-800 flex min-w-0">
+              <div
+                className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-500"
+                style={{ width: `${womBack}%` }}
+              />
+              <div
+                className="h-full bg-gradient-to-r from-pink-400 to-pink-600 transition-all duration-500"
+                style={{ width: `${100 - womBack}%` }}
+              />
             </div>
-            <div className="flex items-center gap-1 md:gap-2 text-[10px] md:text-xs shrink-0">
-              <span className="text-blue-400 font-mono">{womBack}%</span>
-              <span className="text-gray-700">/</span>
-              <span className="text-pink-400 font-mono">{100 - womBack}%</span>
-            </div>
+            <span className="text-[10px] text-pink-400 font-mono font-medium shrink-0">
+              {100 - womBack}% LAY
+            </span>
           </div>
-        </div>
-      </div>
-
-      {/* ─── Momentum Meter ─── */}
-      <div className="border-b border-gray-800/50 bg-gray-900/20">
-        <div className="px-2 md:px-4 py-2 flex items-center justify-center gap-3">
-          <span className="text-[10px] text-blue-400 font-medium shrink-0">{displayPlayers.player1.short}</span>
-          <svg viewBox="0 0 200 60" className="w-40 md:w-48 h-auto shrink-0">
-            <defs>
-              <linearGradient id="momGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#3b82f6" />
-                <stop offset="50%" stopColor="#6b7280" />
-                <stop offset="100%" stopColor="#ec4899" />
-              </linearGradient>
-            </defs>
-            {/* Arc background */}
-            <path d="M 20 55 A 80 80 0 0 1 180 55" fill="none" stroke="#1f2937" strokeWidth="6" strokeLinecap="round" />
-            {/* Arc colored */}
-            <path d="M 20 55 A 80 80 0 0 1 180 55" fill="none" stroke="url(#momGrad)" strokeWidth="6" strokeLinecap="round" opacity="0.6" />
-            {/* Needle: angle maps -5→180° (left/P1) to +5→0° (right/P2) */}
-            {(() => {
-              const angle = 180 - ((momentumScore + 5) / 10) * 180;
-              const rad = (angle * Math.PI) / 180;
-              const cx = 100, cy = 55, len = 65;
-              const nx = cx + len * Math.cos(rad);
-              const ny = cy - len * Math.sin(rad);
-              return (
-                <>
-                  <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="white" strokeWidth="2" strokeLinecap="round" />
-                  <circle cx={cx} cy={cy} r="4" fill="white" />
-                </>
-              );
-            })()}
-            <text x="100" y="54" textAnchor="middle" fill="#9ca3af" fontSize="9" fontFamily="monospace">
-              {momentumScore > 0 ? `+${momentumScore}` : momentumScore}
-            </text>
-          </svg>
-          <span className="text-[10px] text-pink-400 font-medium shrink-0">{displayPlayers.player2.short}</span>
-        </div>
-      </div>
-
-      {/* ─── Live Score Overlay ─── */}
-      <div className="border-b border-gray-800/50 bg-gray-900/30">
-        <div className="px-2 md:px-4 py-2 flex items-center justify-center gap-2 flex-wrap text-xs">
-          <span className="text-gray-400 font-medium">Set {scoreData.set}:</span>
-          <span className="text-white font-semibold">
-            {displayPlayers.player1.short}{" "}
-            {scoreData.setScores.map((s, i) => (
-              <span key={i} className="text-gray-400 font-mono">{s.p1}-{s.p2}{i < scoreData.setScores.length - 1 ? ", " : ""}</span>
-            ))},{" "}
-            <span className="font-mono">{scoreData.p1Games}-{scoreData.p2Games}</span>
-          </span>
-          <span className="text-gray-500">({scoreData.p1Points}-{scoreData.p2Points})</span>
-          <span className="text-gray-700">|</span>
-          <span className="text-yellow-400">
-            🎾 {displayPlayers[scoreData.server].short} serving
-          </span>
-          {scoreData.alert && (
-            <>
-              <span className="text-gray-700">|</span>
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-[10px] font-semibold animate-pulse">
-                {scoreData.alert}
-              </span>
-            </>
-          )}
         </div>
       </div>
 
       {/* ─── Tab Bar (mobile + tablet, hidden on desktop 1920+) ─── */}
       <div className="min-[1920px]:hidden sticky top-14 z-40 border-b border-gray-800/50 bg-gray-900/95 backdrop-blur-sm max-w-full">
         <div className="flex">
-          {([
+          {[
             { id: "ladder" as const, label: "Ladder" },
             { id: "ai" as const, label: "AI Signals" },
             { id: "positions" as const, label: "Positions" },
-          ]).map((tab) => (
+          ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -1243,6 +1634,7 @@ function TradingPage() {
           </div>
         </div>
       </div>
+
       {/* ─── Keyboard Shortcuts Tooltip ─── */}
       <div
         className="fixed bottom-4 right-4 z-50"
@@ -1251,7 +1643,9 @@ function TradingPage() {
       >
         {shortcutsExpanded ? (
           <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 shadow-xl min-w-[180px]">
-            <div className="text-[10px] tracking-[0.15em] uppercase text-gray-400 font-medium mb-2">SHORTCUTS</div>
+            <div className="text-[10px] tracking-[0.15em] uppercase text-gray-400 font-medium mb-2">
+              SHORTCUTS
+            </div>
             <div className="space-y-1.5 text-xs">
               {[
                 { key: "B", desc: "Back best price" },
@@ -1261,7 +1655,9 @@ function TradingPage() {
                 { key: "Esc", desc: "Close" },
               ].map((s) => (
                 <div key={s.key} className="flex items-center gap-2">
-                  <kbd className="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-[10px] font-mono text-gray-300 min-w-[28px] text-center">{s.key}</kbd>
+                  <kbd className="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-[10px] font-mono text-gray-300 min-w-[28px] text-center">
+                    {s.key}
+                  </kbd>
                   <span className="text-gray-400">{s.desc}</span>
                 </div>
               ))}
@@ -1269,7 +1665,7 @@ function TradingPage() {
           </div>
         ) : (
           <div className="bg-gray-900/90 border border-gray-700/50 rounded-lg px-3 py-1.5 text-xs text-gray-400 cursor-default shadow-lg">
-            ⌨ Shortcuts
+            Shortcuts
           </div>
         )}
       </div>
