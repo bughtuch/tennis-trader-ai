@@ -20,42 +20,53 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`[Betfair Auth] APP_KEY length: ${appKey.length}`);
-
     const body = new URLSearchParams({ username, password }).toString();
+    const url = "https://identitysso.betfair.com/api/login";
 
-    const res = await fetch(
-      "https://identitysso.betfair.com/api/login",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "X-Application": appKey,
-          "Accept": "application/json",
-        },
-        body,
-      }
-    );
+    const headers: Record<string, string> = {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "X-Application": appKey,
+      "Accept": "application/json",
+      "Origin": "https://www.betfair.com",
+    };
 
-    const contentType = res.headers.get("content-type") ?? "";
+    console.log(`[Betfair Auth] Request URL: ${url}`);
+    console.log(`[Betfair Auth] APP_KEY: ${appKey.slice(0, 4)}... (length: ${appKey.length})`);
+    console.log(`[Betfair Auth] Headers:`, JSON.stringify({ ...headers, "X-Application": `${appKey.slice(0, 4)}...` }));
+    console.log(`[Betfair Auth] Body: username=${username}&password=***`);
 
-    if (!contentType.includes("json")) {
-      const text = await res.text();
-      console.error(`[Betfair Auth] Non-JSON response (${res.status}):`, text.slice(0, 500));
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body,
+    });
+
+    const responseHeaders: Record<string, string> = {};
+    res.headers.forEach((v, k) => { responseHeaders[k] = v; });
+
+    const responseText = await res.text();
+
+    console.log(`[Betfair Auth] Response status: ${res.status}`);
+    console.log(`[Betfair Auth] Response headers:`, JSON.stringify(responseHeaders));
+    console.log(`[Betfair Auth] Response body (first 500):`, responseText.slice(0, 500));
+
+    // Try parsing as JSON
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
       return NextResponse.json(
         {
           success: false,
-          error: `Betfair returned non-JSON response (HTTP ${res.status}). Check app key and credentials.`,
+          error: `Betfair returned non-JSON (HTTP ${res.status}). Check Vercel logs for details.`,
         },
         { status: 502 }
       );
     }
 
-    const data = await res.json();
-
     if (data.status !== "SUCCESS" || !data.token) {
       return NextResponse.json(
-        { success: false, error: data.error ?? "Authentication failed" },
+        { success: false, error: data.error ?? `Authentication failed (${data.status})` },
         { status: 401 }
       );
     }
