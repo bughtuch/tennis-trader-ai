@@ -29,7 +29,7 @@ export default function SignupPage() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
@@ -38,6 +38,19 @@ export default function SignupPage() {
       setError(error.message);
       setLoading(false);
       return;
+    }
+
+    // Create profile row via API (bypasses RLS using service role key)
+    if (data.user) {
+      try {
+        await fetch("/api/auth/create-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: data.user.id, email }),
+        });
+      } catch {
+        // Non-critical — profile can be created later
+      }
     }
 
     setSuccess(true);
