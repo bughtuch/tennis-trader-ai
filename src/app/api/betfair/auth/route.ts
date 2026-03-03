@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     const body = new URLSearchParams({ username, password }).toString();
 
     const res = await fetch(
-      "https://identitysso-cert.betfair.com/api/login",
+      "https://identitysso.betfair.com/api/login",
       {
         method: "POST",
         headers: {
