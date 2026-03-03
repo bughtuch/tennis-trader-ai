@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase";
 
 /* ─── Types ─── */
 
@@ -142,11 +143,36 @@ export default function MarketsPage() {
   const loadMarkets = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch market catalogue
+      // 1. Check Supabase profile for Betfair connection
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setIsDemoMode(true);
+        setMarkets(MOCK_MARKETS);
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("betfair_connected, betfair_session_token")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.betfair_connected || !profile?.betfair_session_token) {
+        setIsDemoMode(true);
+        setMarkets(MOCK_MARKETS);
+        setLoading(false);
+        return;
+      }
+
+      const sessionToken = profile.betfair_session_token;
+
+      // 2. Fetch market catalogue
       const catRes = await fetch("/api/betfair/markets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "listMarkets" }),
+        body: JSON.stringify({ action: "listMarkets", sessionToken }),
       });
       const catData = await catRes.json();
 
@@ -157,14 +183,14 @@ export default function MarketsPage() {
         return;
       }
 
-      // 2. Fetch market books for odds
+      // 3. Fetch market books for odds
       const marketIds = catData.markets.map((m: { marketId: string }) => m.marketId);
-      let bookMap = new Map();
+      const bookMap = new Map();
       try {
         const bookRes = await fetch("/api/betfair/markets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "getMarketBook", marketIds }),
+          body: JSON.stringify({ action: "getMarketBook", marketIds, sessionToken }),
         });
         const bookData = await bookRes.json();
         if (bookData.success && bookData.marketBooks) {
@@ -176,7 +202,7 @@ export default function MarketsPage() {
         // Odds fetch failed — show markets without odds
       }
 
-      // 3. Merge catalogue + books
+      // 4. Merge catalogue + books
       const mapped = catData.markets
         .map((cat: { marketId: string }) => mapBetfairToMarket(cat, bookMap.get(cat.marketId)))
         .filter((m: Market | null): m is Market => m !== null);
