@@ -69,21 +69,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Check subscription for protected trading routes
-  if (requiresSubscription(pathname)) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("subscription_status")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.subscription_status !== "active") {
-      const settingsUrl = request.nextUrl.clone();
-      settingsUrl.pathname = "/settings";
-      settingsUrl.searchParams.set("subscribe", "true");
-      return NextResponse.redirect(settingsUrl);
-    }
-  }
+  // TODO: Re-enable subscription check before launch
+  // if (requiresSubscription(pathname)) {
+  //   const { data: profile } = await supabase
+  //     .from("profiles")
+  //     .select("subscription_status")
+  //     .eq("id", user.id)
+  //     .single();
+  //
+  //   if (profile?.subscription_status !== "active") {
+  //     const settingsUrl = request.nextUrl.clone();
+  //     settingsUrl.pathname = "/settings";
+  //     settingsUrl.searchParams.set("subscribe", "true");
+  //     return NextResponse.redirect(settingsUrl);
+  //   }
+  // }
 
   return response;
 }
