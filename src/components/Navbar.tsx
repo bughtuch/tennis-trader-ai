@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase";
+import type { User } from "@supabase/supabase-js";
 
 const navLinks = [
   { href: "/markets", label: "Markets" },
@@ -11,6 +14,30 @@ const navLinks = [
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/");
+  }
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 backdrop-blur-xl border-b border-gray-800/50">
@@ -64,21 +91,35 @@ export default function Navbar() {
               <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
               <span>Live</span>
             </div>
-            <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center">
-              <svg
-                className="w-4 h-4 text-gray-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                />
-              </svg>
-            </div>
+
+            {user ? (
+              <div className="flex items-center gap-3">
+                <span className="hidden sm:inline text-sm text-gray-400 max-w-[150px] truncate">
+                  {user.email}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-600 rounded-lg transition-colors"
+                >
+                  Log out
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/auth/login"
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  className="px-3 py-1.5 text-sm text-white bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg font-medium transition-all hover:shadow-[0_0_20px_rgba(59,130,246,0.3)]"
+                >
+                  Get Started
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>

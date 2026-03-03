@@ -55,7 +55,7 @@ export default function Home() {
             style={{ animationDelay: "0.3s" }}
           >
             <Link
-              href="/trading"
+              href="/auth/signup"
               className="group relative px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold text-lg transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02]"
             >
               Start Trading
@@ -295,7 +295,7 @@ export default function Home() {
               </div>
 
               <Link
-                href="/trading"
+                href="/auth/signup"
                 className="block w-full py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02]"
               >
                 Get Started Now
@@ -319,7 +319,7 @@ export default function Home() {
             Join hundreds of traders using AI to find edges in tennis markets.
           </p>
           <Link
-            href="/trading"
+            href="/auth/signup"
             className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold text-lg transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02]"
           >
             Start Trading Free
