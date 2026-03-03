@@ -145,21 +145,32 @@ export default function MarketsPage() {
     try {
       // 1. Check Supabase profile for Betfair connection
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      console.log("[Markets] Step 1 - User:", user?.id ?? "none", "Error:", userError?.message ?? "none");
       if (!user) {
+        console.log("[Markets] No user -> demo mode");
         setIsDemoMode(true);
         setMarkets(MOCK_MARKETS);
         setLoading(false);
         return;
       }
 
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("betfair_connected, betfair_session_token")
         .eq("id", user.id)
         .single();
 
+      console.log("[Markets] Step 2 - Profile:", JSON.stringify({
+        found: !!profile,
+        betfair_connected: profile?.betfair_connected,
+        has_token: !!profile?.betfair_session_token,
+        token_preview: profile?.betfair_session_token?.slice(0, 8),
+        error: profileError?.message,
+      }));
+
       if (!profile?.betfair_connected || !profile?.betfair_session_token) {
+        console.log("[Markets] Not connected -> demo mode");
         setIsDemoMode(true);
         setMarkets(MOCK_MARKETS);
         setLoading(false);
@@ -169,6 +180,7 @@ export default function MarketsPage() {
       const sessionToken = profile.betfair_session_token;
 
       // 2. Fetch market catalogue
+      console.log("[Markets] Step 3 - Calling /api/betfair/markets with token");
       const catRes = await fetch("/api/betfair/markets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -176,7 +188,16 @@ export default function MarketsPage() {
       });
       const catData = await catRes.json();
 
+      console.log("[Markets] Step 4 - API response:", JSON.stringify({
+        status: catRes.status,
+        success: catData.success,
+        marketCount: catData.markets?.length ?? 0,
+        error: catData.error,
+        debug: catData.debug,
+      }));
+
       if (!catData.success || !catData.markets?.length) {
+        console.log("[Markets] API failed or no markets -> demo mode");
         setIsDemoMode(true);
         setMarkets(MOCK_MARKETS);
         setLoading(false);
