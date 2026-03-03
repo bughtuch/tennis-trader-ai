@@ -4,6 +4,26 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAppStore, type PriceSize } from "@/lib/store";
 import { calculateGreenUp, moveByTicks } from "@/lib/tradingMaths";
+import { createClient } from "@/lib/supabase";
+
+interface SupabaseTrade {
+  id: string;
+  user_id: string;
+  market_id: string | null;
+  selection_id: string | null;
+  player: string | null;
+  side: string | null;
+  entry_price: number | null;
+  exit_price: number | null;
+  stake: number | null;
+  pnl: number | null;
+  status: string;
+  greened_up: boolean;
+  ai_signal_used: boolean;
+  notes: string | null;
+  created_at: string;
+  closed_at: string | null;
+}
 
 /* ─── Mock Data ─── */
 
@@ -53,13 +73,6 @@ function generateLadderData(): LadderRow[] {
 }
 
 const LADDER_DATA = generateLadderData();
-
-const RECENT_TRADES = [
-  { time: "14:32", type: "BACK" as const, price: 1.54, stake: 50, pnl: null as number | null },
-  { time: "14:28", type: "LAY" as const, price: 2.68, stake: 25, pnl: 18.5 },
-  { time: "14:15", type: "BACK" as const, price: 1.62, stake: 100, pnl: 42.3 },
-  { time: "14:02", type: "LAY" as const, price: 1.48, stake: 50, pnl: -15.0 },
-];
 
 const STAKES = [5, 10, 25, 50, 100];
 
@@ -120,6 +133,50 @@ function TradingPage() {
   const [guardianLoading, setGuardianLoading] = useState(false);
   const [guardianExecuting, setGuardianExecuting] = useState(false);
 
+  /* Supabase trades state */
+  const [openPositions, setOpenPositions] = useState<SupabaseTrade[]>([]);
+  const [tradeHistory, setTradeHistory] = useState<SupabaseTrade[]>([]);
+
+  const fetchTrades = useCallback(async () => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: open } = await supabase
+      .from("trades")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("status", "open")
+      .order("created_at", { ascending: false });
+    if (open) setOpenPositions(open);
+
+    const { data: closed } = await supabase
+      .from("trades")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("status", "closed")
+      .order("closed_at", { ascending: false })
+      .limit(20);
+    if (closed) setTradeHistory(closed);
+  }, []);
+
+  useEffect(() => { fetchTrades(); }, [fetchTrades]);
+
+  async function closeTradeAsGreenUp(tradeId: string, exitPrice: number, pnl: number) {
+    const supabase = createClient();
+    await supabase
+      .from("trades")
+      .update({
+        exit_price: exitPrice,
+        pnl,
+        status: "closed",
+        greened_up: true,
+        closed_at: new Date().toISOString(),
+      })
+      .eq("id", tradeId);
+    fetchTrades();
+  }
+
   const {
     isConnected,
     marketBook,
@@ -153,6 +210,7 @@ function TradingPage() {
     if (lastTradeSuccess) {
       setToast({ message: lastTradeSuccess, type: "success" });
       clearTradeMessages();
+      fetchTrades(); // Refresh positions after trade
       const t = setTimeout(() => setToast(null), 4000);
       return () => clearTimeout(t);
     }
@@ -162,7 +220,7 @@ function TradingPage() {
       const t = setTimeout(() => setToast(null), 4000);
       return () => clearTimeout(t);
     }
-  }, [lastTradeSuccess, tradeError, clearTradeMessages]);
+  }, [lastTradeSuccess, tradeError, clearTradeMessages, fetchTrades]);
 
   /* ─── Build ladder from live data or mock ─── */
   const selectedRunner = isLive
@@ -383,7 +441,7 @@ function TradingPage() {
   /* ─── Keyboard shortcuts ─── */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stateRef = useRef<any>(null);
-  stateRef.current = { selectedStake, selectedPlayer, isLive, marketId, selectedRunner, ladderData, placeTrade, setToast, setSelectedStake, greenUpResult, currentLayPrice };
+  stateRef.current = { selectedStake, selectedPlayer, isLive, marketId, selectedRunner, ladderData, placeTrade, setToast, setSelectedStake, greenUpResult, currentLayPrice, openPositions, closeTradeAsGreenUp };
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -415,7 +473,15 @@ function TradingPage() {
           break;
         case "g":
           if (s.isLive && s.marketId && s.selectedRunner) {
-            s.placeTrade({ marketId: s.marketId, selectionId: s.selectedRunner.selectionId, side: s.greenUpResult.greenUpSide, price: s.currentLayPrice, size: s.greenUpResult.greenUpStake });
+            s.placeTrade({ marketId: s.marketId, selectionId: s.selectedRunner.selectionId, side: s.greenUpResult.greenUpSide, price: s.currentLayPrice, size: s.greenUpResult.greenUpStake }).then((ok: boolean) => {
+              if (ok) {
+                for (const pos of s.openPositions.filter(
+                  (p: SupabaseTrade) => p.market_id === s.marketId && p.selection_id === String(s.selectedRunner.selectionId)
+                )) {
+                  s.closeTradeAsGreenUp(pos.id, s.currentLayPrice, s.greenUpResult.equalProfit);
+                }
+              }
+            });
           } else {
             s.setToast({ message: `Demo: GREEN UP — lock in £${s.greenUpResult.equalProfit.toFixed(2)}`, type: "success" });
           }
@@ -535,11 +601,17 @@ function TradingPage() {
         <div className="flex items-center justify-between text-xs">
           <div>
             <span className="text-gray-500">Position: </span>
-            <span className="text-blue-400 font-semibold">BACK £50 @ 1.54</span>
+            {openPositions.length > 0 ? (
+              <span className="text-blue-400 font-semibold">
+                {openPositions[0].side} £{openPositions[0].stake} @ {openPositions[0].entry_price}
+              </span>
+            ) : (
+              <span className="text-gray-600">No position</span>
+            )}
           </div>
           <div>
-            <span className="text-gray-500">P&amp;L: </span>
-            <span className="text-green-400 font-mono font-semibold">+£12.50</span>
+            <span className="text-gray-500">Open: </span>
+            <span className="text-gray-300 font-mono font-semibold">{openPositions.length}</span>
           </div>
         </div>
       </div>
@@ -547,15 +619,23 @@ function TradingPage() {
       {/* Green Up Button */}
       <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
         <button
-          onClick={() => {
+          onClick={async () => {
             if (isLive && marketId && selectedRunner) {
-              placeTrade({
+              const success = await placeTrade({
                 marketId,
                 selectionId: selectedRunner.selectionId,
                 side: greenUpResult.greenUpSide,
                 price: currentLayPrice,
                 size: greenUpResult.greenUpStake,
               });
+              if (success) {
+                // Close matching open positions in Supabase
+                for (const pos of openPositions.filter(
+                  (p) => p.market_id === marketId && p.selection_id === String(selectedRunner.selectionId)
+                )) {
+                  await closeTradeAsGreenUp(pos.id, currentLayPrice, greenUpResult.equalProfit);
+                }
+              }
             } else {
               setToast({ message: `Demo: Would ${greenUpResult.greenUpSide} £${greenUpResult.greenUpStake.toFixed(2)} @ ${currentLayPrice.toFixed(2)} to lock in £${greenUpResult.equalProfit.toFixed(2)}`, type: "success" });
             }
@@ -725,6 +805,12 @@ function TradingPage() {
     </div>
   );
 
+  const sessionPnl = tradeHistory.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+  const winCount = tradeHistory.filter((t) => (t.pnl ?? 0) > 0).length;
+  const winRate = tradeHistory.length > 0 ? Math.round((winCount / tradeHistory.length) * 100) : 0;
+  const bestTrade = tradeHistory.length > 0 ? Math.max(...tradeHistory.map((t) => t.pnl ?? 0)) : 0;
+  const worstTrade = tradeHistory.length > 0 ? Math.min(...tradeHistory.map((t) => t.pnl ?? 0)) : 0;
+
   const positionsPanel = (
     <div className="space-y-3 max-w-md mx-auto">
       {/* Session P&L */}
@@ -733,14 +819,16 @@ function TradingPage() {
           <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">SESSION P&amp;L</h2>
         </div>
         <div className="p-4">
-          <div className="text-2xl font-bold text-green-400 font-mono mb-1">+£127.50</div>
-          <div className="text-xs text-gray-500">Today&apos;s profit across all markets</div>
+          <div className={`text-2xl font-bold font-mono mb-1 ${sessionPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+            {sessionPnl >= 0 ? "+" : "-"}£{Math.abs(sessionPnl).toFixed(2)}
+          </div>
+          <div className="text-xs text-gray-500">Profit from closed trades</div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {[
-              { label: "TRADES", value: "12", color: "text-white" },
-              { label: "WIN RATE", value: "75%", color: "text-green-400" },
-              { label: "BEST", value: "+£42.30", color: "text-green-400 font-mono" },
-              { label: "WORST", value: "-£15.00", color: "text-red-400 font-mono" },
+              { label: "TRADES", value: String(tradeHistory.length), color: "text-white" },
+              { label: "WIN RATE", value: `${winRate}%`, color: "text-green-400" },
+              { label: "BEST", value: bestTrade > 0 ? `+£${bestTrade.toFixed(2)}` : "—", color: "text-green-400 font-mono" },
+              { label: "WORST", value: worstTrade < 0 ? `-£${Math.abs(worstTrade).toFixed(2)}` : "—", color: "text-red-400 font-mono" },
             ].map((s) => (
               <div key={s.label} className="bg-gray-800/30 rounded-lg p-2.5">
                 <div className="text-[10px] tracking-wider uppercase text-gray-500 mb-0.5">{s.label}</div>
@@ -756,23 +844,29 @@ function TradingPage() {
         <div className="px-4 py-3 border-b border-gray-800/50">
           <div className="flex items-center justify-between">
             <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">OPEN POSITIONS</h2>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-medium">1 OPEN</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-medium">{openPositions.length} OPEN</span>
           </div>
         </div>
-        <div className="p-4">
-          <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/20 text-blue-400">BACK</span>
-                <span className="text-xs text-white font-medium">Djokovic</span>
+        <div className="p-4 space-y-2">
+          {openPositions.length === 0 ? (
+            <p className="text-xs text-gray-500 text-center py-2">No open positions</p>
+          ) : (
+            openPositions.map((pos) => (
+              <div key={pos.id} className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${pos.side === "BACK" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"}`}>{pos.side}</span>
+                    <span className="text-xs text-white font-medium">{pos.player ?? pos.selection_id}</span>
+                  </div>
+                  <span className="text-gray-500 font-mono text-xs">Open</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-gray-500">
+                  <span>£{pos.stake} @ {pos.entry_price}</span>
+                  <span className="text-gray-600">{new Date(pos.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                </div>
               </div>
-              <span className="text-green-400 font-mono text-xs font-semibold">+£12.50</span>
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-gray-500">
-              <span>£50 @ 1.54</span>
-              <span>Current: 1.50</span>
-            </div>
-          </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -782,20 +876,27 @@ function TradingPage() {
           <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">TRADE HISTORY</h2>
         </div>
         <div className="divide-y divide-gray-800/30">
-          {RECENT_TRADES.map((trade, i) => (
-            <div key={i} className="px-4 py-2.5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${trade.type === "BACK" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"}`}>{trade.type}</span>
-                <div>
-                  <div className="text-[11px] text-gray-300 font-mono">{trade.price} × £{trade.stake}</div>
-                  <div className="text-[10px] text-gray-600">{trade.time}</div>
+          {tradeHistory.length === 0 ? (
+            <div className="px-4 py-4 text-xs text-gray-500 text-center">No closed trades yet</div>
+          ) : (
+            tradeHistory.map((trade) => (
+              <div key={trade.id} className="px-4 py-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${trade.side === "BACK" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"}`}>{trade.side}</span>
+                  <div>
+                    <div className="text-[11px] text-gray-300 font-mono">{trade.entry_price} → {trade.exit_price ?? "—"} × £{trade.stake}</div>
+                    <div className="text-[10px] text-gray-600">
+                      {trade.closed_at ? new Date(trade.closed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                      {trade.greened_up && <span className="ml-1 text-green-500">● green</span>}
+                    </div>
+                  </div>
                 </div>
+                <span className={`text-xs font-mono font-semibold ${(trade.pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {(trade.pnl ?? 0) >= 0 ? "+" : "-"}£{Math.abs(trade.pnl ?? 0).toFixed(2)}
+                </span>
               </div>
-              <span className={`text-xs font-mono font-semibold ${trade.pnl === null ? "text-gray-500" : trade.pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-                {trade.pnl === null ? "Open" : trade.pnl >= 0 ? `+£${trade.pnl.toFixed(2)}` : `-£${Math.abs(trade.pnl).toFixed(2)}`}
-              </span>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
