@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase-server";
+
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
-    const { username, password } = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Invalid JSON body" },
+        { status: 400 }
+      );
+    }
+
+    const { username, password } = body;
 
     if (!username || !password) {
       return NextResponse.json(
@@ -20,37 +31,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = new URLSearchParams({ username, password }).toString();
+    console.log(`[Betfair Auth] Starting login for ${username}`);
+    console.log(`[Betfair Auth] APP_KEY: ${appKey.slice(0, 4)}... (length: ${appKey.length})`);
+
+    const formBody = new URLSearchParams({ username, password }).toString();
     const url = "https://identitysso.betfair.com/api/login";
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "X-Application": appKey,
-      "Accept": "application/json",
-      "Origin": "https://www.betfair.com",
-    };
-
-    console.log(`[Betfair Auth] Request URL: ${url}`);
-    console.log(`[Betfair Auth] APP_KEY: ${appKey.slice(0, 4)}... (length: ${appKey.length})`);
-    console.log(`[Betfair Auth] Headers:`, JSON.stringify({ ...headers, "X-Application": `${appKey.slice(0, 4)}...` }));
-    console.log(`[Betfair Auth] Body: username=${username}&password=***`);
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body,
-    });
-
-    const responseHeaders: Record<string, string> = {};
-    res.headers.forEach((v, k) => { responseHeaders[k] = v; });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Application": appKey,
+          "Accept": "application/json",
+        },
+        body: formBody,
+      });
+    } catch (fetchErr) {
+      console.error(`[Betfair Auth] Fetch failed:`, fetchErr);
+      return NextResponse.json(
+        { success: false, error: `Network error contacting Betfair: ${fetchErr instanceof Error ? fetchErr.message : "unknown"}` },
+        { status: 502 }
+      );
+    }
 
     const responseText = await res.text();
 
     console.log(`[Betfair Auth] Response status: ${res.status}`);
-    console.log(`[Betfair Auth] Response headers:`, JSON.stringify(responseHeaders));
-    console.log(`[Betfair Auth] Response body (first 500):`, responseText.slice(0, 500));
+    console.log(`[Betfair Auth] Response content-type: ${res.headers.get("content-type")}`);
+    console.log(`[Betfair Auth] Response body (first 500): ${responseText.slice(0, 500)}`);
 
-    // Try parsing as JSON
     let data;
     try {
       data = JSON.parse(responseText);
@@ -58,7 +69,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Betfair returned non-JSON (HTTP ${res.status}). Check Vercel logs for details.`,
+          error: `Betfair returned non-JSON (HTTP ${res.status}). Check Vercel logs.`,
         },
         { status: 502 }
       );
@@ -71,8 +82,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Save Betfair session to the user's Supabase profile
+    // Save Betfair session to the user's Supabase profile (non-critical)
     try {
+      const { createServerClient } = await import("@/lib/supabase-server");
       const supabase = await createServerClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -84,8 +96,8 @@ export async function POST(req: NextRequest) {
           })
           .eq("id", user.id);
       }
-    } catch {
-      // Profile update is non-critical — don't block the login
+    } catch (dbErr) {
+      console.error(`[Betfair Auth] Profile update failed:`, dbErr);
     }
 
     const response = NextResponse.json({
@@ -97,12 +109,13 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       secure: true,
       sameSite: "strict",
-      maxAge: 8 * 60 * 60, // 8 hours
+      maxAge: 8 * 60 * 60,
       path: "/",
     });
 
     return response;
   } catch (error) {
+    console.error(`[Betfair Auth] Unhandled error:`, error);
     return NextResponse.json(
       {
         success: false,
