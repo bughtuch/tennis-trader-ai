@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase-server";
+
+export const runtime = "edge";
 
 const BETTING_API = "https://api.betfair.com/exchange/betting/rest/v1.0";
 
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
 
       // Save trades to Supabase
       try {
+        const { createServerClient } = await import("@/lib/supabase-server");
         const supabase = await createServerClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {

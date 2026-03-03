@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "edge";
+
 const BETTING_API = "https://api.betfair.com/exchange/betting/rest/v1.0";
 
 function getHeaders(sessionToken: string, appKey: string) {

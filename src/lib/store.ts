@@ -94,40 +94,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   login: async (username, password) => {
     set({ authLoading: true, authError: null });
     try {
-      // Call Betfair directly from browser to avoid cloud IP blocks
-      const appKey = process.env.NEXT_PUBLIC_BETFAIR_APP_KEY;
-      if (!appKey) {
-        set({ authError: "Betfair app key not configured", authLoading: false });
-        return false;
-      }
-
-      const formBody = new URLSearchParams({ username, password }).toString();
-      const bfRes = await fetch("https://identitysso.betfair.com/api/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "X-Application": appKey,
-          "Accept": "application/json",
-        },
-        body: formBody,
-      });
-
-      const bfData = await bfRes.json();
-
-      if (bfData.status !== "SUCCESS" || !bfData.token) {
-        set({ authError: bfData.error ?? "Betfair authentication failed", authLoading: false });
-        return false;
-      }
-
-      // Save token to our API (sets cookie + updates Supabase profile)
-      await fetch("/api/betfair/auth", {
+      const res = await fetch("/api/betfair/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionToken: bfData.token, username }),
+        body: JSON.stringify({ username, password }),
       });
-
-      set({ isConnected: true, username, authLoading: false });
-      return true;
+      const data = await res.json();
+      if (data.success) {
+        set({ isConnected: true, username, authLoading: false });
+        return true;
+      }
+      set({ authError: data.error ?? "Authentication failed", authLoading: false });
+      return false;
     } catch {
       set({ authError: "Network error. Please try again.", authLoading: false });
       return false;
