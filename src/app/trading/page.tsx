@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAppStore, type PriceSize } from "@/lib/store";
+import { useAppStore, type PriceSize, type PendingOrder } from "@/lib/store";
 import { calculateGreenUp } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
 
@@ -43,6 +43,62 @@ function formatVolume(v: number) {
   if (v >= 1_000_000) return `£${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `£${Math.round(v / 1_000)}K`;
   return `£${Math.round(v)}`;
+}
+
+function MarketCountdown({ startTime }: { startTime: string }) {
+  const [remaining, setRemaining] = useState("");
+  useEffect(() => {
+    function update() {
+      const diff = new Date(startTime).getTime() - Date.now();
+      if (diff <= 0) { setRemaining("Starting..."); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      setRemaining(h > 0 ? `${h}h ${m}m` : `${m}m`);
+    }
+    update();
+    const id = setInterval(update, 10000);
+    return () => clearInterval(id);
+  }, [startTime]);
+  return <span>{remaining}</span>;
+}
+
+function PendingOrderCountdown({ order, onExpire }: { order: PendingOrder; onExpire: (id: string) => void }) {
+  const [remaining, setRemaining] = useState(order.delaySeconds);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setRemaining((r) => {
+        if (r <= 1) {
+          clearInterval(id);
+          onExpire(order.id);
+          return 0;
+        }
+        return r - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [order.id, order.delaySeconds, onExpire]);
+
+  return (
+    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+      <div className="flex items-center gap-2">
+        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+          order.side === "BACK" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"
+        }`}>{order.side}</span>
+        <span className="text-xs text-gray-300 font-mono">
+          £{order.size} @ {order.price.toFixed(2)}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="w-16 h-1.5 rounded-full bg-gray-800 overflow-hidden">
+          <div
+            className="h-full bg-amber-400 transition-all duration-1000"
+            style={{ width: `${(remaining / order.delaySeconds) * 100}%` }}
+          />
+        </div>
+        <span className="text-[10px] text-amber-400 font-mono font-semibold w-5 text-right">{remaining}s</span>
+      </div>
+    </div>
+  );
 }
 
 /* ─── Breakpoints: mobile <768  |  tablet 768-1919  |  desktop 1920+ ─── */
@@ -201,6 +257,12 @@ function TradingPage() {
     tradeError,
     lastTradeSuccess,
     clearTradeMessages,
+    unmatchedOrders,
+    fetchUnmatchedOrders,
+    cancelOrder,
+    pendingOrders,
+    addPendingOrder,
+    removePendingOrder,
   } = useAppStore();
 
   const isLive = isConnected && !!marketId && !!marketBook;
@@ -219,6 +281,22 @@ function TradingPage() {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [fetchPrices]);
+
+  /* ─── Poll unmatched orders every 3 seconds (offset from price poll) ─── */
+  const unmatchedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!isConnected || !marketId) return;
+    const timer = setTimeout(() => {
+      fetchUnmatchedOrders(marketId);
+      unmatchedIntervalRef.current = setInterval(() => {
+        fetchUnmatchedOrders(marketId);
+      }, 3000);
+    }, 1500);
+    return () => {
+      clearTimeout(timer);
+      if (unmatchedIntervalRef.current) clearInterval(unmatchedIntervalRef.current);
+    };
+  }, [isConnected, marketId, fetchUnmatchedOrders]);
 
   /* ─── Show toast on trade success/error ─── */
   useEffect(() => {
@@ -320,9 +398,100 @@ function TradingPage() {
     return Math.round(total * 100) / 100;
   }
 
+  /* ─── Selected runner positions & aggregated position (Feature 2) ─── */
+  const selectedRunnerPositions = openPositions.filter((p) => {
+    if (!selectedRunner) return false;
+    return p.selection_id === String(selectedRunner.selectionId);
+  });
+
+  function getAggregatedPosition() {
+    if (selectedRunnerPositions.length === 0) return null;
+    let backTotal = 0, backWeighted = 0, layTotal = 0, layWeighted = 0;
+    for (const pos of selectedRunnerPositions) {
+      if (!pos.stake || !pos.entry_price) continue;
+      if (pos.side === "BACK") {
+        backTotal += pos.stake;
+        backWeighted += pos.stake * pos.entry_price;
+      } else {
+        layTotal += pos.stake;
+        layWeighted += pos.stake * pos.entry_price;
+      }
+    }
+    const netStake = Math.round((backTotal - layTotal) * 100) / 100;
+    const netSide: "BACK" | "LAY" | "FLAT" = netStake > 0 ? "BACK" : netStake < 0 ? "LAY" : "FLAT";
+    const avgEntry = netSide === "BACK" && backTotal > 0
+      ? Math.round((backWeighted / backTotal) * 100) / 100
+      : netSide === "LAY" && layTotal > 0
+        ? Math.round((layWeighted / layTotal) * 100) / 100
+        : 0;
+    return {
+      netSide,
+      netStake: Math.abs(netStake),
+      avgEntry,
+      count: selectedRunnerPositions.length,
+      backTotal: Math.round(backTotal * 100) / 100,
+      layTotal: Math.round(layTotal * 100) / 100,
+    };
+  }
+  const aggregatedPos = getAggregatedPosition();
+
+  /* ─── P&L per runner outcome (Feature 5) ─── */
+  function getOutcomePnl() {
+    if (openPositions.length === 0) return null;
+    const r0Id = marketBook?.runners?.[0]?.selectionId;
+    const r1Id = marketBook?.runners?.[1]?.selectionId;
+    if (!r0Id || !r1Id) return null;
+    let ifP1Wins = 0, ifP2Wins = 0;
+    for (const pos of openPositions) {
+      if (!pos.stake || !pos.entry_price || !pos.selection_id) continue;
+      const selId = Number(pos.selection_id);
+      const stake = pos.stake;
+      const price = pos.entry_price;
+      if (pos.side === "BACK") {
+        // BACK wins: +stake*(price-1), loses: -stake
+        if (selId === r0Id) {
+          ifP1Wins += stake * (price - 1);
+          ifP2Wins -= stake;
+        } else if (selId === r1Id) {
+          ifP1Wins -= stake;
+          ifP2Wins += stake * (price - 1);
+        }
+      } else {
+        // LAY wins: -stake*(price-1), loses: +stake
+        if (selId === r0Id) {
+          ifP1Wins -= stake * (price - 1);
+          ifP2Wins += stake;
+        } else if (selId === r1Id) {
+          ifP1Wins += stake;
+          ifP2Wins -= stake * (price - 1);
+        }
+      }
+    }
+    return {
+      ifPlayer1Wins: Math.round(ifP1Wins * 100) / 100,
+      ifPlayer2Wins: Math.round(ifP2Wins * 100) / 100,
+    };
+  }
+  const outcomePnl = getOutcomePnl();
+
+  /* ─── Unmatched orders by price for ladder overlay (Feature 3) ─── */
+  const unmatchedByPrice = new Map<number, { backSize: number; laySize: number }>();
+  for (const order of unmatchedOrders) {
+    if (!selectedRunner || order.selectionId !== selectedRunner.selectionId) continue;
+    const entry = unmatchedByPrice.get(order.price) ?? { backSize: 0, laySize: 0 };
+    if (order.side === "BACK") entry.backSize += order.sizeRemaining as number;
+    else entry.laySize += order.sizeRemaining as number;
+    unmatchedByPrice.set(order.price, entry);
+  }
+
   /* ─── Handle trade click ─── */
   async function handleTradeClick(price: number, side: "BACK" | "LAY") {
     if (!isConnected || !marketId || !selectedRunner) return;
+    // Add pending order indicator for in-play bet delay
+    if (marketBook?.inplay) {
+      const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      addPendingOrder({ id: pendingId, side, price, size: selectedStake, placedAt: Date.now(), delaySeconds: 5 });
+    }
     await placeTrade({
       marketId,
       selectionId: selectedRunner.selectionId,
@@ -456,19 +625,17 @@ function TradingPage() {
     return () => clearInterval(id);
   }, [sessionStart]);
 
-  /* ─── Computed: green-up result (only when a real position exists) ─── */
-  const firstOpenPos = openPositions[0] ?? null;
-  const hasRealPosition = !!(firstOpenPos?.entry_price && firstOpenPos?.stake && firstOpenPos?.side);
+  /* ─── Computed: green-up result (uses aggregated position) ─── */
   const currentLayPrice =
     isLive && selectedRunner?.ex?.availableToLay?.[0]?.price
       ? selectedRunner.ex.availableToLay[0].price
       : 0;
-  const greenUpResult = hasRealPosition
+  const greenUpResult = aggregatedPos && aggregatedPos.netSide !== "FLAT" && aggregatedPos.avgEntry > 0
     ? calculateGreenUp(
-        firstOpenPos!.entry_price!,
-        firstOpenPos!.stake!,
-        firstOpenPos!.side as "BACK" | "LAY",
-        currentLayPrice > 0 ? currentLayPrice : firstOpenPos!.entry_price!
+        aggregatedPos.avgEntry,
+        aggregatedPos.netStake,
+        aggregatedPos.netSide as "BACK" | "LAY",
+        currentLayPrice > 0 ? currentLayPrice : aggregatedPos.avgEntry
       )
     : null;
 
@@ -508,6 +675,10 @@ function TradingPage() {
     currentLayPrice,
     openPositions,
     closeTradeAsGreenUp,
+    cancelOrder,
+    unmatchedOrders,
+    marketBook,
+    addPendingOrder,
   };
 
   useEffect(() => {
@@ -524,6 +695,9 @@ function TradingPage() {
         case "b":
           if (bestBack) {
             if (s.isLive && s.marketId && s.selectedRunner) {
+              if (s.marketBook?.inplay) {
+                s.addPendingOrder({ id: `${Date.now()}-kb`, side: "BACK", price: bestBack.price, size: s.selectedStake, placedAt: Date.now(), delaySeconds: 5 });
+              }
               s.placeTrade({
                 marketId: s.marketId,
                 selectionId: s.selectedRunner.selectionId,
@@ -542,6 +716,9 @@ function TradingPage() {
         case "l":
           if (bestLay) {
             if (s.isLive && s.marketId && s.selectedRunner) {
+              if (s.marketBook?.inplay) {
+                s.addPendingOrder({ id: `${Date.now()}-kb`, side: "LAY", price: bestLay.price, size: s.selectedStake, placedAt: Date.now(), delaySeconds: 5 });
+              }
               s.placeTrade({
                 marketId: s.marketId,
                 selectionId: s.selectedRunner.selectionId,
@@ -557,6 +734,12 @@ function TradingPage() {
             }
           }
           break;
+        case "c":
+          if (s.isLive && s.marketId && s.unmatchedOrders.length > 0) {
+            s.cancelOrder({ marketId: s.marketId });
+            s.setToast({ message: "Cancelling all unmatched orders...", type: "success" });
+          }
+          break;
         case "g":
           if (s.greenUpResult && s.isLive && s.marketId && s.selectedRunner) {
             s.placeTrade({
@@ -567,11 +750,11 @@ function TradingPage() {
               size: s.greenUpResult.greenUpStake,
             }).then((ok: boolean) => {
               if (ok) {
-                for (const pos of s.openPositions.filter(
+                const runnerPositions = s.openPositions.filter(
                   (p: SupabaseTrade) =>
-                    p.market_id === s.marketId &&
                     p.selection_id === String(s.selectedRunner.selectionId)
-                )) {
+                );
+                for (const pos of runnerPositions) {
                   s.closeTradeAsGreenUp(pos.id, s.currentLayPrice, s.greenUpResult!.equalProfit);
                 }
               }
@@ -654,6 +837,16 @@ function TradingPage() {
         </div>
       </div>
 
+      {/* Pending Orders (bet delay) */}
+      {pendingOrders.length > 0 && (
+        <div className="px-3 py-2 border-b border-gray-800/50 space-y-1.5">
+          <div className="text-[10px] tracking-[0.15em] uppercase text-amber-400 font-medium">PENDING ({pendingOrders.length})</div>
+          {pendingOrders.map((po) => (
+            <PendingOrderCountdown key={po.id} order={po} onExpire={removePendingOrder} />
+          ))}
+        </div>
+      )}
+
       {/* Grid Header */}
       <div className="grid grid-cols-3 py-2 border-b border-gray-800/50">
         <div className="text-[11px] tracking-[0.15em] uppercase text-blue-400 font-medium pl-3">
@@ -670,7 +863,9 @@ function TradingPage() {
       {/* Ladder Body */}
       <div className="max-h-[640px] overflow-y-auto">
         {ladderData && ladderData.length > 0 ? (
-          ladderData.map((row) => (
+          ladderData.map((row) => {
+            const unmatched = unmatchedByPrice.get(row.price);
+            return (
             <div
               key={row.price}
               className={`grid grid-cols-3 items-center border-b border-gray-800/20 min-h-[48px] md:min-h-0 transition-colors hover:brightness-125 ${
@@ -696,7 +891,12 @@ function TradingPage() {
                     style={{ width: `${Math.min((row.backSize / maxSize) * 100, 100)}%` }}
                   />
                 )}
-                <span className="relative z-10">
+                <span className="relative z-10 flex items-center justify-end gap-1">
+                  {unmatched && unmatched.backSize > 0 && (
+                    <span className="px-1 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-400 font-semibold">
+                      £{Math.round(unmatched.backSize)}
+                    </span>
+                  )}
                   {row.backSize > 0 ? `£${row.backSize.toLocaleString()}` : ""}
                 </span>
               </button>
@@ -732,12 +932,18 @@ function TradingPage() {
                     style={{ width: `${Math.min((row.laySize / maxSize) * 100, 100)}%` }}
                   />
                 )}
-                <span className="relative z-10">
+                <span className="relative z-10 flex items-center gap-1">
                   {row.laySize > 0 ? `£${row.laySize.toLocaleString()}` : ""}
+                  {unmatched && unmatched.laySize > 0 && (
+                    <span className="px-1 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-400 font-semibold">
+                      £{Math.round(unmatched.laySize)}
+                    </span>
+                  )}
                 </span>
               </button>
             </div>
-          ))
+            );
+          })
         ) : (
           /* Empty state when no live data */
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
@@ -766,15 +972,17 @@ function TradingPage() {
         )}
       </div>
 
-      {/* Position Summary */}
-      <div className="px-3 md:px-4 py-2.5 border-t border-gray-800/50 bg-gray-900/30">
+      {/* Position Summary (aggregated) */}
+      <div className="px-3 md:px-4 py-2.5 border-t border-gray-800/50 bg-gray-900/30 space-y-1">
         <div className="flex items-center justify-between text-xs">
           <div>
             <span className="text-gray-500">Position: </span>
-            {openPositions.length > 0 ? (
-              <span className="text-blue-400 font-semibold">
-                {openPositions[0].side} £{openPositions[0].stake} @{" "}
-                {openPositions[0].entry_price}
+            {aggregatedPos && aggregatedPos.netSide !== "FLAT" ? (
+              <span className={`font-semibold ${aggregatedPos.netSide === "BACK" ? "text-blue-400" : "text-pink-400"}`}>
+                Net {aggregatedPos.netSide} £{aggregatedPos.netStake.toFixed(2)} @ {aggregatedPos.avgEntry.toFixed(2)}
+                {aggregatedPos.count > 1 && (
+                  <span className="text-gray-500 font-normal"> ({aggregatedPos.count} entries)</span>
+                )}
               </span>
             ) : (
               <span className="text-gray-600">No position</span>
@@ -783,11 +991,65 @@ function TradingPage() {
           <div>
             <span className="text-gray-500">Open: </span>
             <span className="text-gray-300 font-mono font-semibold">
-              {openPositions.length}
+              {selectedRunnerPositions.length}
             </span>
           </div>
         </div>
+        {/* P&L per runner outcome */}
+        {outcomePnl && (
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className="text-gray-500">If</span>
+            <span className={`font-mono font-semibold ${outcomePnl.ifPlayer1Wins >= 0 ? "text-green-400" : "text-red-400"}`}>
+              {displayPlayers.player1.short} wins: {outcomePnl.ifPlayer1Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer1Wins.toFixed(2)}
+            </span>
+            <span className="text-gray-600">|</span>
+            <span className={`font-mono font-semibold ${outcomePnl.ifPlayer2Wins >= 0 ? "text-green-400" : "text-red-400"}`}>
+              {displayPlayers.player2.short} wins: {outcomePnl.ifPlayer2Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer2Wins.toFixed(2)}
+            </span>
+          </div>
+        )}
       </div>
+
+      {/* Unmatched Orders List */}
+      {unmatchedOrders.filter(o => !selectedRunner || o.selectionId === selectedRunner.selectionId).length > 0 && (
+        <div className="px-3 md:px-4 py-2 border-t border-gray-800/50 bg-gray-900/20">
+          <div className="text-[10px] tracking-[0.15em] uppercase text-amber-400 font-medium mb-1.5">
+            UNMATCHED ORDERS
+          </div>
+          <div className="space-y-1">
+            {unmatchedOrders
+              .filter(o => !selectedRunner || o.selectionId === selectedRunner.selectionId)
+              .map((order) => (
+              <div key={order.betId} className="flex items-center justify-between py-1 px-2 rounded bg-amber-500/5 border border-amber-500/10">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className={`px-1 py-0.5 rounded text-[9px] font-semibold ${
+                    order.side === "BACK" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"
+                  }`}>{order.side}</span>
+                  <span className="text-gray-300 font-mono">£{(order.sizeRemaining as number).toFixed(2)} @ {order.price.toFixed(2)}</span>
+                </div>
+                <button
+                  onClick={() => marketId && cancelOrder({ marketId, betId: order.betId })}
+                  className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cancel All Button */}
+      {unmatchedOrders.length > 0 && marketId && (
+        <div className="px-3 md:px-4 py-2 border-t border-gray-800/50">
+          <button
+            onClick={() => cancelOrder({ marketId })}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 transition-all"
+          >
+            CANCEL ALL ({unmatchedOrders.length} unmatched)
+          </button>
+        </div>
+      )}
 
       {/* Green Up Button — only shown when a real position exists */}
       {greenUpResult && currentLayPrice > 0 && (
@@ -803,11 +1065,7 @@ function TradingPage() {
                   size: greenUpResult.greenUpStake,
                 });
                 if (success) {
-                  for (const pos of openPositions.filter(
-                    (p) =>
-                      p.market_id === marketId &&
-                      p.selection_id === String(selectedRunner.selectionId)
-                  )) {
+                  for (const pos of selectedRunnerPositions) {
                     await closeTradeAsGreenUp(
                       pos.id,
                       currentLayPrice,
@@ -1392,22 +1650,40 @@ function TradingPage() {
         </div>
       )}
 
-      {/* ─── Top Match Info Bar ─── */}
+      {/* ─── Market Status Bar ─── */}
       <div className="border-b border-gray-800/50 bg-gray-900/30">
         <div className="px-2 md:px-4 py-2 flex items-center justify-center gap-2 md:gap-3 flex-wrap text-xs">
           <span className="text-gray-400 font-medium">{tournament}</span>
           <span className="text-gray-700">|</span>
           {isLive && marketBook ? (
             <>
-              <span
-                className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                  marketBook.inplay
-                    ? "bg-green-500/15 text-green-400"
-                    : "bg-blue-500/15 text-blue-400"
-                }`}
-              >
-                {marketBook.inplay ? "IN-PLAY" : "PRE-MATCH"}
-              </span>
+              {marketBook.status === "SUSPENDED" ? (
+                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-500/15 text-red-400 animate-pulse">
+                  SUSPENDED
+                </span>
+              ) : marketBook.status === "CLOSED" ? (
+                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-500/15 text-gray-400">
+                  CLOSED
+                </span>
+              ) : marketBook.inplay ? (
+                <>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-green-500/15 text-green-400">
+                    IN-PLAY
+                  </span>
+                  <span className="text-[10px] font-medium text-amber-400">~5s delay</span>
+                </>
+              ) : (
+                <>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/15 text-blue-400">
+                    PRE-MATCH
+                  </span>
+                  {searchParams.get("startTime") && (
+                    <span className="text-[10px] text-gray-400">
+                      Starts in <MarketCountdown startTime={searchParams.get("startTime")!} />
+                    </span>
+                  )}
+                </>
+              )}
               <span className="text-gray-700">|</span>
               <span className="text-gray-400 font-mono">
                 {formatVolume(marketBook.totalMatched)} matched
@@ -1462,72 +1738,39 @@ function TradingPage() {
         </div>
       </div>
 
-      {/* ─── Player Selector ─── */}
-      <div className="border-b border-gray-800/50 bg-gray-900/30 max-w-full overflow-hidden">
-        <div className="px-2 md:px-4 py-2 md:py-3">
-          <div className="flex items-center justify-center gap-2 md:gap-3 max-w-full">
-            {/* Player 1 */}
-            <button
-              onClick={() => setSelectedPlayer("player1")}
-              className={`flex items-center gap-1.5 md:gap-2 min-h-[44px] md:min-h-0 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium transition-all ${
-                selectedPlayer === "player1"
-                  ? "border-blue-500/50 bg-blue-500/10 text-blue-400 border"
-                  : "border-gray-800/50 bg-gray-900/50 text-gray-400 border opacity-70 hover:opacity-100"
-              }`}
-            >
-              {displayPlayers.player1.flag && (
-                <span>{displayPlayers.player1.flag}</span>
-              )}
-              <span className="hidden md:inline">{displayPlayers.player1.name}</span>
-              <span className="md:hidden">{displayPlayers.player1.short}</span>
-              <span className="font-mono font-bold text-white">
-                {displayPlayers.player1.odds > 0
-                  ? displayPlayers.player1.odds.toFixed(2)
-                  : "--"}
-              </span>
-              {p1Pnl !== null && (
-                <span
-                  className={`text-[10px] font-mono font-semibold ${
-                    p1Pnl >= 0 ? "text-green-400" : "text-red-400"
-                  }`}
-                >
-                  {p1Pnl >= 0 ? "+" : ""}£{p1Pnl.toFixed(2)}
+      {/* ─── Player Selector (segmented tabs) ─── */}
+      <div className="bg-gray-900/30 max-w-full overflow-hidden">
+        <div className="flex">
+          {(["player1", "player2"] as const).map((key) => {
+            const player = displayPlayers[key];
+            const pnl = key === "player1" ? p1Pnl : p2Pnl;
+            const isActive = selectedPlayer === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setSelectedPlayer(key)}
+                className={`flex-1 flex items-center justify-center gap-1.5 md:gap-2 min-h-[48px] md:min-h-[44px] px-3 py-2 text-xs md:text-sm font-medium transition-all border-b-2 ${
+                  isActive
+                    ? "border-blue-500 text-white bg-blue-500/5"
+                    : "border-transparent text-gray-400 hover:text-gray-300 hover:bg-gray-800/30"
+                }`}
+              >
+                {player.flag && <span>{player.flag}</span>}
+                <span className="hidden md:inline">{player.name}</span>
+                <span className="md:hidden">{player.short}</span>
+                <span className="font-mono font-bold text-white">
+                  {player.odds > 0 ? player.odds.toFixed(2) : "--"}
                 </span>
-              )}
-            </button>
-
-            <span className="text-gray-600 text-[10px] md:text-xs font-medium">vs</span>
-
-            {/* Player 2 */}
-            <button
-              onClick={() => setSelectedPlayer("player2")}
-              className={`flex items-center gap-1.5 md:gap-2 min-h-[44px] md:min-h-0 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium transition-all ${
-                selectedPlayer === "player2"
-                  ? "border-blue-500/50 bg-blue-500/10 text-blue-400 border"
-                  : "border-gray-800/50 bg-gray-900/50 text-gray-400 border opacity-70 hover:opacity-100"
-              }`}
-            >
-              {displayPlayers.player2.flag && (
-                <span>{displayPlayers.player2.flag}</span>
-              )}
-              <span className="hidden md:inline">{displayPlayers.player2.name}</span>
-              <span className="md:hidden">{displayPlayers.player2.short}</span>
-              <span className="font-mono font-bold text-white">
-                {displayPlayers.player2.odds > 0
-                  ? displayPlayers.player2.odds.toFixed(2)
-                  : "--"}
-              </span>
-              {p2Pnl !== null && (
-                <span
-                  className={`text-[10px] font-mono font-semibold ${
-                    p2Pnl >= 0 ? "text-green-400" : "text-red-400"
-                  }`}
-                >
-                  {p2Pnl >= 0 ? "+" : ""}£{p2Pnl.toFixed(2)}
-                </span>
-              )}
-            </button>
-          </div>
+                {pnl !== null && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-semibold ${
+                    pnl >= 0 ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
+                  }`}>
+                    {pnl >= 0 ? "+" : ""}£{pnl.toFixed(2)}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -1615,6 +1858,7 @@ function TradingPage() {
                 { key: "B", desc: "Back best price" },
                 { key: "L", desc: "Lay best price" },
                 { key: "G", desc: "Green up" },
+                { key: "C", desc: "Cancel all" },
                 { key: "1-5", desc: "Select stake" },
                 { key: "Esc", desc: "Close" },
               ].map((s) => (

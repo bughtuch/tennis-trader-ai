@@ -204,6 +204,70 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, result: data });
     }
 
+    if (action === "listCurrentOrders") {
+      const orderParams: Record<string, unknown> = {
+        orderProjection: "EXECUTABLE",
+      };
+      if (marketId) orderParams.marketIds = [marketId];
+      if (marketIds) orderParams.marketIds = marketIds;
+
+      const rpcBody = {
+        jsonrpc: "2.0",
+        method: "SportsAPING/v1.0/listCurrentOrders",
+        params: orderParams,
+        id: 1,
+      };
+
+      const res = await fetch(JSONRPC_URL, {
+        method: "POST",
+        headers: getHeaders(sessionToken, appKey),
+        body: JSON.stringify(rpcBody),
+      });
+
+      const responseText = await res.text();
+      if (!res.ok) {
+        return NextResponse.json(
+          { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}` },
+          { status: res.status }
+        );
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {
+        return NextResponse.json(
+          { success: false, error: `Betfair returned non-JSON: ${responseText.slice(0, 300)}` },
+          { status: 502 }
+        );
+      }
+
+      if (parsed.error) {
+        return NextResponse.json(
+          { success: false, error: parsed.error?.data?.exceptionname ?? parsed.error?.message ?? "Betfair error" },
+          { status: 400 }
+        );
+      }
+
+      const data = parsed.result;
+      const currentOrders = (data?.currentOrders ?? []).map(
+        (o: Record<string, unknown>) => ({
+          betId: o.betId,
+          marketId: o.marketId,
+          selectionId: o.selectionId,
+          side: o.side,
+          price: (o.priceSize as Record<string, unknown>)?.price ?? 0,
+          size: (o.priceSize as Record<string, unknown>)?.size ?? 0,
+          sizeMatched: o.sizeMatched ?? 0,
+          sizeRemaining: o.sizeRemaining ?? 0,
+          status: o.status,
+          placedDate: o.placedDate,
+        })
+      );
+
+      return NextResponse.json({ success: true, currentOrders });
+    }
+
     return NextResponse.json(
       { success: false, error: `Unknown action: ${action}` },
       { status: 400 }

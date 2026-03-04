@@ -49,6 +49,30 @@ export interface MarketBook {
   runners: BetfairRunner[];
 }
 
+/* ─── Order / Pending Types ─── */
+
+export interface BetfairOrder {
+  betId: string;
+  marketId: string;
+  selectionId: number;
+  side: "BACK" | "LAY";
+  price: number;
+  size: number;
+  sizeMatched: number;
+  sizeRemaining: number;
+  status: string;
+  placedDate: string;
+}
+
+export interface PendingOrder {
+  id: string;
+  side: "BACK" | "LAY";
+  price: number;
+  size: number;
+  placedAt: number;
+  delaySeconds: number;
+}
+
 /* ─── Store ─── */
 
 interface AppState {
@@ -86,6 +110,17 @@ interface AppState {
     size: number;
   }) => Promise<boolean>;
   clearTradeMessages: () => void;
+
+  // Unmatched Orders
+  unmatchedOrders: BetfairOrder[];
+  unmatchedOrdersLoading: boolean;
+  fetchUnmatchedOrders: (marketId: string) => Promise<void>;
+  cancelOrder: (params: { marketId: string; betId?: string }) => Promise<boolean>;
+
+  // Pending Orders (bet delay tracking)
+  pendingOrders: PendingOrder[];
+  addPendingOrder: (order: PendingOrder) => void;
+  removePendingOrder: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -283,5 +318,58 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   clearTradeMessages: () => {
     set({ tradeError: null, lastTradeSuccess: null });
+  },
+
+  // ─── Unmatched Orders ───
+  unmatchedOrders: [],
+  unmatchedOrdersLoading: false,
+
+  fetchUnmatchedOrders: async (marketId) => {
+    set({ unmatchedOrdersLoading: true });
+    try {
+      const res = await fetch("/api/betfair/trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "listCurrentOrders", marketId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        set({ unmatchedOrders: data.currentOrders ?? [], unmatchedOrdersLoading: false });
+      } else {
+        set({ unmatchedOrdersLoading: false });
+      }
+    } catch {
+      set({ unmatchedOrdersLoading: false });
+    }
+  },
+
+  cancelOrder: async ({ marketId, betId }) => {
+    try {
+      const res = await fetch("/api/betfair/trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancelOrder", marketId, betId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Refresh unmatched orders
+        get().fetchUnmatchedOrders(marketId);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  },
+
+  // ─── Pending Orders ───
+  pendingOrders: [],
+
+  addPendingOrder: (order) => {
+    set((state) => ({ pendingOrders: [...state.pendingOrders, order] }));
+  },
+
+  removePendingOrder: (id) => {
+    set((state) => ({ pendingOrders: state.pendingOrders.filter((o) => o.id !== id) }));
   },
 }));
