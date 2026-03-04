@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore, type PriceSize } from "@/lib/store";
-import { calculateGreenUp, moveByTicks } from "@/lib/tradingMaths";
+import { calculateGreenUp } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
 
 interface SupabaseTrade {
@@ -378,8 +378,8 @@ function TradingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "assessPosition",
-          entryPrice: openPositions[0]?.entry_price ?? 1.54,
-          entryStake: openPositions[0]?.stake ?? 50,
+          entryPrice: openPositions[0]?.entry_price ?? 0,
+          entryStake: openPositions[0]?.stake ?? 0,
           entrySide: openPositions[0]?.side ?? "BACK",
           currentBackPrice: bestBack,
           currentLayPrice: bestLay,
@@ -456,24 +456,21 @@ function TradingPage() {
     return () => clearInterval(id);
   }, [sessionStart]);
 
-  /* ─── Computed: green-up result for first open position (or fallback) ─── */
-  const firstOpenPos = openPositions[0];
-  const entryPrice = firstOpenPos?.entry_price ?? 1.54;
-  const entryStake = firstOpenPos?.stake ?? 50;
-  const entrySide: "BACK" | "LAY" = (firstOpenPos?.side as "BACK" | "LAY") ?? "BACK";
+  /* ─── Computed: green-up result (only when a real position exists) ─── */
+  const firstOpenPos = openPositions[0] ?? null;
+  const hasRealPosition = !!(firstOpenPos?.entry_price && firstOpenPos?.stake && firstOpenPos?.side);
   const currentLayPrice =
     isLive && selectedRunner?.ex?.availableToLay?.[0]?.price
       ? selectedRunner.ex.availableToLay[0].price
-      : displayPlayers[selectedPlayer].odds > 0
-        ? displayPlayers[selectedPlayer].odds + 0.02
-        : 1.56;
-  const greenUpResult = calculateGreenUp(entryPrice, entryStake, entrySide, currentLayPrice);
-
-  /* ─── Computed: odds prediction (win/lose next game) ─── */
-  const currentOdds = displayPlayers[selectedPlayer].odds;
-  const isFavourite = currentOdds > 0 && currentOdds < 2.0;
-  const oddsIfWin = currentOdds > 0 ? moveByTicks(currentOdds, isFavourite ? -3 : -4) : 0;
-  const oddsIfLose = currentOdds > 0 ? moveByTicks(currentOdds, isFavourite ? 4 : 3) : 0;
+      : 0;
+  const greenUpResult = hasRealPosition
+    ? calculateGreenUp(
+        firstOpenPos!.entry_price!,
+        firstOpenPos!.stake!,
+        firstOpenPos!.side as "BACK" | "LAY",
+        currentLayPrice > 0 ? currentLayPrice : firstOpenPos!.entry_price!
+      )
+    : null;
 
   /* ─── Computed: session P&L from real closed trades ─── */
   const sessionPnl = tradeHistory.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
@@ -561,7 +558,7 @@ function TradingPage() {
           }
           break;
         case "g":
-          if (s.isLive && s.marketId && s.selectedRunner) {
+          if (s.greenUpResult && s.isLive && s.marketId && s.selectedRunner) {
             s.placeTrade({
               marketId: s.marketId,
               selectionId: s.selectedRunner.selectionId,
@@ -575,14 +572,9 @@ function TradingPage() {
                     p.market_id === s.marketId &&
                     p.selection_id === String(s.selectedRunner.selectionId)
                 )) {
-                  s.closeTradeAsGreenUp(pos.id, s.currentLayPrice, s.greenUpResult.equalProfit);
+                  s.closeTradeAsGreenUp(pos.id, s.currentLayPrice, s.greenUpResult!.equalProfit);
                 }
               }
-            });
-          } else {
-            s.setToast({
-              message: `Demo: GREEN UP -- lock in £${s.greenUpResult.equalProfit.toFixed(2)}`,
-              type: "success",
             });
           }
           break;
@@ -797,132 +789,50 @@ function TradingPage() {
         </div>
       </div>
 
-      {/* Green Up Button */}
-      <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
-        <button
-          onClick={async () => {
-            if (isLive && marketId && selectedRunner) {
-              const success = await placeTrade({
-                marketId,
-                selectionId: selectedRunner.selectionId,
-                side: greenUpResult.greenUpSide,
-                price: currentLayPrice,
-                size: greenUpResult.greenUpStake,
-              });
-              if (success) {
-                for (const pos of openPositions.filter(
-                  (p) =>
-                    p.market_id === marketId &&
-                    p.selection_id === String(selectedRunner.selectionId)
-                )) {
-                  await closeTradeAsGreenUp(
-                    pos.id,
-                    currentLayPrice,
-                    greenUpResult.equalProfit
-                  );
+      {/* Green Up Button — only shown when a real position exists */}
+      {greenUpResult && currentLayPrice > 0 && (
+        <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
+          <button
+            onClick={async () => {
+              if (isLive && marketId && selectedRunner) {
+                const success = await placeTrade({
+                  marketId,
+                  selectionId: selectedRunner.selectionId,
+                  side: greenUpResult.greenUpSide,
+                  price: currentLayPrice,
+                  size: greenUpResult.greenUpStake,
+                });
+                if (success) {
+                  for (const pos of openPositions.filter(
+                    (p) =>
+                      p.market_id === marketId &&
+                      p.selection_id === String(selectedRunner.selectionId)
+                  )) {
+                    await closeTradeAsGreenUp(
+                      pos.id,
+                      currentLayPrice,
+                      greenUpResult.equalProfit
+                    );
+                  }
                 }
               }
-            } else {
-              setToast({
-                message: `Demo: Would ${greenUpResult.greenUpSide} £${greenUpResult.greenUpStake.toFixed(2)} @ ${currentLayPrice.toFixed(2)} to lock £${greenUpResult.equalProfit.toFixed(2)}`,
-                type: "success",
-              });
-            }
-          }}
-          disabled={tradeLoading}
-          className={`w-full py-3.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-            greenUpResult.equalProfit >= 0
-              ? "bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 shadow-[0_0_20px_rgba(34,197,94,0.3)] animate-pulse-subtle"
-              : "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 shadow-[0_0_20px_rgba(239,68,68,0.3)]"
-          }`}
-        >
-          {greenUpResult.greenUpSide} £{greenUpResult.greenUpStake.toFixed(2)} @{" "}
-          {currentLayPrice.toFixed(2)} → Lock{" "}
-          {greenUpResult.equalProfit >= 0 ? "+" : ""}£
-          {greenUpResult.equalProfit.toFixed(2)}
-        </button>
-        <div className="mt-1.5 text-center text-[10px] text-gray-500 font-mono">
-          Win: £{greenUpResult.profitIfWin.toFixed(2)} / Lose: £
-          {greenUpResult.profitIfLose.toFixed(2)}
-        </div>
-      </div>
-
-      {/* Odds Prediction Chart */}
-      {currentOdds > 0 && (
-        <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
-          <div className="text-[10px] tracking-[0.15em] uppercase text-gray-500 font-medium mb-2">
-            ODDS PREDICTION
+            }}
+            disabled={tradeLoading}
+            className={`w-full py-3.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+              greenUpResult.equalProfit >= 0
+                ? "bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 shadow-[0_0_20px_rgba(34,197,94,0.3)] animate-pulse-subtle"
+                : "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 shadow-[0_0_20px_rgba(239,68,68,0.3)]"
+            }`}
+          >
+            {greenUpResult.greenUpSide} £{greenUpResult.greenUpStake.toFixed(2)} @{" "}
+            {currentLayPrice.toFixed(2)} → Lock{" "}
+            {greenUpResult.equalProfit >= 0 ? "+" : ""}£
+            {greenUpResult.equalProfit.toFixed(2)}
+          </button>
+          <div className="mt-1.5 text-center text-[10px] text-gray-500 font-mono">
+            Win: £{greenUpResult.profitIfWin.toFixed(2)} / Lose: £
+            {greenUpResult.profitIfLose.toFixed(2)}
           </div>
-          <svg viewBox="0 0 280 100" className="w-full h-auto">
-            {/* Current odds node (center left) */}
-            <circle cx="60" cy="50" r="20" fill="#1f2937" stroke="#374151" strokeWidth="1.5" />
-            <text
-              x="60"
-              y="47"
-              textAnchor="middle"
-              fill="white"
-              fontSize="11"
-              fontWeight="bold"
-              fontFamily="monospace"
-            >
-              {currentOdds.toFixed(2)}
-            </text>
-            <text x="60" y="58" textAnchor="middle" fill="#9ca3af" fontSize="7">
-              NOW
-            </text>
-
-            {/* Win path (upper) */}
-            <path
-              d="M 80 42 C 130 20, 170 20, 200 25"
-              fill="none"
-              stroke="#22c55e"
-              strokeWidth="1.5"
-              strokeDasharray="4 3"
-            />
-            <circle cx="220" cy="25" r="18" fill="#052e16" stroke="#22c55e" strokeWidth="1.5" />
-            <text
-              x="220"
-              y="22"
-              textAnchor="middle"
-              fill="#4ade80"
-              fontSize="10"
-              fontWeight="bold"
-              fontFamily="monospace"
-            >
-              {oddsIfWin.toFixed(2)}
-            </text>
-            <text x="220" y="32" textAnchor="middle" fill="#22c55e" fontSize="6.5">
-              WIN GAME
-            </text>
-
-            {/* Lose path (lower) */}
-            <path
-              d="M 80 58 C 130 80, 170 80, 200 75"
-              fill="none"
-              stroke="#ef4444"
-              strokeWidth="1.5"
-              strokeDasharray="4 3"
-            />
-            <circle cx="220" cy="75" r="18" fill="#2a0a0a" stroke="#ef4444" strokeWidth="1.5" />
-            <text
-              x="220"
-              y="72"
-              textAnchor="middle"
-              fill="#f87171"
-              fontSize="10"
-              fontWeight="bold"
-              fontFamily="monospace"
-            >
-              {oddsIfLose.toFixed(2)}
-            </text>
-            <text x="220" y="82" textAnchor="middle" fill="#ef4444" fontSize="6.5">
-              LOSE GAME
-            </text>
-
-            {/* Fork arrows */}
-            <polygon points="196,23 200,25 196,27" fill="#22c55e" />
-            <polygon points="196,73 200,75 196,77" fill="#ef4444" />
-          </svg>
         </div>
       )}
     </div>
