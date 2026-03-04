@@ -203,19 +203,30 @@ export default function MarketsPage() {
         return;
       }
 
-      // 3. Fetch market books for odds
-      const marketIds = catData.markets.map((m: { marketId: string }) => m.marketId);
+      // 3. Fetch market books for odds (batch in groups of 10 to stay within Betfair limits)
+      const allMarketIds: string[] = catData.markets.map((m: { marketId: string }) => m.marketId);
       const bookMap = new Map();
+      const BATCH_SIZE = 10;
       try {
-        const bookRes = await fetch("/api/betfair/markets", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "getMarketBook", marketIds, sessionToken }),
-        });
-        const bookData = await bookRes.json();
-        if (bookData.success && bookData.marketBooks) {
-          for (const book of bookData.marketBooks) {
-            bookMap.set(book.marketId, book);
+        const batches: string[][] = [];
+        for (let i = 0; i < allMarketIds.length; i += BATCH_SIZE) {
+          batches.push(allMarketIds.slice(i, i + BATCH_SIZE));
+        }
+        const results = await Promise.all(
+          batches.map(async (batchIds) => {
+            const bookRes = await fetch("/api/betfair/markets", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "getMarketBook", marketIds: batchIds, sessionToken }),
+            });
+            return bookRes.json();
+          })
+        );
+        for (const bookData of results) {
+          if (bookData.success && bookData.marketBooks) {
+            for (const book of bookData.marketBooks) {
+              bookMap.set(book.marketId, book);
+            }
           }
         }
       } catch {
