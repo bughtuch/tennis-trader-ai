@@ -264,24 +264,22 @@ function TradingPage() {
     removePendingOrder,
   } = useAppStore();
 
-  /* ─── Betfair connection: read from Supabase via server API (source of truth) ─── */
+  /* ─── Betfair connection: read token from localStorage (saved by Settings page) ─── */
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    async function checkSession() {
+    function checkSession() {
       try {
-        const res = await fetch("/api/betfair/session");
-        const data = await res.json();
-        if (data.connected && data.sessionToken) {
+        const token = localStorage.getItem("betfair_token");
+        if (token) {
           setIsConnected(true);
           // Set token in store so fetchMarketBook/placeTrade/etc can use it
           useAppStore.setState({
             isConnected: true,
-            betfairSessionToken: data.sessionToken,
-            username: data.username ?? null,
+            betfairSessionToken: token,
           });
         }
-      } catch { /* non-critical */ }
+      } catch { /* SSR guard */ }
     }
     checkSession();
   }, []);

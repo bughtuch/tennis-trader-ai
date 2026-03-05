@@ -305,6 +305,11 @@ function SettingsPage() {
       setBetfairConnected(true);
       setBetfairUsername(bfUsername);
       setBetfairExpiry(new Date(Date.now() + 8 * 3600000).toISOString());
+      // Save token to localStorage so Markets/Trading pages can read it
+      const token = useAppStore.getState().betfairSessionToken;
+      if (token) {
+        try { localStorage.setItem("betfair_token", token); } catch { /* SSR guard */ }
+      }
     }
   }
 
@@ -315,6 +320,7 @@ function SettingsPage() {
     setBetfairExpiry(null);
     setBfUsername("");
     setBfPassword("");
+    try { localStorage.removeItem("betfair_token"); } catch { /* SSR guard */ }
   }
 
   return (

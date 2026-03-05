@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase";
 
 /* ─── Types ─── */
 
@@ -163,30 +162,16 @@ export default function MarketsPage() {
   const loadMarkets = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Check Supabase profile for Betfair connection
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // 1. Read Betfair token from localStorage (saved by Settings page on connect)
+      let sessionToken: string | null = null;
+      try { sessionToken = localStorage.getItem("betfair_token"); } catch { /* SSR guard */ }
+
+      if (!sessionToken) {
         setIsDemoMode(true);
         setMarkets(MOCK_MARKETS);
         setLoading(false);
         return;
       }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("betfair_connected, betfair_session_token")
-        .eq("id", user.id)
-        .single();
-
-      if (!profile?.betfair_connected || !profile?.betfair_session_token) {
-        setIsDemoMode(true);
-        setMarkets(MOCK_MARKETS);
-        setLoading(false);
-        return;
-      }
-
-      const sessionToken = profile.betfair_session_token;
 
       // 2. Fetch market catalogue
       const catRes = await fetch("/api/betfair/markets", {
