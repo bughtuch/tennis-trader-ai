@@ -263,7 +263,13 @@ function TradingPage() {
     pendingOrders,
     addPendingOrder,
     removePendingOrder,
+    restoreSession,
   } = useAppStore();
+
+  /* ─── Restore Betfair session from Supabase on mount ─── */
+  useEffect(() => {
+    restoreSession();
+  }, [restoreSession]);
 
   const isLive = isConnected && !!marketId && !!marketBook;
 

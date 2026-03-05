@@ -93,6 +93,7 @@ export async function POST(req: NextRequest) {
             betfair_connected: true,
             betfair_session_token: data.token,
             betfair_connected_at: new Date().toISOString(),
+            betfair_username: username,
           })
           .eq("id", user.id);
       }
@@ -107,8 +108,8 @@ export async function POST(req: NextRequest) {
 
     response.cookies.set("betfair_session", data.token, {
       httpOnly: true,
-      secure: true,
-      sameSite: "strict",
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       maxAge: 8 * 60 * 60,
       path: "/",
     });

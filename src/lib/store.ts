@@ -79,6 +79,7 @@ interface AppState {
   // Auth
   isConnected: boolean;
   username: string | null;
+  betfairSessionToken: string | null;
   authError: string | null;
   authLoading: boolean;
   sessionExpiry: string | null;
@@ -127,6 +128,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ─── Auth ───
   isConnected: false,
   username: null,
+  betfairSessionToken: null,
   authError: null,
   authLoading: false,
   sessionExpiry: null,
@@ -143,7 +145,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       const data = await res.json();
       if (data.success) {
         const expiry = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
-        set({ isConnected: true, username, authLoading: false, sessionExpiry: expiry });
+        set({
+          isConnected: true,
+          username,
+          betfairSessionToken: data.sessionToken,
+          authLoading: false,
+          sessionExpiry: expiry,
+        });
+
+        // Save to Supabase profile (client-side — belt-and-suspenders with server-side save)
+        try {
+          const supabase = createClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase
+              .from("profiles")
+              .update({
+                betfair_connected: true,
+                betfair_session_token: data.sessionToken,
+                betfair_connected_at: new Date().toISOString(),
+                betfair_username: username,
+              })
+              .eq("id", user.id);
+          }
+        } catch { /* non-critical */ }
+
         return true;
       }
       set({ authError: data.error ?? "Authentication failed", authLoading: false });
@@ -195,6 +221,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         isConnected: true,
         username: profile.betfair_username ?? "Connected",
+        betfairSessionToken: profile.betfair_session_token,
         sessionExpiry: connectedAt > 0 ? new Date(expiresAt).toISOString() : null,
         sessionLoading: false,
       });
@@ -207,6 +234,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       isConnected: false,
       username: null,
+      betfairSessionToken: null,
       authError: null,
       sessionExpiry: null,
       markets: [],
@@ -266,10 +294,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchMarketBook: async (marketIds) => {
     set({ marketBookLoading: true });
     try {
+      const sessionToken = get().betfairSessionToken;
       const res = await fetch("/api/betfair/markets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "getMarketBook", marketIds }),
+        body: JSON.stringify({ action: "getMarketBook", marketIds, sessionToken }),
       });
       const data = await res.json();
       if (data.success && data.marketBooks?.[0]) {
@@ -290,6 +319,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   placeTrade: async ({ marketId, selectionId, side, price, size }) => {
     set({ tradeLoading: true, tradeError: null, lastTradeSuccess: null });
     try {
+      const sessionToken = get().betfairSessionToken;
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -297,6 +327,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           action: "placeTrade",
           marketId,
           instructions: [{ selectionId, side, size, price }],
+          sessionToken,
         }),
       });
       const data = await res.json();
@@ -327,10 +358,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchUnmatchedOrders: async (marketId) => {
     set({ unmatchedOrdersLoading: true });
     try {
+      const sessionToken = get().betfairSessionToken;
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "listCurrentOrders", marketId }),
+        body: JSON.stringify({ action: "listCurrentOrders", marketId, sessionToken }),
       });
       const data = await res.json();
       if (data.success) {
@@ -345,10 +377,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   cancelOrder: async ({ marketId, betId }) => {
     try {
+      const sessionToken = get().betfairSessionToken;
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "cancelOrder", marketId, betId }),
+        body: JSON.stringify({ action: "cancelOrder", marketId, betId, sessionToken }),
       });
       const data = await res.json();
       if (data.success) {
