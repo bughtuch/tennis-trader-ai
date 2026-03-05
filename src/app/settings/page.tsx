@@ -119,26 +119,27 @@ export default function SettingsPageWrapper() {
 }
 
 function SettingsPage() {
-  /* Betfair connection — wired to zustand store + real API */
-  const { isConnected, username: storedUsername, authError, authLoading, login, logout, sessionExpiry, restoreSession } = useAppStore();
+  /* Betfair connection — Supabase is source of truth */
+  const { authError, authLoading, login, logout } = useAppStore();
   const [bfUsername, setBfUsername] = useState("");
   const [bfPassword, setBfPassword] = useState("");
+
+  /* Connection state read from Supabase profile (not Zustand) */
+  const [betfairConnected, setBetfairConnected] = useState(false);
+  const [betfairUsername, setBetfairUsername] = useState<string | null>(null);
+  const [betfairExpiry, setBetfairExpiry] = useState<string | null>(null);
 
   /* Session expiry countdown */
   const [expiryText, setExpiryText] = useState<string | null>(null);
   const [isExpired, setIsExpired] = useState(false);
 
   useEffect(() => {
-    restoreSession();
-  }, [restoreSession]);
-
-  useEffect(() => {
-    if (!sessionExpiry) {
+    if (!betfairExpiry) {
       setExpiryText(null);
       return;
     }
     function updateCountdown() {
-      const ms = new Date(sessionExpiry!).getTime() - Date.now();
+      const ms = new Date(betfairExpiry!).getTime() - Date.now();
       if (ms <= 0) {
         setExpiryText("Session expired");
         setIsExpired(true);
@@ -152,7 +153,7 @@ function SettingsPage() {
     updateCountdown();
     const timer = setInterval(updateCountdown, 30_000);
     return () => clearInterval(timer);
-  }, [sessionExpiry]);
+  }, [betfairExpiry]);
 
   /* Trading preferences */
   const [defaultStake, setDefaultStake] = useState("25");
@@ -202,6 +203,21 @@ function SettingsPage() {
       setMaxSingleTrade(String(data.max_single_trade ?? 100));
       setSubscriptionStatus(data.subscription_status ?? "inactive");
       setProfileLoaded(true);
+
+      // Betfair connection state from Supabase (source of truth)
+      if (data.betfair_connected && data.betfair_session_token) {
+        setBetfairConnected(true);
+        setBetfairUsername(data.betfair_username ?? null);
+        if (data.betfair_connected_at) {
+          setBetfairExpiry(
+            new Date(new Date(data.betfair_connected_at).getTime() + 8 * 3600000).toISOString()
+          );
+        }
+      } else {
+        setBetfairConnected(false);
+        setBetfairUsername(null);
+        setBetfairExpiry(null);
+      }
     }
   }, []);
 
@@ -284,11 +300,19 @@ function SettingsPage() {
 
   async function handleConnect() {
     if (!bfUsername || !bfPassword) return;
-    await login(bfUsername, bfPassword);
+    const success = await login(bfUsername, bfPassword);
+    if (success) {
+      setBetfairConnected(true);
+      setBetfairUsername(bfUsername);
+      setBetfairExpiry(new Date(Date.now() + 8 * 3600000).toISOString());
+    }
   }
 
   async function handleDisconnect() {
     await logout();
+    setBetfairConnected(false);
+    setBetfairUsername(null);
+    setBetfairExpiry(null);
     setBfUsername("");
     setBfPassword("");
   }
@@ -322,7 +346,7 @@ function SettingsPage() {
 
         {/* ─── Section 1: Betfair Connection ─── */}
         <Card title="Betfair Account">
-          {isConnected ? (
+          {betfairConnected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -334,7 +358,7 @@ function SettingsPage() {
               <div className="bg-gray-800/30 rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Username</span>
-                  <span className="text-white">{storedUsername ?? bfUsername}</span>
+                  <span className="text-white">{betfairUsername ?? bfUsername}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Session expires</span>

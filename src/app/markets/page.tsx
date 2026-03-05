@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAppStore } from "@/lib/store";
+import { createClient } from "@/lib/supabase";
 
 /* ─── Types ─── */
 
@@ -145,19 +145,45 @@ interface LastMarket {
 
 export default function MarketsPage() {
   const router = useRouter();
-  const { isConnected, betfairSessionToken, restoreSession, sessionLoading } = useAppStore();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [markets, setMarkets] = useState<Market[]>([]);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastMarket, setLastMarket] = useState<LastMarket | null>(null);
-  const [sessionRestored, setSessionRestored] = useState(false);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
-  // Restore Betfair session from Supabase on mount
+  // Read Betfair session from Supabase profile (source of truth)
   useEffect(() => {
-    restoreSession().then(() => setSessionRestored(true));
-  }, [restoreSession]);
+    async function checkSession() {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setSessionChecked(true); return; }
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("betfair_connected, betfair_session_token, betfair_connected_at")
+          .eq("id", user.id)
+          .single();
+
+        if (profile?.betfair_connected && profile?.betfair_session_token) {
+          // Check if session is still valid (8h window)
+          const connectedAt = profile.betfair_connected_at
+            ? new Date(profile.betfair_connected_at).getTime()
+            : 0;
+          const isExpired = connectedAt > 0 && Date.now() > connectedAt + 8 * 3600000;
+
+          if (!isExpired) {
+            setSessionToken(profile.betfair_session_token);
+          }
+        }
+      } catch { /* non-critical */ }
+      setSessionChecked(true);
+    }
+    checkSession();
+  }, []);
 
   // Check for saved market on mount
   useEffect(() => {
@@ -168,12 +194,12 @@ export default function MarketsPage() {
   }, []);
 
   const loadMarkets = useCallback(async () => {
-    // Wait for session restore to complete
-    if (!sessionRestored) return;
+    // Wait for Supabase session check to complete
+    if (!sessionChecked) return;
 
     setLoading(true);
 
-    if (!isConnected || !betfairSessionToken) {
+    if (!sessionToken) {
       setIsDemoMode(true);
       setMarkets(MOCK_MARKETS);
       setLoading(false);
@@ -181,8 +207,6 @@ export default function MarketsPage() {
     }
 
     try {
-      const sessionToken = betfairSessionToken;
-
       // 1. Fetch market catalogue
       const catRes = await fetch("/api/betfair/markets", {
         method: "POST",
@@ -248,7 +272,7 @@ export default function MarketsPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionRestored, isConnected, betfairSessionToken]);
+  }, [sessionChecked, sessionToken]);
 
   useEffect(() => {
     loadMarkets();
