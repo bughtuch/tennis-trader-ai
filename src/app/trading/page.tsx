@@ -249,7 +249,6 @@ function TradingPage() {
   }
 
   const {
-    isConnected,
     marketBook,
     fetchMarketBook,
     placeTrade,
@@ -263,13 +262,29 @@ function TradingPage() {
     pendingOrders,
     addPendingOrder,
     removePendingOrder,
-    restoreSession,
   } = useAppStore();
 
-  /* ─── Restore Betfair session from Supabase on mount ─── */
+  /* ─── Betfair connection: read from Supabase via server API (source of truth) ─── */
+  const [isConnected, setIsConnected] = useState(false);
+
   useEffect(() => {
-    restoreSession();
-  }, [restoreSession]);
+    async function checkSession() {
+      try {
+        const res = await fetch("/api/betfair/session");
+        const data = await res.json();
+        if (data.connected && data.sessionToken) {
+          setIsConnected(true);
+          // Set token in store so fetchMarketBook/placeTrade/etc can use it
+          useAppStore.setState({
+            isConnected: true,
+            betfairSessionToken: data.sessionToken,
+            username: data.username ?? null,
+          });
+        }
+      } catch { /* non-critical */ }
+    }
+    checkSession();
+  }, []);
 
   const isLive = isConnected && !!marketId && !!marketBook;
 
