@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase";
 
 /* ─── Types ─── */
 
@@ -150,23 +151,6 @@ export default function MarketsPage() {
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastMarket, setLastMarket] = useState<LastMarket | null>(null);
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const [sessionChecked, setSessionChecked] = useState(false);
-
-  // Read Betfair session from server (Supabase profile via server-side API)
-  useEffect(() => {
-    async function checkSession() {
-      try {
-        const res = await fetch("/api/betfair/session");
-        const data = await res.json();
-        if (data.connected && data.sessionToken) {
-          setSessionToken(data.sessionToken);
-        }
-      } catch { /* non-critical */ }
-      setSessionChecked(true);
-    }
-    checkSession();
-  }, []);
 
   // Check for saved market on mount
   useEffect(() => {
@@ -177,20 +161,34 @@ export default function MarketsPage() {
   }, []);
 
   const loadMarkets = useCallback(async () => {
-    // Wait for Supabase session check to complete
-    if (!sessionChecked) return;
-
     setLoading(true);
-
-    if (!sessionToken) {
-      setIsDemoMode(true);
-      setMarkets(MOCK_MARKETS);
-      setLoading(false);
-      return;
-    }
-
     try {
-      // 1. Fetch market catalogue
+      // 1. Check Supabase profile for Betfair connection
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setIsDemoMode(true);
+        setMarkets(MOCK_MARKETS);
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("betfair_connected, betfair_session_token")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.betfair_connected || !profile?.betfair_session_token) {
+        setIsDemoMode(true);
+        setMarkets(MOCK_MARKETS);
+        setLoading(false);
+        return;
+      }
+
+      const sessionToken = profile.betfair_session_token;
+
+      // 2. Fetch market catalogue
       const catRes = await fetch("/api/betfair/markets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -205,7 +203,7 @@ export default function MarketsPage() {
         return;
       }
 
-      // 2. Fetch market books for odds (batch in groups of 10 to stay within Betfair limits)
+      // 3. Fetch market books for odds (batch in groups of 10 to stay within Betfair limits)
       const allMarketIds: string[] = catData.markets.map((m: { marketId: string }) => m.marketId);
       const bookMap = new Map();
       const BATCH_SIZE = 10;
@@ -235,7 +233,7 @@ export default function MarketsPage() {
         // Odds fetch failed — show markets without odds
       }
 
-      // 3. Merge catalogue + books
+      // 4. Merge catalogue + books
       const mapped = catData.markets
         .map((cat: { marketId: string }) => mapBetfairToMarket(cat, bookMap.get(cat.marketId)))
         .filter((m: Market | null): m is Market => m !== null);
@@ -255,7 +253,7 @@ export default function MarketsPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionChecked, sessionToken]);
+  }, []);
 
   useEffect(() => {
     loadMarkets();
