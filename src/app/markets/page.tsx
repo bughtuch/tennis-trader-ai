@@ -155,31 +155,55 @@ export default function MarketsPage() {
   const [sessionChecked, setSessionChecked] = useState(false);
 
   // Read Betfair session from Supabase profile (source of truth)
+  // Uses exact same pattern as Settings page loadProfile()
   useEffect(() => {
     async function checkSession() {
       try {
         const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { setSessionChecked(true); return; }
+        if (!user) {
+          console.log("[Markets] No Supabase user found");
+          setSessionChecked(true);
+          return;
+        }
 
-        const { data: profile } = await supabase
+        const { data, error } = await supabase
           .from("profiles")
-          .select("betfair_connected, betfair_session_token, betfair_connected_at")
+          .select("*")
           .eq("id", user.id)
           .single();
 
-        if (profile?.betfair_connected && profile?.betfair_session_token) {
+        if (error) {
+          console.error("[Markets] Profile query error:", error);
+          setSessionChecked(true);
+          return;
+        }
+
+        console.log("[Markets] Profile data:", {
+          betfair_connected: data?.betfair_connected,
+          has_token: !!data?.betfair_session_token,
+          connected_at: data?.betfair_connected_at,
+        });
+
+        if (data?.betfair_connected && data?.betfair_session_token) {
           // Check if session is still valid (8h window)
-          const connectedAt = profile.betfair_connected_at
-            ? new Date(profile.betfair_connected_at).getTime()
+          const connectedAt = data.betfair_connected_at
+            ? new Date(data.betfair_connected_at).getTime()
             : 0;
           const isExpired = connectedAt > 0 && Date.now() > connectedAt + 8 * 3600000;
 
           if (!isExpired) {
-            setSessionToken(profile.betfair_session_token);
+            console.log("[Markets] Session valid, setting token");
+            setSessionToken(data.betfair_session_token);
+          } else {
+            console.log("[Markets] Session expired");
           }
+        } else {
+          console.log("[Markets] Not connected or no token");
         }
-      } catch { /* non-critical */ }
+      } catch (err) {
+        console.error("[Markets] checkSession error:", err);
+      }
       setSessionChecked(true);
     }
     checkSession();
