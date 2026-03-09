@@ -206,12 +206,28 @@ function SettingsPage() {
 
       // Betfair connection state from Supabase (source of truth)
       if (data.betfair_connected && data.betfair_session_token) {
-        setBetfairConnected(true);
-        setBetfairUsername(data.betfair_username ?? null);
-        if (data.betfair_connected_at) {
-          setBetfairExpiry(
-            new Date(new Date(data.betfair_connected_at).getTime() + 8 * 3600000).toISOString()
-          );
+        // Check if session is expired (>8 hours from connected_at)
+        const connectedAt = data.betfair_connected_at
+          ? new Date(data.betfair_connected_at).getTime()
+          : 0;
+        const sessionExpired = connectedAt > 0 && Date.now() > connectedAt + 8 * 3600000;
+
+        if (sessionExpired) {
+          setBetfairConnected(false);
+          setBetfairUsername(data.betfair_username ?? null);
+          setBetfairExpiry(null);
+          setIsExpired(true);
+          setExpiryText("Session expired — reconnect");
+          // Clear stale token from localStorage
+          try { localStorage.removeItem("betfair_token"); } catch { /* SSR guard */ }
+        } else {
+          setBetfairConnected(true);
+          setBetfairUsername(data.betfair_username ?? null);
+          if (data.betfair_connected_at) {
+            setBetfairExpiry(
+              new Date(new Date(data.betfair_connected_at).getTime() + 8 * 3600000).toISOString()
+            );
+          }
         }
       } else {
         setBetfairConnected(false);
@@ -224,6 +240,34 @@ function SettingsPage() {
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
+
+  /* Stripe checkout redirect fallback — verify payment if session_id in URL */
+  useEffect(() => {
+    const sessionId = searchParams.get("session_id");
+    if (!sessionId) return;
+
+    async function verifyPayment(sid: string) {
+      try {
+        const res = await fetch("/api/stripe/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: sid }),
+        });
+        const data = await res.json();
+        if (data.verified) {
+          setSubscriptionStatus("active");
+          setSaveMessage("Payment confirmed — subscription active!");
+          setTimeout(() => setSaveMessage(null), 5000);
+        }
+      } catch {
+        // Silent fail — webhook may still handle it
+      }
+      // Clean session_id from URL without reload
+      window.history.replaceState({}, "", "/settings");
+    }
+
+    verifyPayment(sessionId);
+  }, [searchParams]);
 
   /* Save settings to Supabase */
   async function handleSaveSettings() {
@@ -386,7 +430,14 @@ function SettingsPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-xs text-gray-500">Connect your Betfair account to start trading.</p>
+              {isExpired ? (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <div className="w-2 h-2 rounded-full bg-amber-400" />
+                  <span className="text-xs font-medium text-amber-400">Session expired — reconnect below</span>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500">Connect your Betfair account to start trading.</p>
+              )}
               <div>
                 <Label>Username</Label>
                 <TextInput
