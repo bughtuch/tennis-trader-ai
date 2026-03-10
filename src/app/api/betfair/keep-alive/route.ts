@@ -12,11 +12,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get session token from cookie
-    const sessionToken = req.cookies.get("betfair_session")?.value;
+    const { sessionToken } = await req.json();
     if (!sessionToken) {
       return NextResponse.json(
-        { success: false, error: "No Betfair session cookie" },
+        { success: false, error: "No session token provided" },
         { status: 401 }
       );
     }
@@ -39,20 +38,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Refresh the httpOnly cookie with a new 8hr maxAge
-    const response = NextResponse.json({
-      success: true,
-      token: data.token ?? sessionToken,
-    });
-
-    response.cookies.set("betfair_session", data.token ?? sessionToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      maxAge: 8 * 60 * 60,
-      path: "/",
-    });
-
     // Update betfair_connected_at in Supabase profile
     try {
       const { createServerClient } = await import("@/lib/supabase-server");
@@ -63,14 +48,20 @@ export async function POST(req: NextRequest) {
       if (user) {
         await supabase
           .from("profiles")
-          .update({ betfair_connected_at: new Date().toISOString() })
+          .update({
+            betfair_connected_at: new Date().toISOString(),
+            betfair_session_token: data.token ?? sessionToken,
+          })
           .eq("id", user.id);
       }
     } catch {
       // Non-critical — keep-alive still succeeded
     }
 
-    return response;
+    return NextResponse.json({
+      success: true,
+      token: data.token ?? sessionToken,
+    });
   } catch (error) {
     return NextResponse.json(
       {

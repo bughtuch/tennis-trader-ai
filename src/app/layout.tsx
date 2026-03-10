@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import BetfairKeepAlive from "@/components/BetfairKeepAlive";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,6 +31,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#030712] text-gray-100`}
       >
         <Navbar />
+        <BetfairKeepAlive />
         {children}
       </body>
     </html>
