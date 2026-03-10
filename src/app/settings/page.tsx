@@ -173,6 +173,7 @@ function SettingsPage() {
   const searchParams = useSearchParams();
   const [subscriptionStatus, setSubscriptionStatus] = useState<string>("inactive");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
   const showSubscribePrompt = searchParams.get("subscribe") === "true";
 
   /* Save status */
@@ -340,6 +341,38 @@ function SettingsPage() {
       setSaveMessage("Network error starting checkout");
       setCheckoutLoading(false);
     }
+  }
+
+  async function handleRestorePurchase() {
+    setRestoreLoading(true);
+    setSaveMessage(null);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) {
+        setSaveMessage("Not signed in");
+        setRestoreLoading(false);
+        return;
+      }
+      const res = await fetch("/api/stripe/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email }),
+      });
+      const data = await res.json();
+      if (data.synced) {
+        setSubscriptionStatus("active");
+        setSaveMessage("Subscription restored successfully!");
+        setTimeout(() => setSaveMessage(null), 5000);
+      } else {
+        setSaveMessage(data.reason ?? "No active subscription found");
+        setTimeout(() => setSaveMessage(null), 5000);
+      }
+    } catch {
+      setSaveMessage("Network error restoring purchase");
+      setTimeout(() => setSaveMessage(null), 5000);
+    }
+    setRestoreLoading(false);
   }
 
   async function handleConnect() {
@@ -550,6 +583,13 @@ function SettingsPage() {
                 {checkoutLoading ? "Redirecting to Stripe..." : "Subscribe — £37/month"}
               </button>
               <p className="text-center text-[11px] text-gray-600">7-day free trial. Cancel anytime.</p>
+              <button
+                onClick={handleRestorePurchase}
+                disabled={restoreLoading}
+                className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-400 bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800 hover:text-white disabled:opacity-50 transition-all"
+              >
+                {restoreLoading ? "Checking Stripe..." : "Restore Purchase"}
+              </button>
             </div>
           )}
         </Card>
