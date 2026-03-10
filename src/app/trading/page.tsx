@@ -162,11 +162,17 @@ function TradingPage() {
     }
   }, [marketId, p1Name, p2Name, p1Flag, p2Flag, tournament]);
 
-  const [selectedStake, setSelectedStake] = useState(25);
+  const [selectedStake, setSelectedStake] = useState<number | null>(25);
+  const [customStakeInput, setCustomStakeInput] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState<"player1" | "player2">("player1");
   const [activeTab, setActiveTab] = useState<"ladder" | "ai" | "positions">("ladder");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Resolve active stake: custom input takes priority over quick buttons
+  const activeStake = customStakeInput
+    ? Math.max(2, Number(customStakeInput) || 0)
+    : selectedStake ?? 25;
 
   /* ─── Session timer state ─── */
   const [sessionStart] = useState(() => Date.now());
@@ -509,14 +515,14 @@ function TradingPage() {
     // Add pending order indicator for in-play bet delay
     if (marketBook?.inplay) {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      addPendingOrder({ id: pendingId, side, price, size: selectedStake, placedAt: Date.now(), delaySeconds: 5 });
+      addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
     }
     await placeTrade({
       marketId,
       selectionId: selectedRunner.selectionId,
       side,
       price,
-      size: selectedStake,
+      size: activeStake,
     });
   }
 
@@ -681,7 +687,7 @@ function TradingPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stateRef = useRef<any>(null);
   stateRef.current = {
-    selectedStake,
+    activeStake,
     selectedPlayer,
     isLive,
     marketId,
@@ -690,6 +696,7 @@ function TradingPage() {
     placeTrade,
     setToast,
     setSelectedStake,
+    setCustomStakeInput,
     greenUpResult,
     currentLayPrice,
     openPositions,
@@ -715,18 +722,18 @@ function TradingPage() {
           if (bestBack) {
             if (s.isLive && s.marketId && s.selectedRunner) {
               if (s.marketBook?.inplay) {
-                s.addPendingOrder({ id: `${Date.now()}-kb`, side: "BACK", price: bestBack.price, size: s.selectedStake, placedAt: Date.now(), delaySeconds: 5 });
+                s.addPendingOrder({ id: `${Date.now()}-kb`, side: "BACK", price: bestBack.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
               }
               s.placeTrade({
                 marketId: s.marketId,
                 selectionId: s.selectedRunner.selectionId,
                 side: "BACK",
                 price: bestBack.price,
-                size: s.selectedStake,
+                size: s.activeStake,
               });
             } else {
               s.setToast({
-                message: `Demo: BACK £${s.selectedStake} @ ${bestBack.price.toFixed(2)}`,
+                message: `Demo: BACK £${s.activeStake} @ ${bestBack.price.toFixed(2)}`,
                 type: "success",
               });
             }
@@ -736,18 +743,18 @@ function TradingPage() {
           if (bestLay) {
             if (s.isLive && s.marketId && s.selectedRunner) {
               if (s.marketBook?.inplay) {
-                s.addPendingOrder({ id: `${Date.now()}-kb`, side: "LAY", price: bestLay.price, size: s.selectedStake, placedAt: Date.now(), delaySeconds: 5 });
+                s.addPendingOrder({ id: `${Date.now()}-kb`, side: "LAY", price: bestLay.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
               }
               s.placeTrade({
                 marketId: s.marketId,
                 selectionId: s.selectedRunner.selectionId,
                 side: "LAY",
                 price: bestLay.price,
-                size: s.selectedStake,
+                size: s.activeStake,
               });
             } else {
               s.setToast({
-                message: `Demo: LAY £${s.selectedStake} @ ${bestLay.price.toFixed(2)}`,
+                message: `Demo: LAY £${s.activeStake} @ ${bestLay.price.toFixed(2)}`,
                 type: "success",
               });
             }
@@ -781,19 +788,19 @@ function TradingPage() {
           }
           break;
         case "1":
-          s.setSelectedStake(STAKES[0]);
+          s.setSelectedStake(STAKES[0]); s.setCustomStakeInput("");
           break;
         case "2":
-          s.setSelectedStake(STAKES[1]);
+          s.setSelectedStake(STAKES[1]); s.setCustomStakeInput("");
           break;
         case "3":
-          s.setSelectedStake(STAKES[2]);
+          s.setSelectedStake(STAKES[2]); s.setCustomStakeInput("");
           break;
         case "4":
-          s.setSelectedStake(STAKES[3]);
+          s.setSelectedStake(STAKES[3]); s.setCustomStakeInput("");
           break;
         case "5":
-          s.setSelectedStake(STAKES[4]);
+          s.setSelectedStake(STAKES[4]); s.setCustomStakeInput("");
           break;
         case "escape":
           setShortcutsExpanded(false);
@@ -843,9 +850,9 @@ function TradingPage() {
           {STAKES.map((stake) => (
             <button
               key={stake}
-              onClick={() => setSelectedStake(stake)}
+              onClick={() => { setSelectedStake(stake); setCustomStakeInput(""); }}
               className={`shrink-0 min-h-[44px] md:min-h-0 px-4 md:px-3 py-2 md:py-1.5 rounded-lg text-sm md:text-xs font-medium transition-all ${
-                selectedStake === stake
+                selectedStake === stake && !customStakeInput
                   ? "bg-white text-gray-900 shadow-sm"
                   : "bg-gray-800/50 text-gray-400 hover:bg-gray-800 hover:text-gray-300"
               }`}
@@ -853,6 +860,21 @@ function TradingPage() {
               £{stake}
             </button>
           ))}
+          <div className="relative shrink-0">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">£</span>
+            <input
+              type="number"
+              min={2}
+              step="any"
+              value={customStakeInput}
+              onChange={(e) => {
+                setCustomStakeInput(e.target.value);
+                if (e.target.value) setSelectedStake(null);
+              }}
+              placeholder="Custom"
+              className="w-[90px] min-h-[44px] md:min-h-0 pl-6 pr-2 py-2 md:py-1.5 rounded-lg text-sm md:text-xs font-medium bg-gray-800/50 text-white placeholder-gray-500 border border-gray-700/50 focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/20 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+          </div>
         </div>
       </div>
 
