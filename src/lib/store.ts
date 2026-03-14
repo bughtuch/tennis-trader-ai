@@ -122,6 +122,26 @@ interface AppState {
   pendingOrders: PendingOrder[];
   addPendingOrder: (order: PendingOrder) => void;
   removePendingOrder: (id: string) => void;
+
+  // Streak Protection
+  consecutiveLosses: number;
+  setConsecutiveLosses: (n: number) => void;
+  streakCooldownUntil: number | null;
+  setStreakCooldownUntil: (ts: number | null) => void;
+  streakBannerDismissed: boolean;
+  setStreakBannerDismissed: (v: boolean) => void;
+
+  // Shadow Mode
+  shadowMode: boolean;
+  setShadowMode: (enabled: boolean) => void;
+  placeShadowTrade: (params: {
+    marketId: string;
+    selectionId: number;
+    side: "BACK" | "LAY";
+    price: number;
+    size: number;
+    player: string;
+  }) => Promise<boolean>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -404,5 +424,49 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   removePendingOrder: (id) => {
     set((state) => ({ pendingOrders: state.pendingOrders.filter((o) => o.id !== id) }));
+  },
+
+  // ─── Streak Protection ───
+  consecutiveLosses: 0,
+  setConsecutiveLosses: (n) => set({ consecutiveLosses: n }),
+  streakCooldownUntil: null,
+  setStreakCooldownUntil: (ts) => set({ streakCooldownUntil: ts }),
+  streakBannerDismissed: false,
+  setStreakBannerDismissed: (v) => set({ streakBannerDismissed: v }),
+
+  // ─── Shadow Mode ───
+  shadowMode: false,
+  setShadowMode: (enabled) => set({ shadowMode: enabled }),
+
+  placeShadowTrade: async ({ marketId, selectionId, side, price, size, player }) => {
+    set({ tradeLoading: true, tradeError: null, lastTradeSuccess: null });
+    try {
+      const res = await fetch("/api/trades/shadow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "placeShadowTrade",
+          marketId,
+          selectionId,
+          side,
+          price,
+          size,
+          player,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        set({
+          tradeLoading: false,
+          lastTradeSuccess: `SHADOW ${side} £${size} @ ${price.toFixed(2)} recorded`,
+        });
+        return true;
+      }
+      set({ tradeError: data.error ?? "Shadow trade failed", tradeLoading: false });
+      return false;
+    } catch {
+      set({ tradeError: "Network error placing shadow trade", tradeLoading: false });
+      return false;
+    }
   },
 }));

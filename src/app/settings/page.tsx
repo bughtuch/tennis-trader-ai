@@ -155,6 +155,13 @@ function SettingsPage() {
     return () => clearInterval(timer);
   }, [betfairExpiry]);
 
+  /* Shadow mode */
+  const [shadowMode, setShadowMode] = useState(true);
+
+  /* Streak protection */
+  const [streakProtection, setStreakProtection] = useState(true);
+  const [streakThreshold, setStreakThresholdVal] = useState("3");
+
   /* Trading preferences */
   const [defaultStake, setDefaultStake] = useState("25");
   const [maxExposure, setMaxExposure] = useState("500");
@@ -203,6 +210,9 @@ function SettingsPage() {
       setDailyLossLimit(String(data.daily_loss_limit ?? 100));
       setMaxSingleTrade(String(data.max_single_trade ?? 100));
       setSubscriptionStatus(data.subscription_status ?? "inactive");
+      setShadowMode(data.shadow_mode ?? true);
+      setStreakProtection(data.streak_protection_enabled ?? true);
+      setStreakThresholdVal(String(data.streak_threshold ?? 3));
       setProfileLoaded(true);
 
       // Betfair connection state from Supabase (source of truth)
@@ -292,6 +302,9 @@ function SettingsPage() {
         auto_green_up_target: Number(autoGreenUp),
         ai_guardian_enabled: aiGuardian,
         ai_signals_enabled: aiSignals,
+        shadow_mode: shadowMode,
+        streak_protection_enabled: streakProtection,
+        streak_threshold: Number(streakThreshold),
       })
       .eq("id", user.id);
 
@@ -625,6 +638,52 @@ function SettingsPage() {
             </div>
 
             <div className="border-t border-gray-800/50 pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-white">Shadow Mode</div>
+                  <div className="text-xs text-gray-500">
+                    {shadowMode
+                      ? "Practice with real odds, no real money"
+                      : "Live trading — real money at risk"}
+                  </div>
+                </div>
+                <Toggle
+                  enabled={shadowMode}
+                  onToggle={() => {
+                    if (shadowMode) {
+                      // Turning OFF shadow mode — require active subscription
+                      if (subscriptionStatus !== "active") {
+                        setSaveMessage("Subscribe to enable live trading");
+                        setTimeout(() => setSaveMessage(null), 3000);
+                        return;
+                      }
+                    }
+                    setShadowMode(!shadowMode);
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-white">Streak Protection</div>
+                  <div className="text-xs text-gray-500">Warns after losing streaks, pauses trading after extended losses</div>
+                </div>
+                <Toggle enabled={streakProtection} onToggle={() => setStreakProtection(!streakProtection)} />
+              </div>
+              {streakProtection && (
+                <div>
+                  <Label>Streak Threshold</Label>
+                  <Select
+                    value={streakThreshold}
+                    onChange={setStreakThresholdVal}
+                    options={[
+                      { value: "3", label: "3 consecutive losses" },
+                      { value: "5", label: "5 consecutive losses" },
+                      { value: "10", label: "10 consecutive losses" },
+                    ]}
+                  />
+                  <div className="text-[10px] text-gray-600 mt-1">Number of consecutive losses before first warning</div>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm text-white">AI Guardian</div>

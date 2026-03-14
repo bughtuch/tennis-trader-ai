@@ -15,8 +15,15 @@ CREATE TABLE profiles (
   ai_signals_enabled BOOLEAN DEFAULT true,
   daily_loss_limit NUMERIC DEFAULT 100,
   max_single_trade NUMERIC DEFAULT 100,
+  shadow_mode BOOLEAN DEFAULT true,
+  streak_protection_enabled BOOLEAN DEFAULT true,
+  streak_threshold INTEGER DEFAULT 3,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ALTER TABLE profiles ADD COLUMN shadow_mode BOOLEAN DEFAULT true;
+-- ALTER TABLE profiles ADD COLUMN streak_protection_enabled BOOLEAN DEFAULT true;
+-- ALTER TABLE profiles ADD COLUMN streak_threshold INTEGER DEFAULT 3;
 
 -- Auto-create profile on signup
 CREATE OR REPLACE FUNCTION handle_new_user()
@@ -46,6 +53,7 @@ CREATE TABLE trades (
   pnl NUMERIC,
   status TEXT DEFAULT 'open',
   greened_up BOOLEAN DEFAULT false,
+  is_shadow BOOLEAN DEFAULT false,
   ai_signal_used BOOLEAN DEFAULT false,
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),

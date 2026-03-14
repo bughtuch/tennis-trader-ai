@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore, type PriceSize, type PendingOrder } from "@/lib/store";
@@ -20,6 +20,7 @@ interface SupabaseTrade {
   pnl: number | null;
   status: string;
   greened_up: boolean;
+  is_shadow: boolean;
   ai_signal_used: boolean;
   notes: string | null;
   created_at: string;
@@ -182,6 +183,44 @@ function TradingPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  /* ─── Shadow Mode ─── */
+  const [isShadowMode, setIsShadowMode] = useState(false);
+
+  /* ─── Streak Protection Settings ─── */
+  const [streakProtectionEnabled, setStreakProtectionEnabled] = useState(true);
+  const [streakThreshold, setStreakThreshold] = useState(3);
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+  const [cooldownRemaining, setCooldownRemaining] = useState("");
+  const [streakBannerDismissed, setStreakBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    async function loadProfileSettings() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("shadow_mode, streak_protection_enabled, streak_threshold")
+        .eq("id", user.id)
+        .single();
+      if (data) {
+        setIsShadowMode(data.shadow_mode ?? true);
+        setStreakProtectionEnabled(data.streak_protection_enabled ?? true);
+        setStreakThreshold(data.streak_threshold ?? 3);
+      }
+    }
+    loadProfileSettings();
+    // Restore cooldown from sessionStorage
+    try {
+      const saved = sessionStorage.getItem("streakCooldownUntil");
+      if (saved) {
+        const ts = Number(saved);
+        if (ts > Date.now()) setCooldownUntil(ts);
+        else sessionStorage.removeItem("streakCooldownUntil");
+      }
+    } catch { /* SSR guard */ }
+  }, []);
+
   // Resolve active stake: custom input takes priority over quick buttons
   const activeStake = customStakeInput
     ? Math.max(2, Number(customStakeInput) || 0)
@@ -235,6 +274,7 @@ function TradingPage() {
       .select("*")
       .eq("user_id", user.id)
       .eq("status", "open")
+      .eq("is_shadow", isShadowMode)
       .order("created_at", { ascending: false });
     if (open) setOpenPositions(open);
 
@@ -243,10 +283,11 @@ function TradingPage() {
       .select("*")
       .eq("user_id", user.id)
       .eq("status", "closed")
+      .eq("is_shadow", isShadowMode)
       .order("closed_at", { ascending: false })
       .limit(20);
     if (closed) setTradeHistory(closed);
-  }, []);
+  }, [isShadowMode]);
 
   useEffect(() => {
     fetchTrades();
@@ -267,10 +308,70 @@ function TradingPage() {
     fetchTrades();
   }
 
+  /* ─── Compute consecutive losses (most recent first) ─── */
+  const consecutiveLosses = useMemo(() => {
+    let count = 0;
+    for (const t of tradeHistory) {
+      if ((t.pnl ?? 0) < 0) count++;
+      else break;
+    }
+    return count;
+  }, [tradeHistory]);
+
+  /* ─── Compute current streak (wins or losses) for display ─── */
+  const currentStreak = useMemo(() => {
+    if (tradeHistory.length === 0) return { count: 0, type: "none" as const };
+    const first = tradeHistory[0];
+    const firstIsWin = (first.pnl ?? 0) > 0;
+    const firstIsLoss = (first.pnl ?? 0) < 0;
+    if (!firstIsWin && !firstIsLoss) return { count: 0, type: "none" as const };
+    let count = 0;
+    for (const t of tradeHistory) {
+      const isWin = (t.pnl ?? 0) > 0;
+      const isLoss = (t.pnl ?? 0) < 0;
+      if (firstIsWin && isWin) count++;
+      else if (firstIsLoss && isLoss) count++;
+      else break;
+    }
+    return { count, type: firstIsWin ? "win" as const : "loss" as const };
+  }, [tradeHistory]);
+
+  /* ─── Auto-trigger cooldown at threshold+2 ─── */
+  const cooldownActive = cooldownUntil !== null && Date.now() < cooldownUntil;
+  useEffect(() => {
+    if (!streakProtectionEnabled) return;
+    if (consecutiveLosses >= streakThreshold + 2 && !cooldownActive) {
+      const until = Date.now() + 10 * 60 * 1000; // 10 minutes
+      setCooldownUntil(until);
+      try { sessionStorage.setItem("streakCooldownUntil", String(until)); } catch { /* SSR guard */ }
+    }
+  }, [consecutiveLosses, streakThreshold, streakProtectionEnabled, cooldownActive]);
+
+  /* ─── Cooldown countdown timer ─── */
+  useEffect(() => {
+    if (!cooldownUntil) return;
+    function tick() {
+      const ms = cooldownUntil! - Date.now();
+      if (ms <= 0) {
+        setCooldownUntil(null);
+        setCooldownRemaining("");
+        try { sessionStorage.removeItem("streakCooldownUntil"); } catch { /* SSR guard */ }
+        return;
+      }
+      const mins = Math.floor(ms / 60000);
+      const secs = Math.floor((ms % 60000) / 1000);
+      setCooldownRemaining(`${mins}:${secs.toString().padStart(2, "0")}`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [cooldownUntil]);
+
   const {
     marketBook,
     fetchMarketBook,
     placeTrade,
+    placeShadowTrade,
     tradeLoading,
     tradeError,
     lastTradeSuccess,
@@ -524,7 +625,29 @@ function TradingPage() {
 
   /* ─── Handle trade click ─── */
   async function handleTradeClick(price: number, side: "BACK" | "LAY") {
-    if (!isConnected || !marketId || !selectedRunner) return;
+    if (!marketId || !selectedRunner) return;
+
+    // Streak protection cooldown block
+    if (cooldownUntil && Date.now() < cooldownUntil) {
+      setToast({ message: "Trading paused — cooldown active", type: "error" });
+      return;
+    }
+
+    if (isShadowMode) {
+      const playerName = displayPlayers[selectedPlayer].name;
+      await placeShadowTrade({
+        marketId,
+        selectionId: selectedRunner.selectionId,
+        side,
+        price,
+        size: activeStake,
+        player: playerName,
+      });
+      fetchTrades();
+      return;
+    }
+
+    if (!isConnected) return;
     // Add pending order indicator for in-play bet delay
     if (marketBook?.inplay) {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -732,6 +855,9 @@ function TradingPage() {
     selectedRunner,
     ladderData,
     placeTrade,
+    placeShadowTrade,
+    isShadowMode,
+    displayPlayers,
     setToast,
     setSelectedStake,
     setCustomStakeInput,
@@ -743,6 +869,8 @@ function TradingPage() {
     unmatchedOrders,
     marketBook,
     addPendingOrder,
+    fetchTrades,
+    cooldownUntil,
   };
 
   useEffect(() => {
@@ -757,8 +885,21 @@ function TradingPage() {
 
       switch (e.key.toLowerCase()) {
         case "b":
-          if (bestBack) {
-            if (s.isLive && s.marketId && s.selectedRunner) {
+          if (s.cooldownUntil && Date.now() < s.cooldownUntil) {
+            s.setToast({ message: "Trading paused — cooldown active", type: "error" });
+            return;
+          }
+          if (bestBack && s.marketId && s.selectedRunner) {
+            if (s.isShadowMode) {
+              s.placeShadowTrade({
+                marketId: s.marketId,
+                selectionId: s.selectedRunner.selectionId,
+                side: "BACK",
+                price: bestBack.price,
+                size: s.activeStake,
+                player: s.displayPlayers[s.selectedPlayer].name,
+              }).then(() => s.fetchTrades());
+            } else if (s.isLive) {
               if (s.marketBook?.inplay) {
                 s.addPendingOrder({ id: `${Date.now()}-kb`, side: "BACK", price: bestBack.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
               }
@@ -778,8 +919,21 @@ function TradingPage() {
           }
           break;
         case "l":
-          if (bestLay) {
-            if (s.isLive && s.marketId && s.selectedRunner) {
+          if (s.cooldownUntil && Date.now() < s.cooldownUntil) {
+            s.setToast({ message: "Trading paused — cooldown active", type: "error" });
+            return;
+          }
+          if (bestLay && s.marketId && s.selectedRunner) {
+            if (s.isShadowMode) {
+              s.placeShadowTrade({
+                marketId: s.marketId,
+                selectionId: s.selectedRunner.selectionId,
+                side: "LAY",
+                price: bestLay.price,
+                size: s.activeStake,
+                player: s.displayPlayers[s.selectedPlayer].name,
+              }).then(() => s.fetchTrades());
+            } else if (s.isLive) {
               if (s.marketBook?.inplay) {
                 s.addPendingOrder({ id: `${Date.now()}-kb`, side: "LAY", price: bestLay.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
               }
@@ -805,24 +959,52 @@ function TradingPage() {
           }
           break;
         case "g":
-          if (s.greenUpResult && s.isLive && s.marketId && s.selectedRunner) {
-            s.placeTrade({
-              marketId: s.marketId,
-              selectionId: s.selectedRunner.selectionId,
-              side: s.greenUpResult.greenUpSide,
-              price: s.currentLayPrice,
-              size: s.greenUpResult.greenUpStake,
-            }).then((ok: boolean) => {
-              if (ok) {
-                const runnerPositions = s.openPositions.filter(
-                  (p: SupabaseTrade) =>
-                    p.selection_id === String(s.selectedRunner.selectionId)
-                );
-                for (const pos of runnerPositions) {
-                  s.closeTradeAsGreenUp(pos.id, s.currentLayPrice, s.greenUpResult!.equalProfit);
+          if (s.greenUpResult && s.marketId && s.selectedRunner) {
+            if (s.isShadowMode) {
+              // Shadow green-up
+              const runnerPositions = s.openPositions.filter(
+                (p: SupabaseTrade) =>
+                  p.selection_id === String(s.selectedRunner.selectionId)
+              );
+              Promise.all(
+                runnerPositions.map((pos: SupabaseTrade) =>
+                  fetch("/api/trades/shadow", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      action: "closeShadowTrade",
+                      tradeId: pos.id,
+                      exitPrice: s.currentLayPrice,
+                      pnl: s.greenUpResult!.equalProfit,
+                    }),
+                  })
+                )
+              ).then(() => {
+                s.setToast({
+                  message: `SHADOW green-up: lock £${s.greenUpResult!.equalProfit.toFixed(2)}`,
+                  type: "success",
+                });
+                s.fetchTrades();
+              });
+            } else if (s.isLive) {
+              s.placeTrade({
+                marketId: s.marketId,
+                selectionId: s.selectedRunner.selectionId,
+                side: s.greenUpResult.greenUpSide,
+                price: s.currentLayPrice,
+                size: s.greenUpResult.greenUpStake,
+              }).then((ok: boolean) => {
+                if (ok) {
+                  const runnerPositions = s.openPositions.filter(
+                    (p: SupabaseTrade) =>
+                      p.selection_id === String(s.selectedRunner.selectionId)
+                  );
+                  for (const pos of runnerPositions) {
+                    s.closeTradeAsGreenUp(pos.id, s.currentLayPrice, s.greenUpResult!.equalProfit);
+                  }
                 }
-              }
-            });
+              });
+            }
           }
           break;
         case "1":
@@ -954,13 +1136,15 @@ function TradingPage() {
               {/* Back cell */}
               <button
                 onClick={() => row.backSize > 0 && handleTradeClick(row.price, "BACK")}
-                disabled={tradeLoading}
+                disabled={tradeLoading || cooldownActive}
                 className={`relative py-1.5 px-3 text-right text-sm font-mono transition-all overflow-hidden ${
-                  row.backSize > 0
-                    ? row.isBestBack
-                      ? "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 active:bg-blue-500/40"
-                      : "bg-blue-500/8 text-blue-400/80 hover:bg-blue-500/15 active:bg-blue-500/25"
-                    : "text-gray-700 hover:bg-blue-500/5"
+                  cooldownActive
+                    ? "opacity-40 cursor-not-allowed text-gray-700"
+                    : row.backSize > 0
+                      ? row.isBestBack
+                        ? "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 active:bg-blue-500/40"
+                        : "bg-blue-500/8 text-blue-400/80 hover:bg-blue-500/15 active:bg-blue-500/25"
+                      : "text-gray-700 hover:bg-blue-500/5"
                 }`}
               >
                 {/* Depth bar */}
@@ -995,13 +1179,15 @@ function TradingPage() {
               {/* Lay cell */}
               <button
                 onClick={() => row.laySize > 0 && handleTradeClick(row.price, "LAY")}
-                disabled={tradeLoading}
+                disabled={tradeLoading || cooldownActive}
                 className={`relative py-1.5 px-3 text-left text-sm font-mono transition-all overflow-hidden ${
-                  row.laySize > 0
-                    ? row.isBestLay
-                      ? "bg-pink-500/20 text-pink-300 hover:bg-pink-500/30 active:bg-pink-500/40"
-                      : "bg-pink-500/8 text-pink-400/80 hover:bg-pink-500/15 active:bg-pink-500/25"
-                    : "text-gray-700 hover:bg-pink-500/5"
+                  cooldownActive
+                    ? "opacity-40 cursor-not-allowed text-gray-700"
+                    : row.laySize > 0
+                      ? row.isBestLay
+                        ? "bg-pink-500/20 text-pink-300 hover:bg-pink-500/30 active:bg-pink-500/40"
+                        : "bg-pink-500/8 text-pink-400/80 hover:bg-pink-500/15 active:bg-pink-500/25"
+                      : "text-gray-700 hover:bg-pink-500/5"
                 }`}
               >
                 {/* Depth bar */}
@@ -1130,12 +1316,37 @@ function TradingPage() {
         </div>
       )}
 
-      {/* Green Up Button — only shown when a real position exists */}
+      {/* Green Up Button — only shown when a position exists */}
       {greenUpResult && currentLayPrice > 0 && (
         <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
           <button
             onClick={async () => {
-              if (isLive && marketId && selectedRunner) {
+              if (!marketId || !selectedRunner) return;
+
+              if (isShadowMode) {
+                // Shadow green-up: close all open positions via API
+                for (const pos of selectedRunnerPositions) {
+                  await fetch("/api/trades/shadow", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      action: "closeShadowTrade",
+                      tradeId: pos.id,
+                      exitPrice: currentLayPrice,
+                      pnl: greenUpResult.equalProfit,
+                    }),
+                  });
+                }
+                setToast({
+                  message: `SHADOW green-up: lock £${greenUpResult.equalProfit.toFixed(2)}`,
+                  type: "success",
+                });
+                setTimeout(() => setToast(null), 4000);
+                fetchTrades();
+                return;
+              }
+
+              if (isLive) {
                 const success = await placeTrade({
                   marketId,
                   selectionId: selectedRunner.selectionId,
@@ -1161,6 +1372,7 @@ function TradingPage() {
                 : "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 shadow-[0_0_20px_rgba(239,68,68,0.3)]"
             }`}
           >
+            {isShadowMode && <span className="mr-1">SHADOW</span>}
             {greenUpResult.greenUpSide} £{greenUpResult.greenUpStake.toFixed(2)} @{" "}
             {currentLayPrice.toFixed(2)} → Lock{" "}
             {greenUpResult.equalProfit >= 0 ? "+" : ""}£
@@ -1372,9 +1584,17 @@ function TradingPage() {
                 color: "text-green-400 font-mono",
               },
               {
-                label: "WORST",
-                value: worstTrade < 0 ? `-£${Math.abs(worstTrade).toFixed(2)}` : "--",
-                color: "text-red-400 font-mono",
+                label: "STREAK",
+                value: currentStreak.count === 0
+                  ? "—"
+                  : currentStreak.type === "win"
+                    ? `${currentStreak.count}W`
+                    : `${currentStreak.count}L`,
+                color: currentStreak.type === "win"
+                  ? "text-green-400"
+                  : currentStreak.type === "loss"
+                    ? "text-red-400"
+                    : "text-gray-500",
               },
             ].map((s) => (
               <div key={s.label} className="bg-gray-800/30 rounded-lg p-2.5">
@@ -1407,10 +1627,15 @@ function TradingPage() {
             openPositions.map((pos) => (
               <div
                 key={pos.id}
-                className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3"
+                className={`rounded-xl p-3 ${
+                  isShadowMode
+                    ? "bg-purple-500/5 border border-purple-500/20"
+                    : "bg-blue-500/5 border border-blue-500/20"
+                }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
+                    {isShadowMode && <span className="text-sm">👻</span>}
                     <span
                       className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                         pos.side === "BACK"
@@ -1424,7 +1649,9 @@ function TradingPage() {
                       {pos.player ?? pos.selection_id}
                     </span>
                   </div>
-                  <span className="text-gray-500 font-mono text-xs">Open</span>
+                  <span className={`font-mono text-xs ${isShadowMode ? "text-purple-400" : "text-gray-500"}`}>
+                    {isShadowMode ? "Shadow" : "Open"}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-gray-500">
                   <span>
@@ -1715,8 +1942,22 @@ function TradingPage() {
         </div>
       )}
 
+      {/* Shadow Mode Banner */}
+      {isShadowMode && (
+        <div className="border-b border-purple-500/20 bg-purple-500/5">
+          <div className="px-2 md:px-4 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400">
+              SHADOW MODE
+            </span>
+            <span className="text-xs text-purple-400/80">
+              Practice trading with real odds. No money moves.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Demo Mode Banner */}
-      {!isLive && (
+      {!isLive && !isShadowMode && (
         <div className="border-b border-amber-500/20 bg-amber-500/5">
           <div className="px-2 md:px-4 py-1.5 flex items-center gap-2">
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">
@@ -1725,6 +1966,48 @@ function TradingPage() {
             <span className="text-xs text-amber-400/80">
               Demo mode -- connect Betfair in Settings for live trading
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Streak Alert Banner (amber, 3+ losses) */}
+      {streakProtectionEnabled && consecutiveLosses >= streakThreshold && !streakBannerDismissed && !cooldownActive && (
+        <div className="border-b border-amber-500/20 bg-amber-500/10">
+          <div className="px-2 md:px-4 py-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm shrink-0">⚠️</span>
+              <span className="text-xs text-amber-400 font-medium">
+                STREAK ALERT — {consecutiveLosses} losses in a row. Traders who pause here recover faster. Consider a break.
+              </span>
+            </div>
+            <button
+              onClick={() => setStreakBannerDismissed(true)}
+              className="shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cooldown Modal Overlay (red, 5+ losses) */}
+      {cooldownActive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-red-500/30 rounded-2xl p-8 max-w-sm mx-4 text-center space-y-4">
+            <div className="text-4xl">🛑</div>
+            <h2 className="text-xl font-bold text-white">TRADING PAUSED</h2>
+            <p className="text-sm text-gray-400">
+              You&apos;ve hit {consecutiveLosses} consecutive losses. Trading is disabled for 10 minutes.
+            </p>
+            <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+              <div className="text-2xl font-bold font-mono text-red-400">
+                {cooldownRemaining}
+              </div>
+              <div className="text-[10px] text-red-400/60 uppercase tracking-wider mt-1">remaining</div>
+            </div>
+            <p className="text-xs text-gray-500">
+              Traders who cool down after losing streaks average better results in their next session.
+            </p>
           </div>
         </div>
       )}
