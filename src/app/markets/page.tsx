@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -131,6 +131,22 @@ function mapBetfairToMarket(
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
+interface ScannerAlert {
+  id: string;
+  marketId: string;
+  players: string;
+  alertType: "momentum" | "wom_flip" | "volume_spike";
+  description: string;
+  severity: "low" | "medium" | "high";
+  timestamp: number;
+}
+
+const ALERT_ICONS: Record<string, string> = {
+  momentum: "🔥",
+  wom_flip: "⚡",
+  volume_spike: "💰",
+};
+
 type Filter = "all" | "live" | "upcoming";
 
 interface LastMarket {
@@ -150,6 +166,70 @@ export default function MarketsPage() {
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastMarket, setLastMarket] = useState<LastMarket | null>(null);
+
+  /* ─── Scanner State ─── */
+  const [scannerAlerts, setScannerAlerts] = useState<ScannerAlert[]>([]);
+  const [scannerMarketCount, setScannerMarketCount] = useState(0);
+  const [scannerRunning, setScannerRunning] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const snapshotRef = useRef<Record<string, any> | null>(null);
+  const scannerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const runScan = useCallback(async () => {
+    let sessionToken: string | null = null;
+    try { sessionToken = localStorage.getItem("betfair_token"); } catch { /* SSR guard */ }
+    if (!sessionToken) return;
+
+    try {
+      const res = await fetch("/api/betfair/scanner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionToken,
+          previousSnapshot: snapshotRef.current,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        snapshotRef.current = data.snapshot;
+        setScannerMarketCount(data.marketCount ?? 0);
+        if (data.alerts?.length > 0) {
+          setScannerAlerts((prev) => {
+            const merged = [...data.alerts, ...prev].slice(0, 20);
+            try { localStorage.setItem("scannerAlerts", JSON.stringify(merged)); } catch { /* ignore */ }
+            return merged;
+          });
+        }
+        setScannerRunning(true);
+      }
+    } catch { /* non-critical */ }
+  }, []);
+
+  // Load cached alerts + start scanner polling
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("scannerAlerts");
+      if (cached) setScannerAlerts(JSON.parse(cached));
+    } catch { /* ignore */ }
+
+    // First scan is snapshot-only (no previous data to compare), second scan starts producing alerts
+    runScan();
+    scannerIntervalRef.current = setInterval(runScan, 30_000);
+    return () => {
+      if (scannerIntervalRef.current) clearInterval(scannerIntervalRef.current);
+    };
+  }, [runScan]);
+
+  // Expose alert count globally for navbar badge
+  useEffect(() => {
+    try {
+      const recentCount = scannerAlerts.filter(
+        (a) => Date.now() - a.timestamp < 5 * 60 * 1000
+      ).length;
+      localStorage.setItem("scannerAlertCount", String(recentCount));
+      window.dispatchEvent(new Event("scannerAlertUpdate"));
+    } catch { /* ignore */ }
+  }, [scannerAlerts]);
 
   // Check for saved market on mount
   useEffect(() => {
@@ -328,6 +408,77 @@ export default function MarketsPage() {
           </div>
         </div>
       )}
+
+      {/* Market Scanner */}
+      <div className="border-b border-gray-800/50 bg-gray-900/20">
+        <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+              <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">
+                MARKET SCANNER
+              </h2>
+            </div>
+            <span className="text-[10px] text-gray-600">
+              {scannerRunning
+                ? `Scanning ${scannerMarketCount} live market${scannerMarketCount !== 1 ? "s" : ""}...`
+                : "Starting scanner..."}
+            </span>
+          </div>
+          {scannerAlerts.length > 0 ? (
+            <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+              {scannerAlerts.slice(0, 5).map((alert) => {
+                // Find market data for linking
+                const market = markets.find((m) => m.id === alert.marketId);
+                const linkHref = market
+                  ? `/trading?marketId=${alert.marketId}&p1=${encodeURIComponent(market.player1.name)}&p2=${encodeURIComponent(market.player2.name)}&tournament=${encodeURIComponent(market.tournament)}`
+                  : `/trading?marketId=${alert.marketId}`;
+
+                return (
+                  <Link
+                    key={alert.id}
+                    href={linkHref}
+                    className={`block px-3 py-2 rounded-xl border transition-all hover:brightness-125 ${
+                      alert.severity === "high"
+                        ? "bg-red-500/5 border-red-500/20"
+                        : alert.severity === "medium"
+                          ? "bg-orange-500/5 border-orange-500/20"
+                          : "bg-gray-800/30 border-gray-700/30"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="text-sm shrink-0 mt-px">
+                        {ALERT_ICONS[alert.alertType] ?? "📊"}
+                      </span>
+                      <div className="min-w-0">
+                        <span className="text-xs text-white font-medium">{alert.players}</span>
+                        <span className="text-[10px] text-gray-500 ml-1.5">
+                          {Math.round((Date.now() - alert.timestamp) / 60000)}m ago
+                        </span>
+                        <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">{alert.description}</p>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+              {scannerAlerts.length > 5 && (
+                <button
+                  onClick={() => setScannerAlerts((prev) => prev.slice(0, 20))}
+                  className="w-full text-center text-[10px] text-gray-600 py-1 hover:text-gray-400 transition-colors"
+                >
+                  {scannerAlerts.length - 5} more alert{scannerAlerts.length - 5 !== 1 ? "s" : ""}
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-600">
+              {scannerRunning
+                ? `Scanning ${scannerMarketCount} live markets... No alerts yet`
+                : "Connecting to scanner..."}
+            </p>
+          )}
+        </div>
+      </div>
 
       {/* Filters + Search */}
       <div className="border-b border-gray-800/50 bg-gray-900/20">

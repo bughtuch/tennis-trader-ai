@@ -77,6 +77,26 @@ export default function Navbar() {
     };
   }, [isConnected, runKeepAlive]);
 
+  // Scanner alert badge count
+  const [scannerAlertCount, setScannerAlertCount] = useState(0);
+
+  useEffect(() => {
+    function readCount() {
+      try {
+        const c = localStorage.getItem("scannerAlertCount");
+        setScannerAlertCount(c ? Number(c) : 0);
+      } catch { /* SSR guard */ }
+    }
+    readCount();
+    window.addEventListener("scannerAlertUpdate", readCount);
+    // Also poll every 30s in case event is missed
+    const id = setInterval(readCount, 30_000);
+    return () => {
+      window.removeEventListener("scannerAlertUpdate", readCount);
+      clearInterval(id);
+    };
+  }, []);
+
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -118,13 +138,18 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   pathname === link.href
                     ? "text-white bg-white/5"
                     : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
                 }`}
               >
                 {link.label}
+                {link.href === "/markets" && scannerAlertCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center px-1 rounded-full bg-orange-500 text-[9px] font-bold text-white">
+                    {scannerAlertCount > 9 ? "9+" : scannerAlertCount}
+                  </span>
+                )}
               </Link>
             ))}
           </div>
