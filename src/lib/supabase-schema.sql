@@ -63,12 +63,28 @@ CREATE TABLE trades (
 
 -- ALTER TABLE trades ADD COLUMN coach_insight TEXT;
 
+-- Briefings table (cached pre-match AI briefings)
+CREATE TABLE briefings (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id),
+  market_id TEXT NOT NULL,
+  player1 TEXT,
+  player2 TEXT,
+  tournament TEXT,
+  surface TEXT,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- RLS policies
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE briefings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users read own profile" ON profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Users read own trades" ON trades FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users insert own trades" ON trades FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users update own trades" ON trades FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users read own briefings" ON briefings FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own briefings" ON briefings FOR INSERT WITH CHECK (auth.uid() = user_id);

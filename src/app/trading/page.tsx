@@ -253,6 +253,11 @@ function TradingPage() {
   >([]);
   const [signalType, setSignalType] = useState<"pre_match" | "in_play" | "edge_alert">("in_play");
 
+  /* Pre-Match Briefing state */
+  const [briefing, setBriefing] = useState<string | null>(null);
+  const [briefingLoading, setBriefingLoading] = useState(false);
+  const [briefingCached, setBriefingCached] = useState(false);
+
   /* AI Guardian state */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [guardianData, setGuardianData] = useState<any>(null);
@@ -746,6 +751,39 @@ function TradingPage() {
     const id = setInterval(fetchScore, 15_000);
     return () => clearInterval(id);
   }, [p1Name, p2Name]);
+
+  /* ─── Pre-Match Briefing: auto-fetch on market open ─── */
+  useEffect(() => {
+    if (!marketId || !p1Name || !p2Name) return;
+    let cancelled = false;
+    async function loadBriefing() {
+      setBriefingLoading(true);
+      try {
+        const res = await fetch("/api/ai/briefing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            market_id: marketId,
+            player1: p1Name,
+            player2: p2Name,
+            tournament,
+            surface: "Hard",
+            odds1: livePlayerOdds.player1 || 2.0,
+            odds2: livePlayerOdds.player2 || 2.0,
+          }),
+        });
+        const data = await res.json();
+        if (!cancelled && data.success) {
+          setBriefing(data.briefing);
+          setBriefingCached(data.cached ?? false);
+        }
+      } catch { /* non-critical */ }
+      if (!cancelled) setBriefingLoading(false);
+    }
+    loadBriefing();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketId, p1Name, p2Name]);
 
   /* ─── AI Signals fetch ─── */
   async function fetchAiSignal() {
@@ -1487,6 +1525,33 @@ function TradingPage() {
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 font-medium">
             CLAUDE
           </span>
+        </div>
+      </div>
+
+      {/* Pre-Match Briefing */}
+      <div className="p-4 border-b border-gray-800/50">
+        <div className="rounded-xl p-3 border" style={{ borderColor: "rgba(200, 184, 154, 0.3)", background: "rgba(200, 184, 154, 0.05)" }}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: "#C8B89A" }}>
+              PRE-MATCH BRIEFING
+            </span>
+            {briefingCached && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-700/50 text-gray-500">cached</span>
+            )}
+          </div>
+          {briefingLoading ? (
+            <div className="flex items-center gap-2 py-2">
+              <svg className="w-3.5 h-3.5 animate-spin" style={{ color: "#C8B89A" }} viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-xs text-gray-500">Generating briefing...</span>
+            </div>
+          ) : briefing ? (
+            <p className="text-xs leading-relaxed" style={{ color: "#C8B89A" }}>{briefing}</p>
+          ) : (
+            <p className="text-xs text-gray-600">No briefing available — open a market to generate.</p>
+          )}
         </div>
       </div>
 
