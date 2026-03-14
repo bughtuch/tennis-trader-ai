@@ -78,6 +78,11 @@ export default function Footer() {
                   Risk Disclosure
                 </Link>
               </li>
+              <li>
+                <Link href="/affiliates" className="hover:text-white transition-colors">
+                  Earn 30% — Refer a Trader
+                </Link>
+              </li>
             </ul>
           </div>
 
