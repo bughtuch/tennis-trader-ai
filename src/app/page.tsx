@@ -87,10 +87,7 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              <span>
-                Trusted by{" "}
-                <strong className="text-gray-300">500+</strong> tennis traders
-              </span>
+              <span>Join our founding members</span>
             </div>
             <div className="hidden sm:block w-px h-4 bg-gray-800" />
             <div className="flex items-center gap-1.5">
@@ -104,7 +101,7 @@ export default function Home() {
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
               ))}
-              <span className="ml-1">4.9/5 rating</span>
+              <span className="ml-1">Built for pros</span>
             </div>
           </div>
         </div>
@@ -209,10 +206,10 @@ export default function Home() {
       <section className="py-16 px-4 border-y border-gray-800/50">
         <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8">
           {[
-            { value: "£2.4M+", label: "Volume Traded" },
-            { value: "94%", label: "Uptime SLA" },
+            { value: "Live", label: "Betfair Data" },
+            { value: "99.9%", label: "Uptime" },
             { value: "<50ms", label: "Execution Speed" },
-            { value: "500+", label: "Active Traders" },
+            { value: "Open", label: "Founding Members Welcome" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
@@ -316,7 +313,7 @@ export default function Home() {
             Ready to elevate your trading?
           </h2>
           <p className="text-gray-400 max-w-lg mx-auto mb-8">
-            Join hundreds of traders using AI to find edges in tennis markets.
+            Be one of our founding members using AI to find edges in tennis markets.
           </p>
           <Link
             href="/auth/signup"
