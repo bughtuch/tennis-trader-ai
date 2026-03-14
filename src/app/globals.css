@@ -5,6 +5,9 @@
   --color-foreground: #f9fafb;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-jetbrains: var(--font-jetbrains);
+  --font-jakarta: var(--font-jakarta);
+  --font-dm: var(--font-dm);
 }
 
 /* Animations */
