@@ -76,10 +76,20 @@ CREATE TABLE briefings (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Trading DNA table (cached AI pattern analysis)
+CREATE TABLE trading_dna (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id),
+  dna_data JSONB NOT NULL,
+  trade_count INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- RLS policies
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE briefings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trading_dna ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users read own profile" ON profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
@@ -88,3 +98,5 @@ CREATE POLICY "Users insert own trades" ON trades FOR INSERT WITH CHECK (auth.ui
 CREATE POLICY "Users update own trades" ON trades FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users read own briefings" ON briefings FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users insert own briefings" ON briefings FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users read own trading_dna" ON trading_dna FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own trading_dna" ON trading_dna FOR INSERT WITH CHECK (auth.uid() = user_id);
