@@ -35,6 +35,19 @@ interface LadderRow {
   isBestLay: boolean;
 }
 
+interface LiveScore {
+  available: boolean;
+  sets?: number[][];
+  gameScore?: string[];
+  server?: 1 | 2;
+  matchStatus?: string;
+  breakPoint?: boolean;
+  setPoint?: boolean;
+  matchPoint?: boolean;
+  tiebreak?: boolean;
+  tiebreakScore?: string[];
+}
+
 const STAKES = [5, 10, 25, 50, 100];
 
 /* ─── Helpers ─── */
@@ -525,6 +538,31 @@ function TradingPage() {
       size: activeStake,
     });
   }
+
+  /* ─── Live Scores ─── */
+  const [liveScore, setLiveScore] = useState<LiveScore | null>(null);
+
+  useEffect(() => {
+    if (!p1Name || !p2Name) return;
+
+    async function fetchScore() {
+      try {
+        const res = await fetch("/api/tennis-scores", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player1: p1Name, player2: p2Name }),
+        });
+        const data: LiveScore = await res.json();
+        setLiveScore(data.available ? data : null);
+      } catch {
+        setLiveScore(null);
+      }
+    }
+
+    fetchScore();
+    const id = setInterval(fetchScore, 15_000);
+    return () => clearInterval(id);
+  }, [p1Name, p2Name]);
 
   /* ─── AI Signals fetch ─── */
   async function fetchAiSignal() {
@@ -1814,6 +1852,71 @@ function TradingPage() {
           })}
         </div>
       </div>
+
+      {/* ─── Live Score Bar ─── */}
+      {liveScore?.available && (
+        <div className="border-b border-gray-800/50 bg-gray-900/40">
+          <div className="px-2 md:px-4 py-2 flex items-center justify-center gap-2 text-xs flex-wrap">
+            {/* Player 1 name + server dot */}
+            <span className="flex items-center gap-1 font-medium text-white">
+              {liveScore.server === 1 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+              )}
+              {displayPlayers.player1.short}
+            </span>
+
+            {/* Set scores */}
+            <span className="font-mono font-bold text-white tracking-wide">
+              [{liveScore.sets?.map((s) => `${s[0]}-${s[1]}`).join(", ")}]
+            </span>
+
+            {/* Player 2 name + server dot */}
+            <span className="flex items-center gap-1 font-medium text-white">
+              {displayPlayers.player2.short}
+              {liveScore.server === 2 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+              )}
+            </span>
+
+            <span className="text-gray-600">|</span>
+
+            {/* Game score or tiebreak score */}
+            <span className="font-mono font-semibold text-yellow-400">
+              {liveScore.tiebreak && liveScore.tiebreakScore
+                ? `TB ${liveScore.tiebreakScore[0]}-${liveScore.tiebreakScore[1]}`
+                : `${liveScore.gameScore?.[0]}-${liveScore.gameScore?.[1]}`}
+            </span>
+
+            <span className="text-gray-600">|</span>
+
+            {/* Server indicator */}
+            <span className="flex items-center gap-1 text-gray-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+              {liveScore.server === 1
+                ? displayPlayers.player1.short
+                : displayPlayers.player2.short}{" "}
+              serving
+            </span>
+
+            {/* Situation badges */}
+            {liveScore.matchPoint && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 animate-pulse">
+                MATCH PT
+              </span>
+            )}
+            {liveScore.setPoint && !liveScore.matchPoint && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 animate-pulse">
+                SET PT
+              </span>
+            )}
+            {liveScore.breakPoint && !liveScore.setPoint && !liveScore.matchPoint && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 animate-pulse">
+                BREAK PT
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ─── Weight of Money Bar ─── */}
       <div className="border-b border-gray-800/50 bg-gray-900/20 max-w-full">
