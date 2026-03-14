@@ -25,7 +25,7 @@ export default function AffiliatesPage() {
           </p>
           <Link
             href="/auth/signup"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl text-white font-semibold text-lg transition-all duration-300 hover:shadow-[0_0_30px_rgba(34,197,94,0.3)] hover:scale-[1.02]"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl text-white font-semibold text-lg transition-all duration-300 hover:shadow-[0_0_30px_rgba(34,197,94,0.3)] hover:scale-[1.02]"
           >
             Sign Up to Get Your Link
             <svg
@@ -126,7 +126,7 @@ export default function AffiliatesPage() {
           <h2 className="text-2xl font-bold text-white mb-8">
             Potential earnings
           </h2>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
               { referrals: "5", monthly: "£55.50" },
               { referrals: "20", monthly: "£222" },
@@ -159,7 +159,7 @@ export default function AffiliatesPage() {
           </p>
           <Link
             href="/auth/signup"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl text-white font-semibold text-lg transition-all duration-300 hover:shadow-[0_0_30px_rgba(34,197,94,0.3)] hover:scale-[1.02]"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl text-white font-semibold text-lg transition-all duration-300 hover:shadow-[0_0_30px_rgba(34,197,94,0.3)] hover:scale-[1.02]"
           >
             Get Your Referral Link
           </Link>

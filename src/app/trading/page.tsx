@@ -889,7 +889,7 @@ function TradingPage() {
             <button
               key={stake}
               onClick={() => { setSelectedStake(stake); setCustomStakeInput(""); }}
-              className={`shrink-0 min-h-[44px] md:min-h-0 px-4 md:px-3 py-2 md:py-1.5 rounded-lg text-sm md:text-xs font-medium transition-all ${
+              className={`shrink-0 min-h-[48px] md:min-h-0 px-4 md:px-3 py-2.5 md:py-1.5 rounded-lg text-sm md:text-xs font-medium transition-all ${
                 selectedStake === stake && !customStakeInput
                   ? "bg-white text-gray-900 shadow-sm"
                   : "bg-gray-800/50 text-gray-400 hover:bg-gray-800 hover:text-gray-300"
@@ -910,7 +910,7 @@ function TradingPage() {
                 if (e.target.value) setSelectedStake(null);
               }}
               placeholder="Custom"
-              className="w-[90px] min-h-[44px] md:min-h-0 pl-6 pr-2 py-2 md:py-1.5 rounded-lg text-sm md:text-xs font-medium bg-gray-800/50 text-white placeholder-gray-500 border border-gray-700/50 focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/20 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="w-[90px] min-h-[48px] md:min-h-0 pl-6 pr-2 py-2.5 md:py-1.5 rounded-lg text-sm md:text-xs font-medium bg-gray-800/50 text-white placeholder-gray-500 border border-gray-700/50 focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/20 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
           </div>
         </div>
@@ -1828,7 +1828,7 @@ function TradingPage() {
               <button
                 key={key}
                 onClick={() => setSelectedPlayer(key)}
-                className={`flex-1 flex items-center justify-center gap-1.5 md:gap-2 min-h-[48px] md:min-h-[44px] px-3 py-2 text-xs md:text-sm font-medium transition-all border-b-2 ${
+                className={`flex-1 flex items-center justify-center gap-1.5 md:gap-2 min-h-[52px] md:min-h-[44px] px-3 py-2.5 text-xs md:text-sm font-medium transition-all border-b-2 ${
                   isActive
                     ? "border-blue-500 text-white bg-blue-500/5"
                     : "border-transparent text-gray-400 hover:text-gray-300 hover:bg-gray-800/30"

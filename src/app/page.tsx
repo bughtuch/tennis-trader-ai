@@ -56,7 +56,7 @@ export default function Home() {
           >
             <Link
               href="/auth/signup"
-              className="group relative px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold text-lg transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02]"
+              className="group relative w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold text-lg text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02]"
             >
               Start Trading
               <span className="ml-2 inline-block transition-transform group-hover:translate-x-1">
@@ -65,7 +65,7 @@ export default function Home() {
             </Link>
             <Link
               href="#features"
-              className="px-8 py-4 rounded-xl text-gray-300 font-medium text-lg border border-gray-800 hover:border-gray-700 hover:bg-gray-900/50 transition-all duration-300"
+              className="w-full sm:w-auto px-8 py-4 rounded-xl text-gray-300 font-medium text-lg text-center border border-gray-800 hover:border-gray-700 hover:bg-gray-900/50 transition-all duration-300"
             >
               See How It Works
             </Link>
