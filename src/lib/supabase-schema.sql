@@ -56,9 +56,12 @@ CREATE TABLE trades (
   is_shadow BOOLEAN DEFAULT false,
   ai_signal_used BOOLEAN DEFAULT false,
   notes TEXT,
+  coach_insight TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   closed_at TIMESTAMPTZ
 );
+
+-- ALTER TABLE trades ADD COLUMN coach_insight TEXT;
 
 -- RLS policies
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;

@@ -23,6 +23,7 @@ interface SupabaseTrade {
   is_shadow: boolean;
   ai_signal_used: boolean;
   notes: string | null;
+  coach_insight: string | null;
   created_at: string;
   closed_at: string | null;
 }
@@ -293,8 +294,54 @@ function TradingPage() {
     fetchTrades();
   }, [fetchTrades]);
 
+  /* ─── AI Coach: fetch insight for a closed trade ─── */
+  const [coachInsights, setCoachInsights] = useState<Record<string, string>>({});
+  const [fadingInsightId, setFadingInsightId] = useState<string | null>(null);
+
+  async function fetchCoachInsight(trade: {
+    id: string;
+    side: string | null;
+    entry_price: number | null;
+    exit_price: number | null;
+    stake: number | null;
+    pnl: number | null;
+    player: string | null;
+    greened_up: boolean;
+  }) {
+    try {
+      const res = await fetch("/api/ai/coach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          side: trade.side,
+          entry_price: trade.entry_price,
+          exit_price: trade.exit_price,
+          stake: trade.stake,
+          pnl: trade.pnl,
+          player: trade.player ?? "Unknown",
+          greened_up: trade.greened_up,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.insight) {
+        setCoachInsights((prev) => ({ ...prev, [trade.id]: data.insight }));
+        setFadingInsightId(trade.id);
+        // Save to Supabase
+        const supabase = createClient();
+        await supabase
+          .from("trades")
+          .update({ coach_insight: data.insight })
+          .eq("id", trade.id);
+        // Re-fetch so tradeHistory has the insight
+        fetchTrades();
+      }
+    } catch { /* non-critical */ }
+  }
+
   async function closeTradeAsGreenUp(tradeId: string, exitPrice: number, pnl: number) {
     const supabase = createClient();
+    // Find the trade data before closing (for coach context)
+    const trade = openPositions.find((p) => p.id === tradeId);
     await supabase
       .from("trades")
       .update({
@@ -306,6 +353,19 @@ function TradingPage() {
       })
       .eq("id", tradeId);
     fetchTrades();
+    // Fire coach insight in background
+    if (trade) {
+      fetchCoachInsight({
+        id: tradeId,
+        side: trade.side,
+        entry_price: trade.entry_price,
+        exit_price: exitPrice,
+        stake: trade.stake,
+        pnl,
+        player: trade.player,
+        greened_up: true,
+      });
+    }
   }
 
   /* ─── Compute consecutive losses (most recent first) ─── */
@@ -871,6 +931,7 @@ function TradingPage() {
     addPendingOrder,
     fetchTrades,
     cooldownUntil,
+    fetchCoachInsight,
   };
 
   useEffect(() => {
@@ -977,6 +1038,17 @@ function TradingPage() {
                       exitPrice: s.currentLayPrice,
                       pnl: s.greenUpResult!.equalProfit,
                     }),
+                  }).then(() => {
+                    s.fetchCoachInsight({
+                      id: pos.id,
+                      side: pos.side,
+                      entry_price: pos.entry_price,
+                      exit_price: s.currentLayPrice,
+                      stake: pos.stake,
+                      pnl: s.greenUpResult!.equalProfit,
+                      player: pos.player,
+                      greened_up: true,
+                    });
                   })
                 )
               ).then(() => {
@@ -1336,6 +1408,17 @@ function TradingPage() {
                       pnl: greenUpResult.equalProfit,
                     }),
                   });
+                  // Fire coach insight in background
+                  fetchCoachInsight({
+                    id: pos.id,
+                    side: pos.side,
+                    entry_price: pos.entry_price,
+                    exit_price: currentLayPrice,
+                    stake: pos.stake,
+                    pnl: greenUpResult.equalProfit,
+                    player: pos.player,
+                    greened_up: true,
+                  });
                 }
                 setToast({
                   message: `SHADOW green-up: lock £${greenUpResult.equalProfit.toFixed(2)}`,
@@ -1683,48 +1766,58 @@ function TradingPage() {
               No closed trades yet
             </div>
           ) : (
-            tradeHistory.map((trade) => (
-              <div
-                key={trade.id}
-                className="px-4 py-2.5 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                      trade.side === "BACK"
-                        ? "bg-blue-500/20 text-blue-400"
-                        : "bg-pink-500/20 text-pink-400"
-                    }`}
-                  >
-                    {trade.side}
-                  </span>
-                  <div>
-                    <div className="text-[11px] text-gray-300 font-mono">
-                      {trade.entry_price} → {trade.exit_price ?? "--"} x £{trade.stake}
-                    </div>
-                    <div className="text-[10px] text-gray-600">
-                      {trade.closed_at
-                        ? new Date(trade.closed_at).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
-                        : "--"}
-                      {trade.greened_up && (
-                        <span className="ml-1 text-green-500">● green</span>
-                      )}
+            tradeHistory.map((trade) => {
+              const insight = coachInsights[trade.id] ?? trade.coach_insight;
+              return (
+              <div key={trade.id} className="px-4 py-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                        trade.side === "BACK"
+                          ? "bg-blue-500/20 text-blue-400"
+                          : "bg-pink-500/20 text-pink-400"
+                      }`}
+                    >
+                      {trade.side}
+                    </span>
+                    <div>
+                      <div className="text-[11px] text-gray-300 font-mono">
+                        {trade.entry_price} → {trade.exit_price ?? "--"} x £{trade.stake}
+                      </div>
+                      <div className="text-[10px] text-gray-600">
+                        {trade.closed_at
+                          ? new Date(trade.closed_at).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : "--"}
+                        {trade.greened_up && (
+                          <span className="ml-1 text-green-500">● green</span>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  <span
+                    className={`text-xs font-mono font-semibold ${
+                      (trade.pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400"
+                    }`}
+                  >
+                    {(trade.pnl ?? 0) >= 0 ? "+" : "-"}£
+                    {Math.abs(trade.pnl ?? 0).toFixed(2)}
+                  </span>
                 </div>
-                <span
-                  className={`text-xs font-mono font-semibold ${
-                    (trade.pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400"
-                  }`}
-                >
-                  {(trade.pnl ?? 0) >= 0 ? "+" : "-"}£
-                  {Math.abs(trade.pnl ?? 0).toFixed(2)}
-                </span>
+                {insight && (
+                  <div className={`mt-1.5 flex items-start gap-1.5 text-[10px] leading-relaxed ${
+                    fadingInsightId === trade.id ? "animate-fade-in" : ""
+                  }`}>
+                    <span className="shrink-0 mt-px">🧠</span>
+                    <span style={{ color: "#C8B89A" }}>{insight}</span>
+                  </div>
+                )}
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
