@@ -10,6 +10,7 @@ function getHeaders(sessionToken: string, appKey: string) {
     "X-Application": appKey,
     "Content-Type": "application/json",
     Accept: "application/json",
+    "Accept-Encoding": "gzip",
   };
 }
 

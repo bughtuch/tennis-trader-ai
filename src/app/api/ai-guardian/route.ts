@@ -345,6 +345,7 @@ async function executeOption(
       "X-Authentication": sessionToken,
       "X-Application": appKey,
       "Content-Type": "application/json",
+      "Accept-Encoding": "gzip",
     },
     body: JSON.stringify({
       marketId,

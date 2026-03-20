@@ -759,8 +759,17 @@ function SettingsPage() {
           </div>
         </Card>
 
-        {/* Bottom spacer */}
-        <div className="h-8" />
+        {/* Footer links */}
+        <div className="text-center pb-8">
+          <a
+            href="/api/betfair/charges"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+          >
+            Betfair Charges
+          </a>
+        </div>
       </div>
     </main>
   );
