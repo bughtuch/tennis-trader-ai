@@ -3,12 +3,28 @@ import { createClient } from "@supabase/supabase-js";
 
 export async function POST(req: NextRequest) {
   try {
+    // Auth check — verify the authenticated user matches the requested profile
+    const { createServerClient } = await import("@/lib/supabase-server");
+    const authSupabase = await createServerClient();
+    const { data: { user: authUser } } = await authSupabase.auth.getUser();
+    if (!authUser) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
     const { userId, email } = await req.json();
 
     if (!userId || !email) {
       return NextResponse.json(
         { error: "userId and email are required" },
         { status: 400 }
+      );
+    }
+
+    // Only allow creating/updating your own profile
+    if (userId !== authUser.id) {
+      return NextResponse.json(
+        { error: "Cannot create profile for another user" },
+        { status: 403 }
       );
     }
 

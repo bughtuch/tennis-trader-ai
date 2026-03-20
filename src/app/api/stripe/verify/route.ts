@@ -4,6 +4,14 @@ import { createClient } from "@supabase/supabase-js";
 
 export async function POST(req: NextRequest) {
   try {
+    // Auth check — only allow verified users to confirm their own payment
+    const { createServerClient } = await import("@/lib/supabase-server");
+    const authSupabase = await createServerClient();
+    const { data: { user: authUser } } = await authSupabase.auth.getUser();
+    if (!authUser) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeKey) {
       return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
@@ -20,12 +28,6 @@ export async function POST(req: NextRequest) {
 
     // Retrieve the checkout session from Stripe
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    console.log("[Stripe Verify] Session:", {
-      id: session.id,
-      paymentStatus: session.payment_status,
-      userId: session.metadata?.userId,
-      customer: session.customer,
-    });
 
     if (session.payment_status !== "paid") {
       return NextResponse.json({ verified: false, reason: "Payment not completed" });
@@ -34,6 +36,11 @@ export async function POST(req: NextRequest) {
     const userId = session.metadata?.userId;
     if (!userId) {
       return NextResponse.json({ verified: false, reason: "No userId in metadata" });
+    }
+
+    // Verify the authenticated user matches the session metadata
+    if (userId !== authUser.id) {
+      return NextResponse.json({ verified: false, reason: "Session does not belong to this user" });
     }
 
     // Use service role key to bypass RLS
