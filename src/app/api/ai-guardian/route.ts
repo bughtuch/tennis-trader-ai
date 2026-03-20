@@ -391,6 +391,17 @@ async function executeOption(
 
 export async function POST(req: NextRequest) {
   try {
+    // Auth check — prevent unauthenticated access
+    const { createServerClient } = await import("@/lib/supabase-server");
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "Not authenticated" },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
     const { action } = body;
 

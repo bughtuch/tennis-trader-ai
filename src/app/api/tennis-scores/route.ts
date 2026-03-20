@@ -16,6 +16,14 @@ interface ScoreResponse {
 }
 
 export async function POST(req: NextRequest) {
+  // Auth check — prevent unauthenticated API quota usage
+  const { createServerClient } = await import("@/lib/supabase-server");
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ available: false } as ScoreResponse);
+  }
+
   const apiKey = process.env.TENNIS_SCORES_API_KEY;
 
   if (!apiKey) {

@@ -116,6 +116,17 @@ function parseEdgeSize(text: string): EdgeSize {
 
 export async function POST(req: NextRequest) {
   try {
+    // Auth check — prevent unauthenticated Anthropic API usage
+    const { createServerClient } = await import("@/lib/supabase-server");
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "Not authenticated" },
+        { status: 401 }
+      );
+    }
+
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
