@@ -81,10 +81,9 @@ interface AppState {
   username: string | null;
   betfairSessionToken: string | null;
   authError: string | null;
-  authLoading: boolean;
+  setAuthError: (error: string | null) => void;
   sessionExpiry: string | null;
   sessionLoading: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
 
@@ -150,55 +149,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   username: null,
   betfairSessionToken: null,
   authError: null,
-  authLoading: false,
+  setAuthError: (error) => set({ authError: error }),
   sessionExpiry: null,
   sessionLoading: false,
-
-  login: async (username, password) => {
-    set({ authLoading: true, authError: null });
-    try {
-      const res = await fetch("/api/betfair/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        const expiry = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
-        set({
-          isConnected: true,
-          username,
-          betfairSessionToken: data.sessionToken,
-          authLoading: false,
-          sessionExpiry: expiry,
-        });
-
-        // Save to Supabase profile (client-side — belt-and-suspenders with server-side save)
-        try {
-          const supabase = createClient();
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            await supabase
-              .from("profiles")
-              .update({
-                betfair_connected: true,
-                betfair_session_token: data.sessionToken,
-                betfair_connected_at: new Date().toISOString(),
-                betfair_username: username,
-              })
-              .eq("id", user.id);
-          }
-        } catch { /* non-critical */ }
-
-        return true;
-      }
-      set({ authError: data.error ?? "Authentication failed", authLoading: false });
-      return false;
-    } catch {
-      set({ authError: "Network error. Please try again.", authLoading: false });
-      return false;
-    }
-  },
 
   restoreSession: async () => {
     set({ sessionLoading: true });
