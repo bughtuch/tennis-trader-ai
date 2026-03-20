@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const origin = req.headers.get("origin") ?? "http://localhost:3000";
+    // Use app's own URL — never trust the Origin header for redirects
+    const appUrl = process.env.NEXT_PUBLIC_SITE_URL ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`;
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -38,8 +39,8 @@ export async function POST(req: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: `${origin}/settings?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/settings`,
+      success_url: `${appUrl}/settings?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/settings`,
       customer_email: user.email,
       metadata: {
         userId: user.id,
