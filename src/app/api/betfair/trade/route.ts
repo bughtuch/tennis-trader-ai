@@ -45,6 +45,34 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Validate instruction fields before sending to Betfair
+      for (const inst of instructions) {
+        if (!Number.isInteger(inst.selectionId) || inst.selectionId <= 0) {
+          return NextResponse.json(
+            { success: false, error: "Invalid selection ID" },
+            { status: 400 }
+          );
+        }
+        if (inst.side !== "BACK" && inst.side !== "LAY") {
+          return NextResponse.json(
+            { success: false, error: "Side must be BACK or LAY" },
+            { status: 400 }
+          );
+        }
+        if (!Number.isFinite(inst.price) || inst.price < 1.01 || inst.price > 1000) {
+          return NextResponse.json(
+            { success: false, error: "Invalid price" },
+            { status: 400 }
+          );
+        }
+        if (!Number.isFinite(inst.size) || inst.size <= 0) {
+          return NextResponse.json(
+            { success: false, error: "Invalid stake size" },
+            { status: 400 }
+          );
+        }
+      }
+
       const formattedInstructions = instructions.map(
         (inst: {
           selectionId: number;

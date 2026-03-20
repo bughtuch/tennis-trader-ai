@@ -9,10 +9,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
     }
 
-    const { email } = await req.json();
-    if (!email) {
-      return NextResponse.json({ error: "Missing email" }, { status: 400 });
+    // Use authenticated user's email — never trust client-supplied email
+    const { createServerClient } = await import("@/lib/supabase-server");
+    const authSupabase = await createServerClient();
+    const { data: { user: authUser } } = await authSupabase.auth.getUser();
+    if (!authUser?.email) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    const email = authUser.email;
 
     console.log("[Stripe Sync] Looking up customer for email:", email);
 
