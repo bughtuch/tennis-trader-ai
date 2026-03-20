@@ -29,7 +29,7 @@ export default function Footer() {
               A Bug Hutch Ltd product.
             </p>
             <p className="text-sm text-gray-500">
-              Powered by <span className="text-gray-400 font-medium">TOWN</span>.
+              Powered by <span className="text-gray-400 font-medium">Betfair Exchange</span>.
             </p>
           </div>
 
