@@ -18,8 +18,6 @@ export async function POST(req: NextRequest) {
     }
     const email = authUser.email;
 
-    console.log("[Stripe Sync] Looking up customer for email:", email);
-
     const stripe = new Stripe(stripeKey, {
       apiVersion: "2026-02-25.clover",
     });
@@ -27,12 +25,10 @@ export async function POST(req: NextRequest) {
     // Find Stripe customer by email
     const customers = await stripe.customers.list({ email, limit: 1 });
     if (customers.data.length === 0) {
-      console.log("[Stripe Sync] No Stripe customer found for:", email);
       return NextResponse.json({ synced: false, reason: "No Stripe customer found for this email" });
     }
 
     const customer = customers.data[0];
-    console.log("[Stripe Sync] Found customer:", customer.id);
 
     // Check for active subscriptions
     const subscriptions = await stripe.subscriptions.list({
@@ -51,11 +47,8 @@ export async function POST(req: NextRequest) {
     const activeSub = subscriptions.data[0] || trialingSubs.data[0];
 
     if (!activeSub) {
-      console.log("[Stripe Sync] No active subscription for customer:", customer.id);
       return NextResponse.json({ synced: false, reason: "No active subscription found" });
     }
-
-    console.log("[Stripe Sync] Active subscription found:", activeSub.id, "status:", activeSub.status);
 
     // Use service role key to bypass RLS
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -69,7 +62,7 @@ export async function POST(req: NextRequest) {
     );
 
     // Find user by email in auth.users via profiles
-    const { data: profiles, error: findError } = await supabase
+    const { data: profiles } = await supabase
       .from("profiles")
       .select("id")
       .eq("email", email)
@@ -84,7 +77,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (!userId) {
-      console.error("[Stripe Sync] Could not find user for email:", email);
       return NextResponse.json({ synced: false, reason: "Could not find user profile" });
     }
 
@@ -100,14 +92,13 @@ export async function POST(req: NextRequest) {
       .eq("id", userId);
 
     if (error) {
-      console.error("[Stripe Sync] Failed to update profile:", error);
+      console.error("[Stripe Sync] Profile update failed");
       return NextResponse.json({ synced: false, reason: error.message });
     }
 
-    console.log("[Stripe Sync] Profile updated successfully for user:", userId);
     return NextResponse.json({ synced: true, subscriptionStatus: "active", tier });
   } catch (error) {
-    console.error("[Stripe Sync] Error:", error);
+    console.error("[Stripe Sync] Error:", error instanceof Error ? error.message : "unknown");
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Sync failed" },
       { status: 500 }

@@ -61,14 +61,13 @@ export async function POST(req: NextRequest) {
       .eq("id", userId);
 
     if (error) {
-      console.error("[Stripe Verify] Failed to update profile:", error);
+      console.error("[Stripe Verify] Profile update failed");
       return NextResponse.json({ verified: false, reason: error.message });
     }
 
-    console.log("[Stripe Verify] Profile updated successfully for user:", userId);
     return NextResponse.json({ verified: true, subscriptionStatus: "active" });
   } catch (error) {
-    console.error("[Stripe Verify] Error:", error);
+    console.error("[Stripe Verify] Error:", error instanceof Error ? error.message : "unknown");
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Verification failed" },
       { status: 500 }
