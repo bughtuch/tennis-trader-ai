@@ -28,8 +28,9 @@ interface ScannerAlert {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { sessionToken, previousSnapshot } = body;
+    const { previousSnapshot } = body;
 
+    const sessionToken = req.cookies.get("betfair_session")?.value;
     if (!sessionToken) {
       return NextResponse.json(
         { success: false, error: "Not authenticated" },

@@ -9,38 +9,14 @@ export default function BetfairKeepAlive() {
 
   useEffect(() => {
     async function ping() {
-      let token: string | null = null;
-      try {
-        token = localStorage.getItem("betfair_token");
-      } catch {
-        return;
-      }
-      if (!token) return;
-
       try {
         const res = await fetch("/api/betfair/keep-alive", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionToken: token }),
         });
         const data = await res.json();
-
-        if (!data.success) {
-          // Session expired or invalid — clear token
-          try {
-            localStorage.removeItem("betfair_token");
-          } catch { /* SSR guard */ }
-          return;
-        }
-
-        // If Betfair returned a refreshed token, update localStorage
-        if (data.token && data.token !== token) {
-          try {
-            localStorage.setItem("betfair_token", data.token);
-          } catch { /* SSR guard */ }
-        }
+        if (!data.success) return;
       } catch {
-        // Network error — don't clear token, retry next interval
+        // Network error — retry next interval
       }
     }
 

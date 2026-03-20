@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { sessionToken } = await req.json();
+    const sessionToken = req.cookies.get("betfair_session")?.value;
     if (!sessionToken) {
       return NextResponse.json(
         { success: false, error: "No session token provided" },
@@ -46,11 +46,12 @@ export async function POST(req: NextRequest) {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
+        const newToken = data.token ?? sessionToken;
         await supabase
           .from("profiles")
           .update({
             betfair_connected_at: new Date().toISOString(),
-            betfair_session_token: data.token ?? sessionToken,
+            betfair_session_token: newToken,
           })
           .eq("id", user.id);
       }
@@ -58,10 +59,19 @@ export async function POST(req: NextRequest) {
       // Non-critical — keep-alive still succeeded
     }
 
-    return NextResponse.json({
-      success: true,
-      token: data.token ?? sessionToken,
-    });
+    // If Betfair rotated the token, update the cookie
+    const response = NextResponse.json({ success: true });
+    if (data.token && data.token !== sessionToken) {
+      response.cookies.set("betfair_session", data.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 8 * 60 * 60,
+        path: "/",
+      });
+    }
+
+    return response;
   } catch (error) {
     return NextResponse.json(
       {
@@ -72,4 +82,10 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function DELETE(req: NextRequest) {
+  const response = NextResponse.json({ success: true });
+  response.cookies.delete("betfair_session");
+  return response;
 }

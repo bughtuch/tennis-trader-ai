@@ -36,7 +36,6 @@ export async function GET() {
 
     return NextResponse.json({
       connected: true,
-      sessionToken: profile.betfair_session_token,
       username: profile.betfair_username ?? null,
       connectedAt: profile.betfair_connected_at ?? null,
     });

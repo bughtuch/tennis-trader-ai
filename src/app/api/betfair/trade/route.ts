@@ -16,10 +16,9 @@ function getHeaders(sessionToken: string, appKey: string) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, marketId, instructions, betId, marketIds, sessionToken: bodyToken } = body;
+    const { action, marketId, instructions, betId, marketIds } = body;
 
-    // Accept session token from request body or cookie
-    const sessionToken = bodyToken || req.cookies.get("betfair_session")?.value;
+    const sessionToken = req.cookies.get("betfair_session")?.value;
     if (!sessionToken) {
       return NextResponse.json(
         { success: false, error: "Not authenticated. Please log in first." },

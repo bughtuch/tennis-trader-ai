@@ -228,8 +228,6 @@ function SettingsPage() {
           setBetfairExpiry(null);
           setIsExpired(true);
           setExpiryText("Session expired — reconnect");
-          // Clear stale token from localStorage
-          try { localStorage.removeItem("betfair_token"); } catch { /* SSR guard */ }
         } else {
           setBetfairConnected(true);
           setBetfairUsername(data.betfair_username ?? null);
@@ -428,7 +426,6 @@ function SettingsPage() {
     setBetfairConnected(false);
     setBetfairUsername(null);
     setBetfairExpiry(null);
-    try { localStorage.removeItem("betfair_token"); } catch { /* SSR guard */ }
   }
 
   return (

@@ -176,16 +176,11 @@ export default function MarketsPage() {
   const scannerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const runScan = useCallback(async () => {
-    let sessionToken: string | null = null;
-    try { sessionToken = localStorage.getItem("betfair_token"); } catch { /* SSR guard */ }
-    if (!sessionToken) return;
-
     try {
       const res = await fetch("/api/betfair/scanner", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sessionToken,
           previousSnapshot: snapshotRef.current,
         }),
       });
@@ -242,22 +237,22 @@ export default function MarketsPage() {
   const loadMarkets = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Read Betfair token from localStorage (saved by Settings page on connect)
-      let sessionToken: string | null = null;
-      try { sessionToken = localStorage.getItem("betfair_token"); } catch { /* SSR guard */ }
+      // 1. Check if Betfair session is active (cookie-based auth)
+      const sessionRes = await fetch("/api/betfair/session");
+      const sessionData = await sessionRes.json();
 
-      if (!sessionToken) {
+      if (!sessionData.connected) {
         setIsDemoMode(true);
         setMarkets(MOCK_MARKETS);
         setLoading(false);
         return;
       }
 
-      // 2. Fetch market catalogue
+      // 2. Fetch market catalogue (session token sent via httpOnly cookie)
       const catRes = await fetch("/api/betfair/markets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "listMarkets", sessionToken }),
+        body: JSON.stringify({ action: "listMarkets" }),
       });
       const catData = await catRes.json();
 
@@ -282,7 +277,7 @@ export default function MarketsPage() {
             const bookRes = await fetch("/api/betfair/markets", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "getMarketBook", marketIds: batchIds, sessionToken }),
+              body: JSON.stringify({ action: "getMarketBook", marketIds: batchIds }),
             });
             return bookRes.json();
           })
