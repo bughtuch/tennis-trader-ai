@@ -1,3 +1,4 @@
+// Auth-only middleware — subscription gating moved to feature-level components
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
