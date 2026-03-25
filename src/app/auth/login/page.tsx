@@ -29,7 +29,8 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/markets");
+    router.refresh();
+    router.replace("/dashboard");
   }
 
   return (
