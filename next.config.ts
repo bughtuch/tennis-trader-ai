@@ -25,8 +25,9 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "font-src 'self' data:",
-      "connect-src 'self' https://api.betfair.com https://identitysso.betfair.com https://*.supabase.co https://api.anthropic.com https://api.api-tennis.com https://api.stripe.com",
+      "connect-src 'self' https://api.betfair.com https://identitysso.betfair.com https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://api.api-tennis.com https://api.stripe.com",
       "frame-src 'self' https://js.stripe.com https://identitysso.betfair.com",
+      "worker-src 'self' blob:",
     ].join("; "),
   },
 ];
