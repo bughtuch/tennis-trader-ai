@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  console.log('BETFAIR_APP_KEY exists:', !!process.env.BETFAIR_APP_KEY);
+  console.log('BETFAIR_REDIRECT_URI exists:', !!process.env.BETFAIR_REDIRECT_URI);
+  console.log('All env keys:', Object.keys(process.env).filter(k => k.includes('BETFAIR')));
+
   const appKey = process.env.BETFAIR_APP_KEY;
   const redirectUri = process.env.BETFAIR_REDIRECT_URI;
 
