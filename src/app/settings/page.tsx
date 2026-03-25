@@ -249,6 +249,25 @@ function SettingsPage() {
 
   useEffect(() => {
     loadProfile();
+    // Check localStorage for persisted Betfair session (faster than Supabase)
+    try {
+      const token = localStorage.getItem("betfair_token");
+      const savedUsername = localStorage.getItem("betfair_username");
+      const connectedAt = localStorage.getItem("betfair_connected_at");
+      if (token && connectedAt) {
+        const connectedTs = new Date(connectedAt).getTime();
+        const expired = Date.now() > connectedTs + 8 * 3600000;
+        if (!expired) {
+          setBetfairConnected(true);
+          setBetfairUsername(savedUsername);
+          setBetfairExpiry(new Date(connectedTs + 8 * 3600000).toISOString());
+        } else {
+          localStorage.removeItem("betfair_token");
+          localStorage.removeItem("betfair_username");
+          localStorage.removeItem("betfair_connected_at");
+        }
+      }
+    } catch { /* SSR guard */ }
   }, [loadProfile]);
 
   /* Stripe checkout redirect fallback — verify payment if session_id in URL */
@@ -420,6 +439,16 @@ function SettingsPage() {
       });
       const data = await res.json();
       if (data.success) {
+        // Persist token to localStorage so it survives page reloads
+        try {
+          localStorage.setItem("betfair_token", data.token);
+          localStorage.setItem("betfair_username", data.username ?? betfairUsernameInput);
+          localStorage.setItem("betfair_connected_at", new Date().toISOString());
+        } catch { /* SSR guard */ }
+        setBetfairConnected(true);
+        setBetfairUsername(data.username ?? betfairUsernameInput);
+        const expiry = new Date(Date.now() + 8 * 3600000).toISOString();
+        setBetfairExpiry(expiry);
         setBetfairUsernameInput("");
         setBetfairPasswordInput("");
         setSaveMessage("Betfair connected successfully!");
@@ -437,6 +466,11 @@ function SettingsPage() {
 
   async function handleDisconnect() {
     await logout();
+    try {
+      localStorage.removeItem("betfair_token");
+      localStorage.removeItem("betfair_username");
+      localStorage.removeItem("betfair_connected_at");
+    } catch { /* SSR guard */ }
     setBetfairConnected(false);
     setBetfairUsername(null);
     setBetfairExpiry(null);

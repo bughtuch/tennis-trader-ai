@@ -57,8 +57,8 @@ export async function POST(req: NextRequest) {
       // Non-critical — token is still valid
     }
 
-    // Set session cookie
-    const response = NextResponse.json({ success: true });
+    // Set session cookie + return token for client localStorage
+    const response = NextResponse.json({ success: true, token: sessionToken, username });
     response.cookies.set("betfair_session", sessionToken, {
       httpOnly: true,
       secure: true,
