@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "edge";
+
+const BETFAIR_APP_KEY = "fCsY8wIPysRCih";
+
 export async function POST(req: NextRequest) {
   try {
     const { username, password } = await req.json();
@@ -11,19 +15,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const appKey = process.env.BETFAIR_APP_KEY;
-    if (!appKey) {
-      return NextResponse.json(
-        { success: false, error: "BETFAIR_APP_KEY is not configured" },
-        { status: 500 }
-      );
-    }
-
     // Call Betfair login API
     const loginRes = await fetch("https://identitysso.betfair.com/api/login", {
       method: "POST",
       headers: {
-        "X-Application": appKey,
+        "X-Application": BETFAIR_APP_KEY,
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json",
       },
