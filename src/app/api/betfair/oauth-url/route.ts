@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "edge";
-
 export async function GET() {
   const appKey = process.env.BETFAIR_APP_KEY;
   const redirectUri = process.env.BETFAIR_REDIRECT_URI;
