@@ -129,6 +129,11 @@ interface AppState {
   streakBannerDismissed: boolean;
   setStreakBannerDismissed: (v: boolean) => void;
 
+  // Subscription
+  subscriptionStatus: "active" | "inactive" | "cancelled" | "loading";
+  subscriptionLoaded: boolean;
+  fetchSubscriptionStatus: () => Promise<void>;
+
   // Shadow Mode
   shadowMode: boolean;
   setShadowMode: (enabled: boolean) => void;
@@ -163,9 +168,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("betfair_connected, betfair_session_token, betfair_connected_at, betfair_username")
+        .select("betfair_connected, betfair_session_token, betfair_connected_at, betfair_username, subscription_status")
         .eq("id", user.id)
         .single();
+
+      // Set subscription status from profile
+      const subStatus = profile?.subscription_status;
+      if (subStatus === "active" || subStatus === "cancelled") {
+        set({ subscriptionStatus: subStatus, subscriptionLoaded: true });
+      } else {
+        set({ subscriptionStatus: "inactive", subscriptionLoaded: true });
+      }
 
       if (!profile?.betfair_connected || !profile?.betfair_session_token) {
         set({ isConnected: false, sessionLoading: false });
@@ -377,6 +390,34 @@ export const useAppStore = create<AppState>((set, get) => ({
   setStreakCooldownUntil: (ts) => set({ streakCooldownUntil: ts }),
   streakBannerDismissed: false,
   setStreakBannerDismissed: (v) => set({ streakBannerDismissed: v }),
+
+  // ─── Subscription ───
+  subscriptionStatus: "loading",
+  subscriptionLoaded: false,
+
+  fetchSubscriptionStatus: async () => {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        set({ subscriptionStatus: "inactive", subscriptionLoaded: true });
+        return;
+      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("subscription_status")
+        .eq("id", user.id)
+        .single();
+      const status = profile?.subscription_status;
+      if (status === "active" || status === "cancelled") {
+        set({ subscriptionStatus: status, subscriptionLoaded: true });
+      } else {
+        set({ subscriptionStatus: "inactive", subscriptionLoaded: true });
+      }
+    } catch {
+      set({ subscriptionStatus: "inactive", subscriptionLoaded: true });
+    }
+  },
 
   // ─── Shadow Mode ───
   shadowMode: false,

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useAppStore } from "@/lib/store";
+import SubscribeGate from "@/components/SubscribeGate";
 
 interface DnaData {
   bestSurface: string;
@@ -17,6 +19,8 @@ interface DnaData {
 }
 
 export default function TradingDnaPage() {
+  const { subscriptionStatus, subscriptionLoaded } = useAppStore();
+  const isSubscribed = subscriptionStatus === "active";
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
   const [dna, setDna] = useState<DnaData | null>(null);
@@ -25,6 +29,10 @@ export default function TradingDnaPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isSubscribed) {
+      setLoading(false);
+      return;
+    }
     async function fetchDna() {
       try {
         const res = await fetch("/api/ai/trading-dna", {
@@ -50,9 +58,9 @@ export default function TradingDnaPage() {
       setLoading(false);
     }
     fetchDna();
-  }, []);
+  }, [isSubscribed]);
 
-  if (loading) {
+  if (!subscriptionLoaded || loading) {
     return (
       <main className="min-h-screen pt-14 bg-[#030712] flex items-center justify-center">
         <div className="flex items-center gap-3">
@@ -61,6 +69,18 @@ export default function TradingDnaPage() {
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
           <span className="text-gray-400 text-sm">Analysing your trading patterns...</span>
+        </div>
+      </main>
+    );
+  }
+
+  if (!isSubscribed) {
+    return (
+      <main className="min-h-screen pt-14 bg-[#030712]">
+        <div className="max-w-lg mx-auto px-4 py-12">
+          <SubscribeGate feature="Trading DNA" description="AI-powered analysis of your personal trading patterns, strengths, and weaknesses.">
+            <div />
+          </SubscribeGate>
         </div>
       </main>
     );

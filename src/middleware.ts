@@ -12,17 +12,8 @@ const publicPaths = [
   "/api",
 ];
 
-// Routes that require both auth AND active subscription
-const subscriptionPaths = ["/markets", "/trading"];
-
 function isPublic(pathname: string) {
   return publicPaths.some(
-    (p) => pathname === p || pathname.startsWith(p + "/")
-  );
-}
-
-function requiresSubscription(pathname: string) {
-  return subscriptionPaths.some(
     (p) => pathname === p || pathname.startsWith(p + "/")
   );
 }
@@ -67,21 +58,6 @@ export async function middleware(request: NextRequest) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/auth/login";
     return NextResponse.redirect(loginUrl);
-  }
-
-  if (requiresSubscription(pathname)) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("subscription_status")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.subscription_status !== "active") {
-      const settingsUrl = request.nextUrl.clone();
-      settingsUrl.pathname = "/settings";
-      settingsUrl.searchParams.set("subscribe", "true");
-      return NextResponse.redirect(settingsUrl);
-    }
   }
 
   return response;

@@ -264,6 +264,7 @@ function SettingsPage() {
         const data = await res.json();
         if (data.verified) {
           setSubscriptionStatus("active");
+          useAppStore.getState().fetchSubscriptionStatus();
           setSaveMessage("Payment confirmed — subscription active!");
           setTimeout(() => setSaveMessage(null), 5000);
         }
@@ -390,6 +391,7 @@ function SettingsPage() {
       const data = await res.json();
       if (data.synced) {
         setSubscriptionStatus("active");
+        useAppStore.getState().fetchSubscriptionStatus();
         setSaveMessage("Subscription restored successfully!");
         setTimeout(() => setSaveMessage(null), 5000);
       } else {

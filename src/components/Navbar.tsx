@@ -19,7 +19,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const { isConnected, restoreSession } = useAppStore();
+  const { isConnected, restoreSession, fetchSubscriptionStatus } = useAppStore();
   const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRestored = useRef(false);
 
@@ -39,13 +39,14 @@ export default function Navbar() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Restore Betfair session on mount (once)
+  // Restore Betfair session + subscription status on mount (once)
   useEffect(() => {
     if (!sessionRestored.current && user) {
       sessionRestored.current = true;
       restoreSession();
+      fetchSubscriptionStatus();
     }
-  }, [user, restoreSession]);
+  }, [user, restoreSession, fetchSubscriptionStatus]);
 
   // Keep-alive interval (every 20 minutes) when connected
   const runKeepAlive = useCallback(async () => {
