@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useAppStore, type PriceSize, type PendingOrder } from "@/lib/store";
 import { calculateGreenUp } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
-import SubscribeGate from "@/components/SubscribeGate";
+
 
 interface SupabaseTrade {
   id: string;
@@ -185,10 +185,6 @@ function TradingPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /* ─── Subscription ─── */
-  const { subscriptionStatus } = useAppStore();
-  const isSubscribed = subscriptionStatus === "active";
-
   /* ─── Shadow Mode ─── */
   const [isShadowMode, setIsShadowMode] = useState(false);
 
@@ -318,7 +314,6 @@ function TradingPage() {
     player: string | null;
     greened_up: boolean;
   }) {
-    if (!isSubscribed) return;
     try {
       const res = await fetch("/api/ai/coach", {
         method: "POST",
@@ -757,7 +752,7 @@ function TradingPage() {
 
   /* ─── Pre-Match Briefing: auto-fetch on market open ─── */
   useEffect(() => {
-    if (!marketId || !p1Name || !p2Name || !isSubscribed) return;
+    if (!marketId || !p1Name || !p2Name) return;
     let cancelled = false;
     async function loadBriefing() {
       setBriefingLoading(true);
@@ -790,7 +785,6 @@ function TradingPage() {
 
   /* ─── AI Signals fetch ─── */
   async function fetchAiSignal() {
-    if (!isSubscribed) return;
     setAiSignalLoading(true);
     try {
       const res = await fetch("/api/ai-signals", {
@@ -822,7 +816,6 @@ function TradingPage() {
 
   /* ─── AI Guardian fetch ─── */
   async function fetchGuardianAssessment() {
-    if (!isSubscribed) return;
     setGuardianLoading(true);
     try {
       const bestBack = displayPlayers[selectedPlayer].odds;
@@ -1518,7 +1511,6 @@ function TradingPage() {
   /* ─────────────────────────────────────────────────────────── */
 
   const aiPanel = (
-    <SubscribeGate feature="AI Signals" description="Get AI-powered trading signals, pre-match briefings, and real-time analysis.">
     <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden max-w-md mx-auto">
       <div className="px-4 py-3 border-b border-gray-800/50">
         <div className="flex items-center justify-between">
@@ -1704,7 +1696,6 @@ function TradingPage() {
         )}
       </div>
     </div>
-    </SubscribeGate>
   );
 
   /* ─────────────────────────────────────────────────────────── */
@@ -1895,7 +1886,6 @@ function TradingPage() {
       </div>
 
       {/* AI Guardian */}
-      <SubscribeGate feature="AI Guardian" description="AI-powered exit strategy and position assessment.">
       <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/50">
           <div className="flex items-center justify-between">
@@ -2068,7 +2058,6 @@ function TradingPage() {
           )}
         </div>
       </div>
-      </SubscribeGate>
     </div>
   );
 

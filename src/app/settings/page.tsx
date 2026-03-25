@@ -121,7 +121,9 @@ export default function SettingsPageWrapper() {
 function SettingsPage() {
   /* Betfair connection — Supabase is source of truth */
   const { authError, setAuthError, logout, restoreSession } = useAppStore();
-  const [oauthLoading, setOauthLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [betfairUsernameInput, setBetfairUsernameInput] = useState("");
+  const [betfairPasswordInput, setBetfairPasswordInput] = useState("");
 
   /* Connection state read from Supabase profile (not Zustand) */
   const [betfairConnected, setBetfairConnected] = useState(false);
@@ -264,7 +266,6 @@ function SettingsPage() {
         const data = await res.json();
         if (data.verified) {
           setSubscriptionStatus("active");
-          useAppStore.getState().fetchSubscriptionStatus();
           setSaveMessage("Payment confirmed — subscription active!");
           setTimeout(() => setSaveMessage(null), 5000);
         }
@@ -391,7 +392,6 @@ function SettingsPage() {
       const data = await res.json();
       if (data.synced) {
         setSubscriptionStatus("active");
-        useAppStore.getState().fetchSubscriptionStatus();
         setSaveMessage("Subscription restored successfully!");
         setTimeout(() => setSaveMessage(null), 5000);
       } else {
@@ -405,10 +405,34 @@ function SettingsPage() {
     setRestoreLoading(false);
   }
 
-  function handleConnect() {
-    setOauthLoading(true);
+  async function handleConnect() {
+    if (!betfairUsernameInput || !betfairPasswordInput) {
+      setAuthError("Please enter your Betfair username and password.");
+      return;
+    }
+    setLoginLoading(true);
     setAuthError(null);
-    window.location.href = "/api/betfair/auth/redirect";
+    try {
+      const res = await fetch("/api/betfair/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: betfairUsernameInput, password: betfairPasswordInput }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBetfairUsernameInput("");
+        setBetfairPasswordInput("");
+        setSaveMessage("Betfair connected successfully!");
+        setTimeout(() => setSaveMessage(null), 5000);
+        restoreSession();
+        loadProfile();
+      } else {
+        setAuthError(data.error ?? "Login failed");
+      }
+    } catch {
+      setAuthError("Network error. Please try again.");
+    }
+    setLoginLoading(false);
   }
 
   async function handleDisconnect() {
@@ -459,7 +483,7 @@ function SettingsPage() {
               <div className="bg-gray-800/30 rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Account</span>
-                  <span className="text-white">{betfairUsername ?? "Connected via OAuth"}</span>
+                  <span className="text-white">{betfairUsername ?? "Connected"}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Session expires</span>
@@ -487,25 +511,40 @@ function SettingsPage() {
                   <span className="text-xs font-medium text-amber-400">Session expired — reconnect below</span>
                 </div>
               ) : (
-                <p className="text-xs text-gray-500">Connect your Betfair account to start trading. You&apos;ll be redirected to Betfair to log in securely.</p>
+                <p className="text-xs text-gray-500">Connect your Betfair account to start trading. Enter your Betfair credentials below.</p>
               )}
               {authError && (
                 <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
                   {authError}
                 </div>
               )}
+              <div className="space-y-2">
+                <Label>Betfair Username</Label>
+                <TextInput
+                  value={betfairUsernameInput}
+                  onChange={setBetfairUsernameInput}
+                  placeholder="Your Betfair username"
+                />
+                <Label>Betfair Password</Label>
+                <TextInput
+                  value={betfairPasswordInput}
+                  onChange={setBetfairPasswordInput}
+                  placeholder="Your Betfair password"
+                  type="password"
+                />
+              </div>
               <button
                 onClick={handleConnect}
-                disabled={oauthLoading}
+                disabled={loginLoading}
                 className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
-                {oauthLoading ? (
+                {loginLoading ? (
                   <span className="flex items-center justify-center gap-2">
                     <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Redirecting...
+                    Connecting...
                   </span>
                 ) : (
                   "Connect Betfair Account"

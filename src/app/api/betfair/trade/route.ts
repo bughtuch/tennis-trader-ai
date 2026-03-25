@@ -74,32 +74,6 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Subscription gate — only active subscribers can place real trades
-      try {
-        const { createServerClient } = await import("@/lib/supabase-server");
-        const supabase = await createServerClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("subscription_status")
-            .eq("id", user.id)
-            .single();
-          if (profile?.subscription_status !== "active") {
-            return NextResponse.json(
-              { success: false, error: "Active subscription required to place trades" },
-              { status: 403 }
-            );
-          }
-        }
-      } catch {
-        // If subscription check fails, block the trade for safety
-        return NextResponse.json(
-          { success: false, error: "Unable to verify subscription status" },
-          { status: 403 }
-        );
-      }
-
       const formattedInstructions = instructions.map(
         (inst: {
           selectionId: number;

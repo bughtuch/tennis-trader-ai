@@ -3,8 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAppStore } from "@/lib/store";
-import SubscribeGate from "@/components/SubscribeGate";
 
 /* ─── Types ─── */
 
@@ -162,8 +160,6 @@ interface LastMarket {
 
 export default function MarketsPage() {
   const router = useRouter();
-  const { subscriptionStatus } = useAppStore();
-  const isSubscribed = subscriptionStatus === "active";
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [markets, setMarkets] = useState<Market[]>([]);
@@ -204,9 +200,8 @@ export default function MarketsPage() {
     } catch { /* non-critical */ }
   }, []);
 
-  // Load cached alerts + start scanner polling (subscribers only)
+  // Load cached alerts + start scanner polling
   useEffect(() => {
-    if (!isSubscribed) return;
     try {
       const cached = localStorage.getItem("scannerAlerts");
       if (cached) setScannerAlerts(JSON.parse(cached));
@@ -218,7 +213,7 @@ export default function MarketsPage() {
     return () => {
       if (scannerIntervalRef.current) clearInterval(scannerIntervalRef.current);
     };
-  }, [runScan, isSubscribed]);
+  }, [runScan]);
 
   // Expose alert count globally for navbar badge
   useEffect(() => {
@@ -412,7 +407,6 @@ export default function MarketsPage() {
       {/* Market Scanner */}
       <div className="border-b border-gray-800/50 bg-gray-900/20">
         <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-3">
-        <SubscribeGate feature="Market Scanner" description="Real-time momentum shifts, WOM flips, and volume spike alerts.">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
@@ -478,7 +472,6 @@ export default function MarketsPage() {
                 : "Connecting to scanner..."}
             </p>
           )}
-        </SubscribeGate>
         </div>
       </div>
 
