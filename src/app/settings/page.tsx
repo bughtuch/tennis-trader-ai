@@ -405,22 +405,10 @@ function SettingsPage() {
     setRestoreLoading(false);
   }
 
-  async function handleConnect() {
+  function handleConnect() {
     setOauthLoading(true);
     setAuthError(null);
-    try {
-      const res = await fetch("/api/betfair/oauth-url");
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        setAuthError(data.error ?? "Failed to get OAuth URL");
-        setOauthLoading(false);
-      }
-    } catch {
-      setAuthError("Network error. Please try again.");
-      setOauthLoading(false);
-    }
+    window.location.href = "/api/betfair/auth/redirect";
   }
 
   async function handleDisconnect() {
