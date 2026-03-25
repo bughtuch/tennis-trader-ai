@@ -455,6 +455,20 @@ function TradingPage() {
 
   useEffect(() => {
     async function checkSession() {
+      // Check localStorage first for instant connection
+      try {
+        const token = localStorage.getItem("betfair_token");
+        const connectedAt = localStorage.getItem("betfair_connected_at");
+        if (token && connectedAt) {
+          const expired = Date.now() > new Date(connectedAt).getTime() + 8 * 3600000;
+          if (!expired) {
+            setIsConnected(true);
+            useAppStore.setState({ isConnected: true });
+            return;
+          }
+        }
+      } catch { /* SSR guard */ }
+      // Fallback: check server-side session
       try {
         const res = await fetch("/api/betfair/session");
         const data = await res.json();

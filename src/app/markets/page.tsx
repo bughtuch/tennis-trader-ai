@@ -237,11 +237,25 @@ export default function MarketsPage() {
   const loadMarkets = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Check if Betfair session is active (cookie-based auth)
-      const sessionRes = await fetch("/api/betfair/session");
-      const sessionData = await sessionRes.json();
+      // 1. Check if Betfair session is active — localStorage first, then API fallback
+      let connected = false;
+      try {
+        const token = localStorage.getItem("betfair_token");
+        const connectedAt = localStorage.getItem("betfair_connected_at");
+        if (token && connectedAt) {
+          const expired = Date.now() > new Date(connectedAt).getTime() + 8 * 3600000;
+          connected = !expired;
+        }
+      } catch { /* SSR guard */ }
 
-      if (!sessionData.connected) {
+      if (!connected) {
+        // Fallback: check server-side session
+        const sessionRes = await fetch("/api/betfair/session");
+        const sessionData = await sessionRes.json();
+        connected = sessionData.connected;
+      }
+
+      if (!connected) {
         setIsDemoMode(true);
         setMarkets(MOCK_MARKETS);
         setLoading(false);
