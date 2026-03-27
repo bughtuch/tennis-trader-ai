@@ -114,7 +114,15 @@ export default function RiskPage() {
           </p>
         </Section>
 
-        <Section title="6. Seek Professional Advice">
+        <Section title="6. Betfair Exchange Commission">
+          <p>
+            Betfair Exchange charges commission on net winnings in each market. Commission rates vary
+            by user and market. This commission is deducted by Betfair and is separate from any Tennis
+            Trader AI subscription fees. You should factor commission into your trading calculations.
+          </p>
+        </Section>
+
+        <Section title="7. Seek Professional Advice">
           <p>
             If you are unsure about any aspect of exchange trading, the risks involved, or whether
             trading is appropriate for your financial situation, you should seek independent

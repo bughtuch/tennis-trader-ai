@@ -156,9 +156,6 @@ function SettingsPage() {
     return () => clearInterval(timer);
   }, [betfairExpiry]);
 
-  /* Shadow mode */
-  const [shadowMode, setShadowMode] = useState(true);
-
   /* Streak protection */
   const [streakProtection, setStreakProtection] = useState(true);
   const [streakThreshold, setStreakThresholdVal] = useState("3");
@@ -183,6 +180,22 @@ function SettingsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const showSubscribePrompt = searchParams.get("subscribe") === "true";
+
+  /* Change password */
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  /* Cancel subscription */
+  const [cancelLoading, setCancelLoading] = useState(false);
+
+  /* Delete account */
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  /* Annual checkout */
+  const [annualCheckoutLoading, setAnnualCheckoutLoading] = useState(false);
 
   /* Save status */
   const [saving, setSaving] = useState(false);
@@ -211,7 +224,6 @@ function SettingsPage() {
       setDailyLossLimit(String(data.daily_loss_limit ?? 100));
       setMaxSingleTrade(String(data.max_single_trade ?? 100));
       setSubscriptionStatus(data.subscription_status ?? "inactive");
-      setShadowMode(data.shadow_mode ?? true);
       setStreakProtection(data.streak_protection_enabled ?? true);
       setStreakThresholdVal(String(data.streak_threshold ?? 3));
       setProfileLoaded(true);
@@ -338,7 +350,6 @@ function SettingsPage() {
         auto_green_up_target: Number(autoGreenUp),
         ai_guardian_enabled: aiGuardian,
         ai_signals_enabled: aiSignals,
-        shadow_mode: shadowMode,
         streak_protection_enabled: streakProtection,
         streak_threshold: Number(streakThreshold),
       })
@@ -375,20 +386,101 @@ function SettingsPage() {
     if (!error) setTimeout(() => setSaveMessage(null), 3000);
   }
 
-  async function handleSubscribe() {
-    setCheckoutLoading(true);
+  async function handleSubscribe(priceId?: string) {
+    if (priceId === "annual") {
+      setAnnualCheckoutLoading(true);
+    } else {
+      setCheckoutLoading(true);
+    }
     try {
-      const res = await fetch("/api/stripe/checkout", { method: "POST" });
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(priceId ? { priceId } : {}),
+      });
       const data = await res.json();
       if (data.url) {
         window.location.href = data.url;
       } else {
         setSaveMessage(data.error ?? "Failed to start checkout");
         setCheckoutLoading(false);
+        setAnnualCheckoutLoading(false);
       }
     } catch {
       setSaveMessage("Network error starting checkout");
       setCheckoutLoading(false);
+      setAnnualCheckoutLoading(false);
+    }
+  }
+
+  async function handleChangePassword() {
+    if (!newPassword || !confirmPassword) {
+      setSaveMessage("Please fill in both password fields");
+      setTimeout(() => setSaveMessage(null), 3000);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setSaveMessage("Passwords do not match");
+      setTimeout(() => setSaveMessage(null), 3000);
+      return;
+    }
+    if (newPassword.length < 8) {
+      setSaveMessage("Password must be at least 8 characters");
+      setTimeout(() => setSaveMessage(null), 3000);
+      return;
+    }
+    setPasswordLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setPasswordLoading(false);
+    if (error) {
+      setSaveMessage(error.message);
+      setTimeout(() => setSaveMessage(null), 5000);
+    } else {
+      setSaveMessage("Password updated successfully");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setSaveMessage(null), 3000);
+    }
+  }
+
+  async function handleCancelSubscription() {
+    setCancelLoading(true);
+    try {
+      const res = await fetch("/api/stripe/portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setSaveMessage(data.error ?? "Failed to open billing portal");
+        setTimeout(() => setSaveMessage(null), 5000);
+      }
+    } catch {
+      setSaveMessage("Network error opening billing portal");
+      setTimeout(() => setSaveMessage(null), 5000);
+    }
+    setCancelLoading(false);
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteConfirmText !== "DELETE") return;
+    setDeleteLoading(true);
+    try {
+      const res = await fetch("/api/auth/delete-account", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        const supabase = createClient();
+        await supabase.auth.signOut();
+        window.location.href = "/";
+      } else {
+        setSaveMessage(data.error ?? "Failed to delete account");
+        setTimeout(() => setSaveMessage(null), 5000);
+        setDeleteLoading(false);
+      }
+    } catch {
+      setSaveMessage("Network error deleting account");
+      setTimeout(() => setSaveMessage(null), 5000);
+      setDeleteLoading(false);
     }
   }
 
@@ -616,8 +708,12 @@ function SettingsPage() {
                   <span className="text-white">£37/month <span className="text-gray-600 line-through ml-1">£47</span></span>
                 </div>
               </div>
-              <button className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-300 bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800 hover:text-white transition-all">
-                Manage Subscription
+              <button
+                onClick={handleCancelSubscription}
+                disabled={cancelLoading}
+                className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-300 bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800 hover:text-white disabled:opacity-50 transition-all"
+              >
+                {cancelLoading ? "Opening Stripe..." : "Manage / Cancel Subscription"}
               </button>
             </div>
           ) : (
@@ -650,13 +746,35 @@ function SettingsPage() {
                 ))}
               </div>
               <button
-                onClick={handleSubscribe}
+                onClick={() => handleSubscribe()}
                 disabled={checkoutLoading}
                 className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 transition-all hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]"
               >
                 {checkoutLoading ? "Redirecting to Stripe..." : "Subscribe — £37/month"}
               </button>
               <p className="text-center text-[11px] text-gray-600">7-day free trial. Cancel anytime.</p>
+
+              {/* Annual pricing */}
+              <div className="bg-gradient-to-r from-green-500/5 to-emerald-500/5 border border-green-500/20 rounded-xl p-4 text-center space-y-2">
+                <div className="flex items-center justify-center gap-1.5 mb-1">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+                    Save £195/year
+                  </span>
+                </div>
+                <div className="flex items-center justify-center gap-3 mb-1">
+                  <span className="text-lg text-gray-500 line-through">£444</span>
+                  <span className="text-3xl font-bold text-white">£249</span>
+                  <span className="text-gray-400 text-sm">/year</span>
+                </div>
+                <p className="text-xs text-gray-500">That&apos;s just £20.75/month — save over 44%</p>
+                <button
+                  onClick={() => handleSubscribe("annual")}
+                  disabled={annualCheckoutLoading}
+                  className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 transition-all"
+                >
+                  {annualCheckoutLoading ? "Redirecting to Stripe..." : "Subscribe — £249/year"}
+                </button>
+              </div>
               <button
                 onClick={handleRestorePurchase}
                 disabled={restoreLoading}
@@ -699,30 +817,6 @@ function SettingsPage() {
             </div>
 
             <div className="border-t border-gray-800/50 pt-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-white">Shadow Mode</div>
-                  <div className="text-xs text-gray-500">
-                    {shadowMode
-                      ? "Practice with real odds, no real money"
-                      : "Live trading — real money at risk"}
-                  </div>
-                </div>
-                <Toggle
-                  enabled={shadowMode}
-                  onToggle={() => {
-                    if (shadowMode) {
-                      // Turning OFF shadow mode — require active subscription
-                      if (subscriptionStatus !== "active") {
-                        setSaveMessage("Subscribe to enable live trading");
-                        setTimeout(() => setSaveMessage(null), 3000);
-                        return;
-                      }
-                    }
-                    setShadowMode(!shadowMode);
-                  }}
-                />
-              </div>
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm text-white">Streak Protection</div>
@@ -819,6 +913,96 @@ function SettingsPage() {
             >
               {saving ? "Saving..." : "Save Risk Limits"}
             </button>
+          </div>
+        </Card>
+
+        {/* ─── Section 5: Change Password ─── */}
+        <Card title="Change Password">
+          <div className="space-y-3">
+            <div>
+              <Label>New Password</Label>
+              <TextInput
+                value={newPassword}
+                onChange={setNewPassword}
+                placeholder="Minimum 8 characters"
+                type="password"
+              />
+            </div>
+            <div>
+              <Label>Confirm New Password</Label>
+              <TextInput
+                value={confirmPassword}
+                onChange={setConfirmPassword}
+                placeholder="Confirm your new password"
+                type="password"
+              />
+            </div>
+            <button
+              onClick={handleChangePassword}
+              disabled={passwordLoading || !newPassword || !confirmPassword}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 transition-all"
+            >
+              {passwordLoading ? "Updating..." : "Update Password"}
+            </button>
+          </div>
+        </Card>
+
+        {/* ─── Section 6: Danger Zone ─── */}
+        <Card title="Danger Zone">
+          <div className="space-y-4">
+            {subscriptionStatus === "active" && (
+              <div>
+                <p className="text-xs text-gray-400 mb-2">
+                  Cancel your subscription. You&apos;ll retain access until the end of your current billing period.
+                </p>
+                <button
+                  onClick={handleCancelSubscription}
+                  disabled={cancelLoading}
+                  className="w-full py-2.5 rounded-xl text-sm font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 disabled:opacity-50 transition-all"
+                >
+                  {cancelLoading ? "Opening Stripe..." : "Cancel Subscription"}
+                </button>
+              </div>
+            )}
+            <div className="border-t border-gray-800/50 pt-4">
+              <p className="text-xs text-gray-400 mb-2">
+                Permanently delete your account, all data, and cancel any active subscription. This action cannot be undone.
+              </p>
+              {showDeleteConfirm ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-red-400 font-medium">
+                    Type DELETE to confirm account deletion:
+                  </p>
+                  <TextInput
+                    value={deleteConfirmText}
+                    onChange={setDeleteConfirmText}
+                    placeholder="Type DELETE"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); }}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-medium text-gray-300 bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteAccount}
+                      disabled={deleteLoading || deleteConfirmText !== "DELETE"}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-all"
+                    >
+                      {deleteLoading ? "Deleting..." : "Delete Account"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="w-full py-2.5 rounded-xl text-sm font-medium text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all"
+                >
+                  Delete Account
+                </button>
+              )}
+            </div>
           </div>
         </Card>
 

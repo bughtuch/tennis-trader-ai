@@ -51,9 +51,8 @@ export default function CookiesPage() {
         </Section>
 
         <Section title="2. Cookies We Use">
-          <h3 className="text-sm font-semibold text-white mt-4 mb-3">Essential Cookies</h3>
           <p className="mb-3">
-            These cookies are necessary for the Service to function and cannot be disabled.
+            We only use essential cookies that are necessary for the Service to function. These cannot be disabled.
           </p>
           <div className="space-y-2 mb-6">
             <CookieRow
@@ -68,38 +67,20 @@ export default function CookiesPage() {
               duration="30 days"
               type="Essential"
             />
-          </div>
-
-          <h3 className="text-sm font-semibold text-white mt-4 mb-3">Analytics Cookies</h3>
-          <p className="mb-3">
-            These cookies help us understand how you use the Service so we can improve it.
-          </p>
-          <div className="space-y-2 mb-6">
-            <CookieRow
-              name="_analytics"
-              purpose="Tracks anonymised usage patterns including pages visited, features used, and session duration. No personal data is collected."
-              duration="1 year"
-              type="Analytics"
-            />
-          </div>
-
-          <h3 className="text-sm font-semibold text-white mt-4 mb-3">Preference Cookies</h3>
-          <p className="mb-3">
-            These cookies remember your choices and settings to provide a personalised experience.
-          </p>
-          <div className="space-y-2">
-            <CookieRow
-              name="theme_prefs"
-              purpose="Remembers your display preferences such as default stake size, ladder settings, and panel layout."
-              duration="1 year"
-              type="Preferences"
-            />
             <CookieRow
               name="cookie_consent"
               purpose="Records your cookie consent preferences."
               duration="1 year"
-              type="Preferences"
+              type="Essential"
             />
+          </div>
+
+          <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-4">
+            <p className="text-green-300 font-medium text-sm">
+              We do not use any advertising cookies, analytics cookies, or third-party tracking cookies.
+              Your browsing activity on Tennis Trader AI is not tracked or shared with any third party
+              for advertising purposes.
+            </p>
           </div>
         </Section>
 

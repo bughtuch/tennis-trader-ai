@@ -18,6 +18,7 @@ export default function ContactPage() {
     <main className="min-h-screen pt-14 bg-[#030712]">
       <div className="max-w-2xl mx-auto px-4 py-12">
         <h1 className="text-3xl font-bold text-white mb-2">Get in Touch</h1>
+        <p className="text-xs text-gray-500 mb-1">Bug Hutch Ltd</p>
         <p className="text-gray-400 mb-10">
           Have a question, suggestion, or need help? We&apos;d love to hear from you.
         </p>

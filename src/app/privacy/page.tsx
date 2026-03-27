@@ -18,8 +18,8 @@ export default function PrivacyPage() {
         <p className="text-sm text-gray-500 mb-10">Last updated: 27 February 2026</p>
 
         <p className="text-sm text-gray-300 leading-relaxed mb-10">
-          At Tennis Trader AI, we take your privacy seriously. This policy explains what information we
-          collect, how we use it, and your rights regarding your personal data.
+          At Tennis Trader AI, operated by Bug Hutch Ltd, we take your privacy seriously. This policy
+          explains what information we collect, how we use it, and your rights regarding your personal data.
         </p>
 
         <Section title="1. Information We Collect">
@@ -54,7 +54,7 @@ export default function PrivacyPage() {
           </div>
         </Section>
 
-        <Section title="4. Data Retention">
+        <Section title="4. Data Retention & Deletion">
           <p>
             We retain your account information for as long as your account is active. If you cancel
             your subscription, we retain your data for 30 days to allow for re-activation, after
@@ -63,6 +63,14 @@ export default function PrivacyPage() {
           <p>
             Anonymised usage data may be retained indefinitely for service improvement purposes.
             Trading history is retained for 90 days after account closure.
+          </p>
+          <p>
+            You can request deletion of all your personal data at any time by contacting{" "}
+            <a href="mailto:support@tennistraderai.com" className="text-blue-400 hover:text-blue-300 transition-colors">
+              support@tennistraderai.com
+            </a>{" "}
+            or by using the &quot;Delete Account&quot; option in your account settings. Upon deletion, all
+            personal data is permanently removed from our systems within 30 days.
           </p>
         </Section>
 
@@ -83,6 +91,7 @@ export default function PrivacyPage() {
           <ul className="list-disc list-inside space-y-1.5 text-gray-300 ml-1">
             <li><span className="text-white font-medium">Betfair Exchange:</span> Market data and trade execution via their official API</li>
             <li><span className="text-white font-medium">Stripe:</span> Payment processing for subscriptions</li>
+            <li><span className="text-white font-medium">Supabase:</span> Database hosting and user authentication</li>
             <li><span className="text-white font-medium">Anthropic:</span> AI-powered match analysis and trading signals (no personal data is sent)</li>
           </ul>
           <p>
@@ -91,8 +100,26 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        <Section title="7. Your Rights">
-          <p>Under applicable data protection laws, you have the right to:</p>
+        <Section title="7. GDPR Compliance">
+          <p>
+            Tennis Trader AI complies with the UK General Data Protection Regulation (UK GDPR) and the
+            Data Protection Act 2018. Bug Hutch Ltd is the data controller for the personal data we process.
+          </p>
+          <p>
+            Our lawful bases for processing your personal data are: (a) performance of a contract (providing
+            the Service), (b) legitimate interests (improving the Service, preventing fraud), and (c) your
+            consent (where applicable, such as for marketing communications).
+          </p>
+          <p>
+            For data protection enquiries, contact us at{" "}
+            <a href="mailto:support@tennistraderai.com" className="text-blue-400 hover:text-blue-300 transition-colors">
+              support@tennistraderai.com
+            </a>.
+          </p>
+        </Section>
+
+        <Section title="8. Your Rights">
+          <p>Under UK GDPR and applicable data protection laws, you have the right to:</p>
           <ul className="list-disc list-inside space-y-1.5 text-gray-300 ml-1">
             <li>Access the personal data we hold about you</li>
             <li>Request correction of inaccurate data</li>
@@ -109,7 +136,7 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        <Section title="8. Contact">
+        <Section title="9. Contact">
           <p>
             If you have any questions about this Privacy Policy, please contact us at{" "}
             <a href="mailto:support@tennistraderai.com" className="text-blue-400 hover:text-blue-300 transition-colors">

@@ -27,7 +27,8 @@ export default function TermsPage() {
 
         <Section title="1. Acceptance of Terms">
           <p>
-            By accessing or using Tennis Trader AI (&quot;the Service&quot;), you agree to be bound by these
+            By accessing or using Tennis Trader AI (&quot;the Service&quot;), operated by Bug Hutch Ltd
+            (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;), you agree to be bound by these
             Terms of Service. If you do not agree to these terms, do not use the Service.
           </p>
           <p>
@@ -64,8 +65,8 @@ export default function TermsPage() {
         <Section title="4. Trading Risks">
           <p>
             Trading on Betfair Exchange involves significant financial risk. You may lose some or all of
-            your deposited funds. Past performance of AI signals or any analysis provided by the Service
-            is not indicative of future results.
+            your deposited funds. There are no guaranteed profits from using the Service. Past performance of
+            AI signals or any analysis provided by the Service is not indicative of future results.
           </p>
           <p>
             You acknowledge that you understand the risks involved in exchange trading and that you are
@@ -76,13 +77,14 @@ export default function TermsPage() {
 
         <Section title="5. Betfair Integration">
           <p>
-            The Service integrates with Betfair Exchange via their official API. You must have a valid
-            Betfair account to use live trading features. Your use of Betfair is subject to
-            Betfair&apos;s own terms and conditions.
+            Betfair Exchange is a third-party service. The Service integrates with Betfair Exchange via
+            their official API. You must have a valid Betfair account to use live trading features. Your
+            use of Betfair is subject to Betfair&apos;s own terms and conditions.
           </p>
           <p>
             Tennis Trader AI is an independent product and is not affiliated with, endorsed by, or
-            sponsored by Betfair or Flutter Entertainment plc.
+            sponsored by Betfair or Flutter Entertainment plc. We are not responsible for the
+            availability, performance, or policies of Betfair&apos;s services.
           </p>
         </Section>
 

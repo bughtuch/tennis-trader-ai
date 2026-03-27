@@ -116,13 +116,29 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-gray-800/50 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-gray-600">
-            &copy; 2026 Bug Hutch Ltd. All rights reserved.
-          </p>
-          <p className="text-xs text-gray-700">
-            Trading involves risk. Past performance is not indicative of future results.
-          </p>
+        <div className="border-t border-gray-800/50 pt-8 space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-gray-600">
+              &copy; 2026 Bug Hutch Ltd. All rights reserved.
+            </p>
+            <p className="text-xs text-gray-700">
+              Trading involves risk. Past performance is not indicative of future results.
+            </p>
+          </div>
+          <div className="text-center space-y-2">
+            <p className="text-xs text-gray-500">
+              If you&apos;re experiencing gambling-related harm, visit{" "}
+              <a href="https://www.begambleaware.org" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 transition-colors">
+                BeGambleAware.org
+              </a>{" "}
+              or call 0808 8020 133.
+            </p>
+            <p className="text-xs text-gray-600">
+              <a href="https://www.betfair.com/responsiblegambling" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">
+                Betfair Responsible Gambling
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     </footer>

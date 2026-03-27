@@ -28,6 +28,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Accept optional priceId from request body
+    let selectedPriceId = process.env.STRIPE_PRICE_ID!;
+    try {
+      const body = await req.json();
+      if (body?.priceId === "annual") {
+        const annualPriceId = process.env.STRIPE_ANNUAL_PRICE_ID;
+        if (!annualPriceId) {
+          return NextResponse.json(
+            { error: "Annual pricing is not configured" },
+            { status: 500 }
+          );
+        }
+        selectedPriceId = annualPriceId;
+      }
+    } catch {
+      // No body or invalid JSON — use default monthly price
+    }
+
     // Use app's own URL — never trust the Origin header for redirects
     const appUrl = process.env.NEXT_PUBLIC_SITE_URL ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`;
 
@@ -35,7 +53,7 @@ export async function POST(req: NextRequest) {
       mode: "subscription",
       line_items: [
         {
-          price: process.env.STRIPE_PRICE_ID!,
+          price: selectedPriceId,
           quantity: 1,
         },
       ],
