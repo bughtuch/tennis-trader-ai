@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useBetfairToken } from "@/hooks/useBetfairToken";
 
 /* ─── Types ─── */
 
@@ -160,6 +161,7 @@ interface LastMarket {
 
 export default function MarketsPage() {
   const router = useRouter();
+  const { isConnected: betfairConnected } = useBetfairToken();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [markets, setMarkets] = useState<Market[]>([]);
@@ -237,25 +239,8 @@ export default function MarketsPage() {
   const loadMarkets = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Check if Betfair session is active — localStorage first, then API fallback
-      let connected = false;
-      try {
-        const token = localStorage.getItem("betfair_token");
-        const connectedAt = localStorage.getItem("betfair_connected_at");
-        if (token && connectedAt) {
-          const expired = Date.now() > new Date(connectedAt).getTime() + 8 * 3600000;
-          connected = !expired;
-        }
-      } catch { /* SSR guard */ }
-
-      if (!connected) {
-        // Fallback: check server-side session
-        const sessionRes = await fetch("/api/betfair/session");
-        const sessionData = await sessionRes.json();
-        connected = sessionData.connected;
-      }
-
-      if (!connected) {
+      // 1. Check if Betfair session is active (via useBetfairToken hook)
+      if (!betfairConnected) {
         setIsDemoMode(true);
         setMarkets(MOCK_MARKETS);
         setLoading(false);
@@ -327,7 +312,7 @@ export default function MarketsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [betfairConnected]);
 
   useEffect(() => {
     loadMarkets();

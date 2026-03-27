@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAppStore, type PriceSize, type PendingOrder } from "@/lib/store";
 import { calculateGreenUp } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
+import { useBetfairToken } from "@/hooks/useBetfairToken";
 
 
 interface SupabaseTrade {
@@ -450,36 +451,16 @@ function TradingPage() {
     removePendingOrder,
   } = useAppStore();
 
-  /* ─── Betfair connection: check via session endpoint (cookie-based auth) ─── */
+  /* ─── Betfair connection: read from shared hook ─── */
+  const { isConnected: betfairHookConnected } = useBetfairToken();
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    async function checkSession() {
-      // Check localStorage first for instant connection
-      try {
-        const token = localStorage.getItem("betfair_token");
-        const connectedAt = localStorage.getItem("betfair_connected_at");
-        if (token && connectedAt) {
-          const expired = Date.now() > new Date(connectedAt).getTime() + 8 * 3600000;
-          if (!expired) {
-            setIsConnected(true);
-            useAppStore.setState({ isConnected: true });
-            return;
-          }
-        }
-      } catch { /* SSR guard */ }
-      // Fallback: check server-side session
-      try {
-        const res = await fetch("/api/betfair/session");
-        const data = await res.json();
-        if (data.connected) {
-          setIsConnected(true);
-          useAppStore.setState({ isConnected: true });
-        }
-      } catch { /* non-critical */ }
+    if (betfairHookConnected) {
+      setIsConnected(true);
+      useAppStore.setState({ isConnected: true });
     }
-    checkSession();
-  }, []);
+  }, [betfairHookConnected]);
 
   const isLive = isConnected && !!marketId && !!marketBook;
 
