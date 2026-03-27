@@ -134,6 +134,10 @@ interface AppState {
   subscriptionLoaded: boolean;
   fetchSubscriptionStatus: () => Promise<void>;
 
+  // Streaming
+  streamStatus: "disconnected" | "connecting" | "connected" | "fallback";
+  isStreaming: boolean;
+
   // Shadow Mode
   shadowMode: boolean;
   setShadowMode: (enabled: boolean) => void;
@@ -418,6 +422,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ subscriptionStatus: "inactive", subscriptionLoaded: true });
     }
   },
+
+  // ─── Streaming ───
+  streamStatus: "disconnected",
+  isStreaming: false,
 
   // ─── Shadow Mode ───
   shadowMode: false,

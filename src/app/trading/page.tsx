@@ -7,6 +7,7 @@ import { useAppStore, type PriceSize, type PendingOrder } from "@/lib/store";
 import { calculateGreenUp } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
+import { useBetfairStream } from "@/hooks/useBetfairStream";
 
 
 interface SupabaseTrade {
@@ -464,7 +465,12 @@ function TradingPage() {
 
   const isLive = isConnected && !!marketId && !!marketBook;
 
-  /* ─── Fetch live prices on 2-second interval ─── */
+  /* ─── Betfair Streaming (real-time prices via SSE) ─── */
+  const { streamStatus, isStreaming, suspensionDetected, clearSuspension } = useBetfairStream(
+    isConnected ? marketId : null,
+  );
+
+  /* ─── Fetch live prices on 2-second interval (fallback when not streaming) ─── */
   const fetchPrices = useCallback(() => {
     if (isConnected && marketId) {
       fetchMarketBook([marketId]);
@@ -472,12 +478,17 @@ function TradingPage() {
   }, [isConnected, marketId, fetchMarketBook]);
 
   useEffect(() => {
+    if (isStreaming) {
+      // Streaming is active — skip polling
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      return;
+    }
     fetchPrices();
     intervalRef.current = setInterval(fetchPrices, 2000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [fetchPrices]);
+  }, [fetchPrices, isStreaming]);
 
   /* ─── Poll unmatched orders every 3 seconds (offset from price poll) ─── */
   const unmatchedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -744,6 +755,25 @@ function TradingPage() {
     const id = setInterval(fetchScore, 15_000);
     return () => clearInterval(id);
   }, [p1Name, p2Name]);
+
+  /* ─── Suspension-triggered instant score refresh ─── */
+  useEffect(() => {
+    if (!suspensionDetected || !p1Name || !p2Name) return;
+    clearSuspension();
+    (async () => {
+      try {
+        const res = await fetch("/api/tennis-scores", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player1: p1Name, player2: p2Name }),
+        });
+        const data: LiveScore = await res.json();
+        setLiveScore(data.available ? data : null);
+      } catch {
+        /* non-critical */
+      }
+    })();
+  }, [suspensionDetected, clearSuspension, p1Name, p2Name]);
 
   /* ─── Pre-Match Briefing: auto-fetch on market open ─── */
   useEffect(() => {
@@ -2204,6 +2234,24 @@ function TradingPage() {
             </>
           ) : (
             <span className="text-gray-500">Awaiting connection</span>
+          )}
+          {isLive && (
+            <>
+              <span className="text-gray-700">|</span>
+              {streamStatus === "connected" ? (
+                <span className="flex items-center gap-1">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                  </span>
+                  <span className="text-[10px] font-semibold text-green-400">LIVE</span>
+                </span>
+              ) : streamStatus === "connecting" ? (
+                <span className="text-[10px] font-medium text-yellow-400 animate-pulse">Connecting...</span>
+              ) : (
+                <span className="text-[10px] font-medium text-gray-500">Polling</span>
+              )}
+            </>
           )}
           <span className="text-gray-700">|</span>
           <span className="flex items-center gap-1 text-gray-400">
