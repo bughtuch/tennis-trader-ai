@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "rea
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore, type PriceSize, type PendingOrder } from "@/lib/store";
-import { calculateGreenUp } from "@/lib/tradingMaths";
+import { calculateGreenUp, moveByTicks, roundToTick } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
@@ -54,47 +54,6 @@ interface LiveScore {
 }
 
 const STAKES = [5, 10, 25, 50, 100];
-
-/* ─── Betfair Tick Table ─── */
-
-const TICK_RANGES: [number, number, number][] = [
-  // [min, max, increment]
-  [1.01, 2, 0.01],
-  [2, 3, 0.02],
-  [3, 4, 0.05],
-  [4, 6, 0.1],
-  [6, 10, 0.2],
-  [10, 20, 0.5],
-  [20, 30, 1],
-  [30, 50, 2],
-  [50, 100, 5],
-  [100, 1000, 10],
-];
-
-function getTickIncrement(price: number): number {
-  for (const [min, max, inc] of TICK_RANGES) {
-    if (price >= min && price < max) return inc;
-  }
-  return 10;
-}
-
-function roundToTick(price: number): number {
-  const inc = getTickIncrement(price);
-  return Math.round(price / inc) * inc;
-}
-
-function nextTick(price: number): number {
-  const inc = getTickIncrement(price);
-  const next = roundToTick(price + inc);
-  return Math.round(next * 100) / 100;
-}
-
-function prevTick(price: number): number {
-  // Use the increment for the price just below
-  const inc = getTickIncrement(price - 0.001);
-  const prev = roundToTick(price - inc);
-  return Math.max(1.01, Math.round(prev * 100) / 100);
-}
 
 /* ─── Helpers ─── */
 
@@ -578,61 +537,61 @@ function TradingPage() {
     livePlayerOdds = { player1: bestBack0, player2: bestBack1 };
 
     if (selectedRunner?.ex) {
-      const priceMap = new Map<number, { back: number; lay: number }>();
+      // Index all available back/lay volume by price
+      const backMap = new Map<number, number>();
+      const layMap = new Map<number, number>();
       const backs = selectedRunner.ex.availableToBack ?? [];
       const lays = selectedRunner.ex.availableToLay ?? [];
 
       backs.forEach((ps: PriceSize) => {
-        const entry = priceMap.get(ps.price) ?? { back: 0, lay: 0 };
-        entry.back += ps.size;
-        priceMap.set(ps.price, entry);
+        backMap.set(ps.price, (backMap.get(ps.price) ?? 0) + ps.size);
       });
       lays.forEach((ps: PriceSize) => {
-        const entry = priceMap.get(ps.price) ?? { back: 0, lay: 0 };
-        entry.lay += ps.size;
-        priceMap.set(ps.price, entry);
+        layMap.set(ps.price, (layMap.get(ps.price) ?? 0) + ps.size);
       });
 
       const bestBackPrice = backs[0]?.price ?? 0;
       const bestLayPrice = lays[0]?.price ?? 0;
+      const lastTradedPrice = (selectedRunner as { lastTradedPrice?: number }).lastTradedPrice ?? 0;
 
-      // Determine center price and fill ladder to at least 15 rows
-      const centerPrice = bestBackPrice || bestLayPrice || 2.0;
-      const MIN_ROWS = 15;
+      // Center the ladder on the midpoint between best back and best lay
+      const centerPrice = roundToTick(
+        bestBackPrice && bestLayPrice
+          ? (bestBackPrice + bestLayPrice) / 2
+          : bestBackPrice || bestLayPrice || 2.0,
+      );
 
-      // Extend downward from lowest known price
-      const allPrices = Array.from(priceMap.keys());
-      let lowestPrice = allPrices.length > 0 ? Math.min(...allPrices) : centerPrice;
-      let highestPrice = allPrices.length > 0 ? Math.max(...allPrices) : centerPrice;
+      // Generate a continuous tick range: 8 ticks below center, center, 8 ticks above
+      // This gives 17+ rows. Any Betfair data outside this range extends it further.
+      const TICKS_EACH_SIDE = 8;
+      const ladderLow = moveByTicks(centerPrice, -TICKS_EACH_SIDE);
+      const ladderHigh = moveByTicks(centerPrice, TICKS_EACH_SIDE);
 
-      // Add empty ticks below and above until we have enough rows
-      const targetBelow = Math.ceil(MIN_ROWS / 2);
-      const targetAbove = Math.ceil(MIN_ROWS / 2);
-      let p = lowestPrice;
-      for (let i = 0; i < targetBelow; i++) {
-        p = prevTick(p);
-        if (p >= 1.01 && !priceMap.has(Math.round(p * 100) / 100)) {
-          priceMap.set(Math.round(p * 100) / 100, { back: 0, lay: 0 });
-        }
+      // Also include every price that has volume (extends range if needed)
+      const allDataPrices = new Set([...backMap.keys(), ...layMap.keys()]);
+      const absoluteLow = Math.min(ladderLow, ...(allDataPrices.size > 0 ? allDataPrices : [ladderLow]));
+      const absoluteHigh = Math.max(ladderHigh, ...(allDataPrices.size > 0 ? allDataPrices : [ladderHigh]));
+
+      // Walk every tick from absoluteLow to absoluteHigh
+      const rows: LadderRow[] = [];
+      let tick = roundToTick(absoluteLow);
+      while (tick <= absoluteHigh) {
+        rows.push({
+          price: tick,
+          backSize: Math.round(backMap.get(tick) ?? 0),
+          laySize: Math.round(layMap.get(tick) ?? 0),
+          isLastTraded: lastTradedPrice > 0
+            ? tick === roundToTick(lastTradedPrice)
+            : tick === bestBackPrice,
+          isBestBack: tick === bestBackPrice,
+          isBestLay: tick === bestLayPrice,
+        });
+        const next = moveByTicks(tick, 1);
+        if (next <= tick) break; // safety
+        tick = next;
       }
-      p = highestPrice;
-      for (let i = 0; i < targetAbove; i++) {
-        p = nextTick(p);
-        if (p <= 1000 && !priceMap.has(Math.round(p * 100) / 100)) {
-          priceMap.set(Math.round(p * 100) / 100, { back: 0, lay: 0 });
-        }
-      }
 
-      liveLadder = Array.from(priceMap.entries())
-        .map(([price, sizes]) => ({
-          price,
-          backSize: Math.round(sizes.back),
-          laySize: Math.round(sizes.lay),
-          isLastTraded: price === bestBackPrice,
-          isBestBack: price === bestBackPrice,
-          isBestLay: price === bestLayPrice,
-        }))
-        .sort((a, b) => a.price - b.price);
+      liveLadder = rows;
     }
   }
 
@@ -1336,16 +1295,16 @@ function TradingPage() {
             >
               {/* Back cell */}
               <button
-                onClick={() => row.backSize > 0 && handleTradeClick(row.price, "BACK")}
+                onClick={() => handleTradeClick(row.price, "BACK")}
                 disabled={tradeLoading || cooldownActive}
                 className={`relative py-1.5 px-3 text-right text-sm font-mono transition-all overflow-hidden ${
                   cooldownActive
                     ? "opacity-40 cursor-not-allowed text-gray-700"
-                    : row.backSize > 0
-                      ? row.isBestBack
-                        ? "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 active:bg-blue-500/40"
-                        : "bg-blue-500/8 text-blue-400/80 hover:bg-blue-500/15 active:bg-blue-500/25"
-                      : "text-gray-700 hover:bg-blue-500/5"
+                    : row.isBestBack
+                      ? "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 active:bg-blue-500/40"
+                      : row.backSize > 0
+                        ? "bg-blue-500/8 text-blue-400/80 hover:bg-blue-500/15 active:bg-blue-500/25"
+                        : "text-gray-700 hover:bg-blue-500/5"
                 }`}
               >
                 {/* Depth bar */}
@@ -1379,16 +1338,16 @@ function TradingPage() {
 
               {/* Lay cell */}
               <button
-                onClick={() => row.laySize > 0 && handleTradeClick(row.price, "LAY")}
+                onClick={() => handleTradeClick(row.price, "LAY")}
                 disabled={tradeLoading || cooldownActive}
                 className={`relative py-1.5 px-3 text-left text-sm font-mono transition-all overflow-hidden ${
                   cooldownActive
                     ? "opacity-40 cursor-not-allowed text-gray-700"
-                    : row.laySize > 0
-                      ? row.isBestLay
-                        ? "bg-pink-500/20 text-pink-300 hover:bg-pink-500/30 active:bg-pink-500/40"
-                        : "bg-pink-500/8 text-pink-400/80 hover:bg-pink-500/15 active:bg-pink-500/25"
-                      : "text-gray-700 hover:bg-pink-500/5"
+                    : row.isBestLay
+                      ? "bg-pink-500/20 text-pink-300 hover:bg-pink-500/30 active:bg-pink-500/40"
+                      : row.laySize > 0
+                        ? "bg-pink-500/8 text-pink-400/80 hover:bg-pink-500/15 active:bg-pink-500/25"
+                        : "text-gray-700 hover:bg-pink-500/5"
                 }`}
               >
                 {/* Depth bar */}
