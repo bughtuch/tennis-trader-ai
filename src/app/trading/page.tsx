@@ -55,6 +55,47 @@ interface LiveScore {
 
 const STAKES = [5, 10, 25, 50, 100];
 
+/* ─── Betfair Tick Table ─── */
+
+const TICK_RANGES: [number, number, number][] = [
+  // [min, max, increment]
+  [1.01, 2, 0.01],
+  [2, 3, 0.02],
+  [3, 4, 0.05],
+  [4, 6, 0.1],
+  [6, 10, 0.2],
+  [10, 20, 0.5],
+  [20, 30, 1],
+  [30, 50, 2],
+  [50, 100, 5],
+  [100, 1000, 10],
+];
+
+function getTickIncrement(price: number): number {
+  for (const [min, max, inc] of TICK_RANGES) {
+    if (price >= min && price < max) return inc;
+  }
+  return 10;
+}
+
+function roundToTick(price: number): number {
+  const inc = getTickIncrement(price);
+  return Math.round(price / inc) * inc;
+}
+
+function nextTick(price: number): number {
+  const inc = getTickIncrement(price);
+  const next = roundToTick(price + inc);
+  return Math.round(next * 100) / 100;
+}
+
+function prevTick(price: number): number {
+  // Use the increment for the price just below
+  const inc = getTickIncrement(price - 0.001);
+  const prev = roundToTick(price - inc);
+  return Math.max(1.01, Math.round(prev * 100) / 100);
+}
+
 /* ─── Helpers ─── */
 
 function formatVolume(v: number) {
@@ -554,6 +595,33 @@ function TradingPage() {
 
       const bestBackPrice = backs[0]?.price ?? 0;
       const bestLayPrice = lays[0]?.price ?? 0;
+
+      // Determine center price and fill ladder to at least 15 rows
+      const centerPrice = bestBackPrice || bestLayPrice || 2.0;
+      const MIN_ROWS = 15;
+
+      // Extend downward from lowest known price
+      const allPrices = Array.from(priceMap.keys());
+      let lowestPrice = allPrices.length > 0 ? Math.min(...allPrices) : centerPrice;
+      let highestPrice = allPrices.length > 0 ? Math.max(...allPrices) : centerPrice;
+
+      // Add empty ticks below and above until we have enough rows
+      const targetBelow = Math.ceil(MIN_ROWS / 2);
+      const targetAbove = Math.ceil(MIN_ROWS / 2);
+      let p = lowestPrice;
+      for (let i = 0; i < targetBelow; i++) {
+        p = prevTick(p);
+        if (p >= 1.01 && !priceMap.has(Math.round(p * 100) / 100)) {
+          priceMap.set(Math.round(p * 100) / 100, { back: 0, lay: 0 });
+        }
+      }
+      p = highestPrice;
+      for (let i = 0; i < targetAbove; i++) {
+        p = nextTick(p);
+        if (p <= 1000 && !priceMap.has(Math.round(p * 100) / 100)) {
+          priceMap.set(Math.round(p * 100) / 100, { back: 0, lay: 0 });
+        }
+      }
 
       liveLadder = Array.from(priceMap.entries())
         .map(([price, sizes]) => ({
@@ -2235,22 +2303,33 @@ function TradingPage() {
           ) : (
             <span className="text-gray-500">Awaiting connection</span>
           )}
-          {isLive && (
+          {isConnected && marketId && (
             <>
               <span className="text-gray-700">|</span>
-              {streamStatus === "connected" ? (
-                <span className="flex items-center gap-1">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+              <span className="flex items-center gap-1">
+                <span className="text-[10px] font-medium text-gray-500">Stream:</span>
+                {streamStatus === "connected" ? (
+                  <span className="flex items-center gap-1">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                    </span>
+                    <span className="text-[10px] font-semibold text-green-400">Connected</span>
                   </span>
-                  <span className="text-[10px] font-semibold text-green-400">LIVE</span>
-                </span>
-              ) : streamStatus === "connecting" ? (
-                <span className="text-[10px] font-medium text-yellow-400 animate-pulse">Connecting...</span>
-              ) : (
-                <span className="text-[10px] font-medium text-gray-500">Polling</span>
-              )}
+                ) : streamStatus === "connecting" ? (
+                  <span className="text-[10px] font-semibold text-yellow-400 animate-pulse">Connecting...</span>
+                ) : streamStatus === "fallback" ? (
+                  <span className="flex items-center gap-1">
+                    <span className="inline-flex rounded-full h-2 w-2 bg-red-500" />
+                    <span className="text-[10px] font-semibold text-red-400">Disconnected</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <span className="inline-flex rounded-full h-2 w-2 bg-red-500" />
+                    <span className="text-[10px] font-semibold text-red-400">Disconnected</span>
+                  </span>
+                )}
+              </span>
             </>
           )}
           <span className="text-gray-700">|</span>
