@@ -53,6 +53,12 @@ export default function SignupPage() {
       }
     }
 
+    // If session exists (email confirmation disabled), go straight to dashboard
+    if (data.session) {
+      window.location.href = "/dashboard";
+      return;
+    }
+
     setSuccess(true);
     setLoading(false);
   }

@@ -24,13 +24,18 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError(error.message);
+      // Surface a clearer message for unconfirmed emails
+      if (error.message.includes("Email not confirmed")) {
+        setError("Please confirm your email before signing in. Check your inbox for the confirmation link.");
+      } else {
+        setError(error.message);
+      }
       setLoading(false);
       return;
     }
 
-    router.refresh();
-    router.replace("/dashboard");
+    // Full page reload ensures auth cookies are sent on the next server request
+    window.location.href = "/dashboard";
   }
 
   return (
