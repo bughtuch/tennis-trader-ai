@@ -11,6 +11,7 @@ import { useBetfairStream } from "@/hooks/useBetfairStream";
 import RiskRewardPanel from "@/components/RiskRewardPanel";
 import ServeHoldStats from "@/components/ServeHoldStats";
 import SetWinningPrice from "@/components/SetWinningPrice";
+import ScaleOutButtons from "@/components/ScaleOutButtons";
 
 
 interface SupabaseTrade {
@@ -1560,6 +1561,47 @@ function TradingPage() {
             Win: £{greenUpResult.profitIfWin.toFixed(2)} / Lose: £
             {greenUpResult.profitIfLose.toFixed(2)}
           </div>
+          {aggregatedPos && aggregatedPos.netSide !== "FLAT" && (
+            <ScaleOutButtons
+              netStake={aggregatedPos.netStake}
+              netSide={aggregatedPos.netSide as "BACK" | "LAY"}
+              avgEntry={aggregatedPos.avgEntry}
+              scaleOutPrice={currentLayPrice}
+              tradeLoading={tradeLoading}
+              onScaleOut={async (side, price, size) => {
+                if (!marketId || !selectedRunner) return false;
+                if (isShadowMode) {
+                  const playerName = displayPlayers[selectedPlayer].name;
+                  await placeShadowTrade({
+                    marketId,
+                    selectionId: selectedRunner.selectionId,
+                    side,
+                    price,
+                    size,
+                    player: playerName,
+                  });
+                  fetchTrades();
+                  return true;
+                }
+                if (isLive) {
+                  const success = await placeTrade({
+                    marketId,
+                    selectionId: selectedRunner.selectionId,
+                    side,
+                    price,
+                    size,
+                  });
+                  if (success) fetchTrades();
+                  return success;
+                }
+                return false;
+              }}
+              onToast={(message, type) => {
+                setToast({ message, type });
+                setTimeout(() => setToast(null), 4000);
+              }}
+            />
+          )}
         </div>
       )}
     </div>
