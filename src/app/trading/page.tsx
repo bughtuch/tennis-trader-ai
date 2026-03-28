@@ -13,6 +13,7 @@ import ServeHoldStats from "@/components/ServeHoldStats";
 import SetWinningPrice from "@/components/SetWinningPrice";
 import ScaleOutButtons from "@/components/ScaleOutButtons";
 import StrategyDetector from "@/components/StrategyDetector";
+import ChangeoverAlert from "@/components/ChangeoverAlert";
 
 
 interface SupabaseTrade {
@@ -2544,6 +2545,12 @@ function TradingPage() {
           ))}
         </div>
       </div>
+
+      {/* ─── Changeover Alert ─── */}
+      <ChangeoverAlert
+        playerOdds={displayPlayers[selectedPlayer].odds}
+        isInPlay={!!marketBook?.inplay}
+      />
 
       {/* ─── Content Area ─── */}
       <div className="max-w-full overflow-x-hidden">
