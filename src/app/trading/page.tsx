@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
 import RiskRewardPanel from "@/components/RiskRewardPanel";
+import ServeHoldStats from "@/components/ServeHoldStats";
 
 
 interface SupabaseTrade {
@@ -2499,6 +2500,14 @@ function TradingPage() {
             <div className="w-1/2 min-w-0 space-y-4">
               {ladderPanel}
               <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
+              <ServeHoldStats
+                player1Name={displayPlayers.player1.name}
+                player2Name={displayPlayers.player2.name}
+                player1Odds={displayPlayers.player1.odds}
+                player2Odds={displayPlayers.player2.odds}
+                isInPlay={!!marketBook?.inplay}
+                server={liveScore?.server}
+              />
             </div>
             <div className="w-1/4 min-w-0">{positionsPanel}</div>
           </div>
@@ -2511,6 +2520,14 @@ function TradingPage() {
               <>
                 {ladderPanel}
                 <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
+                <ServeHoldStats
+                  player1Name={displayPlayers.player1.name}
+                  player2Name={displayPlayers.player2.name}
+                  player1Odds={displayPlayers.player1.odds}
+                  player2Odds={displayPlayers.player2.odds}
+                  isInPlay={!!marketBook?.inplay}
+                  server={liveScore?.server}
+                />
               </>
             )}
             {activeTab === "ai" && aiPanel}
