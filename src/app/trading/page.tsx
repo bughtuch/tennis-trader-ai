@@ -8,6 +8,7 @@ import { calculateGreenUp, moveByTicks, roundToTick } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
+import RiskRewardPanel from "@/components/RiskRewardPanel";
 
 
 interface SupabaseTrade {
@@ -959,11 +960,15 @@ function TradingPage() {
     return () => clearInterval(id);
   }, [sessionStart]);
 
-  /* ─── Computed: green-up result (uses aggregated position) ─── */
+  /* ─── Computed: best back/lay prices ─── */
+  const currentBackPrice =
+    isLive && selectedRunner?.ex?.availableToBack?.[0]?.price
+      ? selectedRunner.ex.availableToBack[0].price
+      : ladderData?.find((r: LadderRow) => r.isBestBack)?.price ?? 0;
   const currentLayPrice =
     isLive && selectedRunner?.ex?.availableToLay?.[0]?.price
       ? selectedRunner.ex.availableToLay[0].price
-      : 0;
+      : ladderData?.find((r: LadderRow) => r.isBestLay)?.price ?? 0;
   const greenUpResult = aggregatedPos && aggregatedPos.netSide !== "FLAT" && aggregatedPos.avgEntry > 0
     ? calculateGreenUp(
         aggregatedPos.avgEntry,
@@ -2491,15 +2496,23 @@ function TradingPage() {
         <div className="hidden min-[1920px]:block px-6 py-4 max-w-[1920px] mx-auto">
           <div className="flex gap-4">
             <div className="w-1/4 min-w-0">{aiPanel}</div>
-            <div className="w-1/2 min-w-0">{ladderPanel}</div>
+            <div className="w-1/2 min-w-0 space-y-4">
+              {ladderPanel}
+              <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
+            </div>
             <div className="w-1/4 min-w-0">{positionsPanel}</div>
           </div>
         </div>
 
         {/* MOBILE + TABLET: Single panel with tab switching (<1920px) */}
         <div className="min-[1920px]:hidden px-2 md:px-4 py-3 md:py-4 max-w-full">
-          <div className="transition-opacity duration-200 ease-in-out">
-            {activeTab === "ladder" && ladderPanel}
+          <div className="transition-opacity duration-200 ease-in-out space-y-4">
+            {activeTab === "ladder" && (
+              <>
+                {ladderPanel}
+                <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
+              </>
+            )}
             {activeTab === "ai" && aiPanel}
             {activeTab === "positions" && positionsPanel}
           </div>
