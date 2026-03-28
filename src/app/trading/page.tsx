@@ -12,6 +12,7 @@ import RiskRewardPanel from "@/components/RiskRewardPanel";
 import ServeHoldStats from "@/components/ServeHoldStats";
 import SetWinningPrice from "@/components/SetWinningPrice";
 import ScaleOutButtons from "@/components/ScaleOutButtons";
+import StrategyDetector from "@/components/StrategyDetector";
 
 
 interface SupabaseTrade {
@@ -2561,6 +2562,25 @@ function TradingPage() {
                 isInPlay={!!marketBook?.inplay}
                 server={liveScore?.server}
               />
+              <StrategyDetector
+                playerName={displayPlayers[selectedPlayer].name}
+                playerOdds={displayPlayers[selectedPlayer].odds}
+                opponentOdds={displayPlayers[selectedPlayer === "player1" ? "player2" : "player1"].odds}
+                stake={activeStake}
+                isInPlay={!!marketBook?.inplay}
+                server={liveScore?.server}
+                selectedPlayer={selectedPlayer}
+                tradeLoading={tradeLoading}
+                onExecute={async (side, price, size) => {
+                  if (!marketId || !selectedRunner) return;
+                  if (isShadowMode) {
+                    await placeShadowTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size, player: displayPlayers[selectedPlayer].name });
+                    fetchTrades();
+                  } else if (isLive) {
+                    await placeTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size });
+                  }
+                }}
+              />
             </div>
             <div className="w-1/4 min-w-0">{positionsPanel}</div>
           </div>
@@ -2580,6 +2600,25 @@ function TradingPage() {
                   player2Odds={displayPlayers.player2.odds}
                   isInPlay={!!marketBook?.inplay}
                   server={liveScore?.server}
+                />
+                <StrategyDetector
+                  playerName={displayPlayers[selectedPlayer].name}
+                  playerOdds={displayPlayers[selectedPlayer].odds}
+                  opponentOdds={displayPlayers[selectedPlayer === "player1" ? "player2" : "player1"].odds}
+                  stake={activeStake}
+                  isInPlay={!!marketBook?.inplay}
+                  server={liveScore?.server}
+                  selectedPlayer={selectedPlayer}
+                  tradeLoading={tradeLoading}
+                  onExecute={async (side, price, size) => {
+                    if (!marketId || !selectedRunner) return;
+                    if (isShadowMode) {
+                      await placeShadowTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size, player: displayPlayers[selectedPlayer].name });
+                      fetchTrades();
+                    } else if (isLive) {
+                      await placeTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size });
+                    }
+                  }}
                 />
               </>
             )}
