@@ -10,6 +10,7 @@ import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
 import RiskRewardPanel from "@/components/RiskRewardPanel";
 import ServeHoldStats from "@/components/ServeHoldStats";
+import SetWinningPrice from "@/components/SetWinningPrice";
 
 
 interface SupabaseTrade {
@@ -2442,6 +2443,16 @@ function TradingPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ─── Set Winning Price Bar ─── */}
+      {displayPlayers.player1.odds > 1.01 && (
+        <SetWinningPrice
+          player1Name={displayPlayers.player1.name}
+          player2Name={displayPlayers.player2.name}
+          player1Odds={displayPlayers.player1.odds}
+          player2Odds={displayPlayers.player2.odds}
+        />
       )}
 
       {/* ─── Weight of Money Bar ─── */}
