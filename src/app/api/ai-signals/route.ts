@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "edge";
+
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 
 type SignalType = "pre_match" | "in_play" | "edge_alert";
@@ -23,7 +25,7 @@ function getConfig(signalType: SignalType) {
   switch (signalType) {
     case "pre_match":
       return {
-        model: "claude-sonnet-4-5-20250929",
+        model: "claude-haiku-4-5-20251001",
         maxTokens: 400,
         system:
           "You are an expert tennis trading analyst for Betfair Exchange. Provide concise, actionable trading analysis. Focus on: H2H records, surface form, fatigue, market pricing efficiency. Always specify if you see value and which side (back or lay). Be specific about odds levels. Keep response under 200 words.",
@@ -115,6 +117,7 @@ function parseEdgeSize(text: string): EdgeSize {
 /* ─── Route Handler ─── */
 
 export async function POST(req: NextRequest) {
+  console.log("[AI Signals API] Request received");
   try {
     // Auth check — prevent unauthenticated Anthropic API usage
     const { createServerClient } = await import("@/lib/supabase-server");

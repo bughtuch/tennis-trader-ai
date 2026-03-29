@@ -1050,6 +1050,7 @@ function TradingPage() {
   /* ─── AI Signals fetch ─── */
   async function fetchAiSignal() {
     setAiSignalLoading(true);
+    console.log("[AI Signal] Fetching signal, type:", signalType);
     try {
       const res = await fetch("/api/ai-signals", {
         method: "POST",
@@ -1057,22 +1058,41 @@ function TradingPage() {
         body: JSON.stringify({
           signalType,
           matchContext: {
-            player1: displayPlayers.player1.name,
-            player2: displayPlayers.player2.name,
-            odds1: displayPlayers.player1.odds,
-            odds2: displayPlayers.player2.odds,
+            player1: activeDisplayPlayers.player1.name,
+            player2: activeDisplayPlayers.player2.name,
+            odds1: activeDisplayPlayers.player1.odds,
+            odds2: activeDisplayPlayers.player2.odds,
             tournament,
             surface: "Hard",
           },
         }),
       });
       const data = await res.json();
+      console.log("[AI Signal] Response:", data);
       if (data.success && data.signal) {
         setAiSignal(data.signal);
         setAiSignalHistory((prev) => [data.signal, ...prev].slice(0, 5));
+      } else if (!data.success) {
+        console.error("[AI Signal] API error:", data.error);
+        setAiSignal({
+          type: signalType,
+          confidence: 0,
+          edgeSize: "none" as const,
+          analysis: `Error: ${data.error || "Unknown error"}`,
+          model: "error",
+          timestamp: new Date().toISOString(),
+        });
       }
-    } catch {
-      /* network error */
+    } catch (err) {
+      console.error("[AI Signal] Network error:", err);
+      setAiSignal({
+        type: signalType,
+        confidence: 0,
+        edgeSize: "none" as const,
+        analysis: "Network error — check console for details.",
+        model: "error",
+        timestamp: new Date().toISOString(),
+      });
     } finally {
       setAiSignalLoading(false);
     }
