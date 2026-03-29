@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
+import MatchSelectionGuide from "@/components/MatchSelectionGuide";
 
 /* ─── Types ─── */
 
@@ -562,6 +563,13 @@ export default function MarketsPage() {
         <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-12 text-center">
           <div className="inline-block w-6 h-6 border-2 border-gray-700 border-t-blue-400 rounded-full animate-spin" />
           <p className="text-sm text-gray-500 mt-3">Loading markets...</p>
+        </div>
+      )}
+
+      {/* Match Selection Guide */}
+      {!loading && markets.length > 0 && (
+        <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 pt-4">
+          <MatchSelectionGuide markets={markets} />
         </div>
       )}
 
