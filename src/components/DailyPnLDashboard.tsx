@@ -10,6 +10,7 @@ interface ClosedTrade {
   pnl: number | null;
   closed_at: string | null;
   created_at: string;
+  is_shadow?: boolean;
 }
 
 interface DailyStats {
@@ -19,7 +20,7 @@ interface DailyStats {
   winRate: number;
   bestTrade: number;
   worstTrade: number;
-  firstTradeAt: number | null; // timestamp ms
+  firstTradeAt: number | null;
 }
 
 /* ─── Constants ─── */
@@ -93,26 +94,39 @@ export default function DailyPnLDashboard({
   lossLimit = DEFAULT_LOSS_LIMIT,
 }: DailyPnLDashboardProps) {
   const [collapsed, setCollapsed] = useState(true);
-  const [dbTrades, setDbTrades] = useState<ClosedTrade[]>([]);
+  const [dbLiveTrades, setDbLiveTrades] = useState<ClosedTrade[]>([]);
+  const [dbPaperTrades, setDbPaperTrades] = useState<ClosedTrade[]>([]);
   const [elapsed, setElapsed] = useState("");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fetch today's closed trades from Supabase
+  // Fetch today's closed trades from Supabase (both live and paper)
   const fetchTodayTrades = useCallback(async () => {
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data } = await supabase
-        .from("trades")
-        .select("id, pnl, closed_at, created_at")
-        .eq("user_id", user.id)
-        .eq("status", "closed")
-        .gte("created_at", todayStart())
-        .order("closed_at", { ascending: false });
+      const [liveRes, paperRes] = await Promise.all([
+        supabase
+          .from("trades")
+          .select("id, pnl, closed_at, created_at, is_shadow")
+          .eq("user_id", user.id)
+          .eq("status", "closed")
+          .eq("is_shadow", false)
+          .gte("created_at", todayStart())
+          .order("closed_at", { ascending: false }),
+        supabase
+          .from("trades")
+          .select("id, pnl, closed_at, created_at, is_shadow")
+          .eq("user_id", user.id)
+          .eq("status", "closed")
+          .eq("is_shadow", true)
+          .gte("created_at", todayStart())
+          .order("closed_at", { ascending: false }),
+      ]);
 
-      if (data) setDbTrades(data);
+      if (liveRes.data) setDbLiveTrades(liveRes.data);
+      if (paperRes.data) setDbPaperTrades(paperRes.data);
     } catch { /* non-critical */ }
   }, []);
 
@@ -120,35 +134,43 @@ export default function DailyPnLDashboard({
     fetchTodayTrades();
   }, [fetchTodayTrades]);
 
-  // Re-fetch when local trades change (new trade closed)
+  // Re-fetch when local trades change
   useEffect(() => {
     if (localClosedTrades.length > 0) {
       fetchTodayTrades();
     }
   }, [localClosedTrades.length, fetchTodayTrades]);
 
-  // Merge DB trades with local trades (dedup by id)
-  const allTrades = (() => {
-    const idSet = new Set(dbTrades.map((t) => t.id));
-    const merged = [...dbTrades];
-    for (const lt of localClosedTrades) {
-      if (!idSet.has(lt.id)) {
-        merged.push(lt);
-      }
-    }
-    // Filter to today only
+  // Merge DB trades with local trades (dedup by id), filtering to today
+  const todayFilter = (t: ClosedTrade) => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
-    return merged.filter((t) => new Date(t.created_at) >= start);
+    return new Date(t.created_at) >= start;
+  };
+
+  const allLiveTrades = (() => {
+    const idSet = new Set(dbLiveTrades.map((t) => t.id));
+    const merged = [...dbLiveTrades];
+    for (const lt of localClosedTrades) {
+      if (!idSet.has(lt.id)) merged.push(lt);
+    }
+    return merged.filter(todayFilter);
   })();
 
-  const stats = calcStats(allTrades);
+  const allPaperTrades = dbPaperTrades.filter(todayFilter);
+
+  const liveStats = calcStats(allLiveTrades);
+  const paperStats = calcStats(allPaperTrades);
+
+  // Combined stats for overall dashboard
+  const allTrades = [...allLiveTrades, ...allPaperTrades];
+  const combinedStats = calcStats(allTrades);
 
   // Timer for elapsed time
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
-    if (stats.firstTradeAt) {
-      const update = () => setElapsed(formatDuration(Date.now() - stats.firstTradeAt!));
+    if (combinedStats.firstTradeAt) {
+      const update = () => setElapsed(formatDuration(Date.now() - combinedStats.firstTradeAt!));
       update();
       timerRef.current = setInterval(update, 30_000);
     } else {
@@ -157,14 +179,14 @@ export default function DailyPnLDashboard({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [stats.firstTradeAt]);
+  }, [combinedStats.firstTradeAt]);
 
-  // Loss limit calculations
-  const totalLoss = Math.max(0, -stats.totalPnl);
+  // Loss limit calculations (live trades only)
+  const totalLoss = Math.max(0, -liveStats.totalPnl);
   const lossUsedPct = lossLimit > 0 ? Math.min((totalLoss / lossLimit) * 100, 100) : 0;
   const profitPerHour =
-    stats.firstTradeAt && Date.now() - stats.firstTradeAt > 60_000
-      ? r2(stats.totalPnl / ((Date.now() - stats.firstTradeAt) / 3_600_000))
+    combinedStats.firstTradeAt && Date.now() - combinedStats.firstTradeAt > 60_000
+      ? r2(combinedStats.totalPnl / ((Date.now() - combinedStats.firstTradeAt) / 3_600_000))
       : 0;
 
   // Warning levels
@@ -175,9 +197,12 @@ export default function DailyPnLDashboard({
     ? "bg-red-500"
     : isWarning
       ? "bg-amber-500"
-      : stats.totalPnl >= 0
+      : liveStats.totalPnl >= 0
         ? "bg-green-500"
         : "bg-red-400";
+
+  const hasPaper = paperStats.tradeCount > 0;
+  const hasLive = liveStats.tradeCount > 0;
 
   return (
     <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden max-w-md mx-auto">
@@ -187,19 +212,19 @@ export default function DailyPnLDashboard({
         className="w-full px-4 py-3 border-b border-gray-800/50 flex items-center justify-between hover:bg-gray-800/20 transition-all"
       >
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${stats.tradeCount > 0 ? "bg-blue-400 animate-pulse" : "bg-gray-600"}`} />
+          <div className={`w-2 h-2 rounded-full ${combinedStats.tradeCount > 0 ? "bg-blue-400 animate-pulse" : "bg-gray-600"}`} />
           <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">
             SESSION DASHBOARD
           </h2>
         </div>
         <div className="flex items-center gap-3">
-          {stats.tradeCount > 0 && (
+          {combinedStats.tradeCount > 0 && (
             <span
               className={`text-xs font-mono font-semibold ${
-                stats.totalPnl >= 0 ? "text-green-400" : "text-red-400"
+                combinedStats.totalPnl >= 0 ? "text-green-400" : "text-red-400"
               }`}
             >
-              {stats.totalPnl >= 0 ? "+" : "-"}£{Math.abs(stats.totalPnl).toFixed(2)}
+              {combinedStats.totalPnl >= 0 ? "+" : "-"}£{Math.abs(combinedStats.totalPnl).toFixed(2)}
             </span>
           )}
           <svg
@@ -217,23 +242,48 @@ export default function DailyPnLDashboard({
       {/* Collapsible content */}
       {!collapsed && (
         <div className="p-4 space-y-3">
-          {stats.tradeCount === 0 ? (
+          {combinedStats.tradeCount === 0 ? (
             <p className="text-xs text-gray-500 text-center py-2">
               No closed trades today. Stats appear after your first trade.
             </p>
           ) : (
             <>
-              {/* Summary line */}
+              {/* Live / Paper P&L split */}
+              {(hasLive || hasPaper) && (
+                <div className="text-xs leading-relaxed space-y-0.5">
+                  {hasLive && (
+                    <div className="text-gray-300">
+                      Live P&amp;L:{" "}
+                      <span className={`font-mono font-semibold ${liveStats.totalPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {liveStats.totalPnl >= 0 ? "+" : "-"}£{Math.abs(liveStats.totalPnl).toFixed(2)}
+                      </span>
+                      <span className="text-gray-600 ml-1">({liveStats.tradeCount} trades, {liveStats.winRate}% win)</span>
+                    </div>
+                  )}
+                  {hasPaper && (
+                    <div className="text-gray-300">
+                      <span className="mr-0.5">👻</span>
+                      Paper P&amp;L:{" "}
+                      <span className={`font-mono font-semibold ${paperStats.totalPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {paperStats.totalPnl >= 0 ? "+" : "-"}£{Math.abs(paperStats.totalPnl).toFixed(2)}
+                      </span>
+                      <span className="text-gray-600 ml-1">({paperStats.tradeCount} trades, {paperStats.winRate}% win)</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Combined summary line */}
               <div className="text-xs text-gray-300 leading-relaxed">
                 Today:{" "}
-                <span className={`font-mono font-semibold ${stats.totalPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-                  {stats.totalPnl >= 0 ? "+" : "-"}£{Math.abs(stats.totalPnl).toFixed(2)}
+                <span className={`font-mono font-semibold ${combinedStats.totalPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {combinedStats.totalPnl >= 0 ? "+" : "-"}£{Math.abs(combinedStats.totalPnl).toFixed(2)}
                 </span>
                 {" | "}
-                <span className="text-white font-medium">{stats.tradeCount}</span> trades
+                <span className="text-white font-medium">{combinedStats.tradeCount}</span> trades
                 {" | "}
-                <span className={`font-medium ${stats.winRate >= 60 ? "text-green-400" : stats.winRate >= 40 ? "text-amber-400" : "text-red-400"}`}>
-                  {stats.winRate}% win rate
+                <span className={`font-medium ${combinedStats.winRate >= 60 ? "text-green-400" : combinedStats.winRate >= 40 ? "text-amber-400" : "text-red-400"}`}>
+                  {combinedStats.winRate}% win rate
                 </span>
               </div>
 
@@ -247,14 +297,14 @@ export default function DailyPnLDashboard({
                 Time: <span className="text-white font-medium">{elapsed}</span>
               </div>
 
-              {/* Loss limit progress */}
+              {/* Loss limit progress (live trades only) */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-gray-500">
                     Loss limit: <span className="text-white font-mono">£{lossLimit}</span>
                   </span>
                   <span className={`font-mono font-medium ${isDanger ? "text-red-400" : isWarning ? "text-amber-400" : "text-gray-400"}`}>
-                    {stats.totalPnl < 0 ? `Used: £${totalLoss.toFixed(2)} (${lossUsedPct.toFixed(1)}%)` : "Unused"}
+                    {liveStats.totalPnl < 0 ? `Used: £${totalLoss.toFixed(2)} (${lossUsedPct.toFixed(1)}%)` : "Unused"}
                   </span>
                 </div>
                 <div className="h-2 rounded-full bg-gray-800 overflow-hidden">
@@ -281,14 +331,14 @@ export default function DailyPnLDashboard({
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-gray-800/30 rounded-lg p-2.5">
                   <div className="text-[10px] tracking-wider uppercase text-gray-500 mb-0.5">BEST</div>
-                  <div className={`text-sm font-bold font-mono ${stats.bestTrade > 0 ? "text-green-400" : "text-gray-500"}`}>
-                    {stats.bestTrade > 0 ? `+£${stats.bestTrade.toFixed(2)}` : "—"}
+                  <div className={`text-sm font-bold font-mono ${combinedStats.bestTrade > 0 ? "text-green-400" : "text-gray-500"}`}>
+                    {combinedStats.bestTrade > 0 ? `+£${combinedStats.bestTrade.toFixed(2)}` : "—"}
                   </div>
                 </div>
                 <div className="bg-gray-800/30 rounded-lg p-2.5">
                   <div className="text-[10px] tracking-wider uppercase text-gray-500 mb-0.5">WORST</div>
-                  <div className={`text-sm font-bold font-mono ${stats.worstTrade < 0 ? "text-red-400" : "text-gray-500"}`}>
-                    {stats.worstTrade < 0 ? `-£${Math.abs(stats.worstTrade).toFixed(2)}` : "—"}
+                  <div className={`text-sm font-bold font-mono ${combinedStats.worstTrade < 0 ? "text-red-400" : "text-gray-500"}`}>
+                    {combinedStats.worstTrade < 0 ? `-£${Math.abs(combinedStats.worstTrade).toFixed(2)}` : "—"}
                   </div>
                 </div>
               </div>

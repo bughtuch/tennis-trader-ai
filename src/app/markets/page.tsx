@@ -426,7 +426,7 @@ export default function MarketsPage() {
                 // Find market data for linking
                 const market = markets.find((m) => m.id === alert.marketId);
                 const linkHref = market
-                  ? `/trading?marketId=${alert.marketId}&p1=${encodeURIComponent(market.player1.name)}&p2=${encodeURIComponent(market.player2.name)}&tournament=${encodeURIComponent(market.tournament)}`
+                  ? `/trading?marketId=${alert.marketId}&p1=${encodeURIComponent(market.player1.name)}&p2=${encodeURIComponent(market.player2.name)}&tournament=${encodeURIComponent(market.tournament)}${market.player1.odds ? `&p1Odds=${market.player1.odds}` : ""}${market.player2.odds ? `&p2Odds=${market.player2.odds}` : ""}`
                   : `/trading?marketId=${alert.marketId}`;
 
                 return (
@@ -580,7 +580,7 @@ export default function MarketsPage() {
             {filtered.map((market) => (
               <Link
                 key={market.id}
-                href={`/trading?marketId=${market.id}&p1=${encodeURIComponent(market.player1.name)}&p2=${encodeURIComponent(market.player2.name)}&tournament=${encodeURIComponent(market.tournament)}`}
+                href={`/trading?marketId=${market.id}&p1=${encodeURIComponent(market.player1.name)}&p2=${encodeURIComponent(market.player2.name)}&tournament=${encodeURIComponent(market.tournament)}${market.player1.odds ? `&p1Odds=${market.player1.odds}` : ""}${market.player2.odds ? `&p2Odds=${market.player2.odds}` : ""}`}
                 className={`group block w-full bg-gray-900/50 border rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-600/50 ${
                   market.isLive
                     ? "border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.06)]"

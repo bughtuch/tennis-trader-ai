@@ -15,6 +15,9 @@ import ScaleOutButtons from "@/components/ScaleOutButtons";
 import StrategyDetector from "@/components/StrategyDetector";
 import ChangeoverAlert from "@/components/ChangeoverAlert";
 import DailyPnLDashboard from "@/components/DailyPnLDashboard";
+import PaperTradeModal from "@/components/PaperTradeModal";
+import RealTradeConfirmModal from "@/components/RealTradeConfirmModal";
+import PaperMilestonePrompt from "@/components/PaperMilestonePrompt";
 
 
 interface SupabaseTrade {
@@ -151,6 +154,8 @@ function TradingPage() {
   const p1Flag = searchParams.get("p1Flag") ?? "";
   const p2Flag = searchParams.get("p2Flag") ?? "";
   const tournament = searchParams.get("tournament") ?? "Tennis";
+  const urlP1Odds = parseFloat(searchParams.get("p1Odds") ?? "0") || 0;
+  const urlP2Odds = parseFloat(searchParams.get("p2Odds") ?? "0") || 0;
 
   /* ─── Restore last market from localStorage if no URL params ─── */
   const [noMarket, setNoMarket] = useState(false);
@@ -196,6 +201,12 @@ function TradingPage() {
 
   /* ─── Shadow Mode ─── */
   const [isShadowMode, setIsShadowMode] = useState(false);
+
+  /* ─── Paper / Real Trade Modals ─── */
+  const [pendingPaperTrade, setPendingPaperTrade] = useState<{ price: number; side: "BACK" | "LAY" } | null>(null);
+  const [pendingRealTrade, setPendingRealTrade] = useState<{ price: number; side: "BACK" | "LAY" } | null>(null);
+  const [paperMilestoneData, setPaperMilestoneData] = useState<{ count: number; pnl: number } | null>(null);
+  const [paperMilestoneDismissed, setPaperMilestoneDismissed] = useState(false);
 
   /* ─── Streak Protection Settings ─── */
   const [streakProtectionEnabled, setStreakProtectionEnabled] = useState(true);
@@ -619,6 +630,67 @@ function TradingPage() {
     },
   };
 
+  /* ─── Demo ladder & runner for paper trading when not connected ─── */
+  const demoPlayerOdds = {
+    player1: livePlayerOdds.player1 || urlP1Odds,
+    player2: livePlayerOdds.player2 || urlP2Odds,
+  };
+  const demoSelectedOdds = demoPlayerOdds[selectedPlayer];
+
+  const demoLadderData = useMemo((): LadderRow[] | null => {
+    if (ladderData && ladderData.length > 0) return null; // real ladder exists
+    if (!demoSelectedOdds || demoSelectedOdds <= 1.01) return null;
+
+    const center = roundToTick(demoSelectedOdds);
+    const TICKS = 8;
+    const low = moveByTicks(center, -TICKS);
+    const high = moveByTicks(center, TICKS);
+    const rows: LadderRow[] = [];
+    let tick = roundToTick(low);
+    while (tick <= high) {
+      const isBest = tick === center;
+      const isLay = tick === moveByTicks(center, 1);
+      rows.push({
+        price: tick,
+        backSize: isBest ? 150 : tick < center ? Math.round(30 + Math.abs(center - tick) * 20) : 0,
+        laySize: isLay ? 150 : tick > center ? Math.round(30 + Math.abs(tick - center) * 20) : 0,
+        isLastTraded: isBest,
+        isBestBack: isBest,
+        isBestLay: isLay,
+      });
+      const next = moveByTicks(tick, 1);
+      if (next <= tick) break;
+      tick = next;
+    }
+    return rows;
+  }, [ladderData, demoSelectedOdds]);
+
+  // Use demo ladder when real ladder is empty
+  const activeLadderData = (ladderData && ladderData.length > 0) ? ladderData : demoLadderData;
+
+  // Demo runner for paper trades when no Betfair connection
+  const demoRunner = useMemo(() => {
+    if (selectedRunner) return null;
+    if (!marketId || !demoSelectedOdds || demoSelectedOdds <= 1.01) return null;
+    return {
+      selectionId: selectedPlayer === "player1" ? 99001 : 99002,
+    };
+  }, [selectedRunner, marketId, selectedPlayer, demoSelectedOdds]);
+
+  const activeRunner = selectedRunner ?? demoRunner;
+
+  // Update displayPlayers to include demo odds when no live data
+  const activeDisplayPlayers = {
+    player1: {
+      ...displayPlayers.player1,
+      odds: displayPlayers.player1.odds || urlP1Odds,
+    },
+    player2: {
+      ...displayPlayers.player2,
+      odds: displayPlayers.player2.odds || urlP2Odds,
+    },
+  };
+
   /* ─── Unrealized P&L per player (from open positions) ─── */
   function getUnrealizedPnl(playerKey: "player1" | "player2"): number | null {
     const playerName = displayPlayers[playerKey].name;
@@ -728,7 +800,14 @@ function TradingPage() {
 
   /* ─── Handle trade click ─── */
   async function handleTradeClick(price: number, side: "BACK" | "LAY") {
-    if (!marketId || !selectedRunner) return;
+    if (!marketId || !selectedRunner) {
+      // Paper trade fallback: if no real runner but demo runner exists
+      if (marketId && activeRunner && !selectedRunner) {
+        setPendingPaperTrade({ price, side });
+        return;
+      }
+      return;
+    }
 
     // Streak protection cooldown block
     if (cooldownUntil && Date.now() < cooldownUntil) {
@@ -747,10 +826,24 @@ function TradingPage() {
         player: playerName,
       });
       fetchTrades();
+      checkPaperMilestone();
       return;
     }
 
-    if (!isConnected) return;
+    if (!isConnected) {
+      // Not connected — offer paper trade
+      setPendingPaperTrade({ price, side });
+      return;
+    }
+
+    // First-time real trade confirmation
+    try {
+      if (!localStorage.getItem("realTradeConfirmed")) {
+        setPendingRealTrade({ price, side });
+        return;
+      }
+    } catch { /* SSR guard */ }
+
     // Add pending order indicator for in-play bet delay
     if (marketBook?.inplay) {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -763,6 +856,63 @@ function TradingPage() {
       price,
       size: activeStake,
     });
+  }
+
+  /* ─── Paper trade execution (from modal confirm) ─── */
+  async function executePaperTrade(price: number, side: "BACK" | "LAY") {
+    if (!marketId) return;
+    const runner = selectedRunner ?? demoRunner;
+    if (!runner) return;
+
+    // Activate shadow mode so positions panel shows paper trades
+    if (!isShadowMode) setIsShadowMode(true);
+
+    const playerName = displayPlayers[selectedPlayer].name;
+    await placeShadowTrade({
+      marketId,
+      selectionId: runner.selectionId,
+      side,
+      price,
+      size: activeStake,
+      player: playerName,
+    });
+    fetchTrades();
+    checkPaperMilestone();
+  }
+
+  /* ─── Real trade execution (from confirmation modal) ─── */
+  async function executeConfirmedRealTrade(price: number, side: "BACK" | "LAY", dontAskAgain: boolean) {
+    if (!marketId || !selectedRunner) return;
+    if (dontAskAgain) {
+      try { localStorage.setItem("realTradeConfirmed", "true"); } catch { /* SSR guard */ }
+    }
+    if (marketBook?.inplay) {
+      const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
+    }
+    await placeTrade({
+      marketId,
+      selectionId: selectedRunner.selectionId,
+      side,
+      price,
+      size: activeStake,
+    });
+  }
+
+  /* ─── Paper trade milestone check ─── */
+  async function checkPaperMilestone() {
+    try {
+      if (localStorage.getItem("paperMilestoneDismissed")) return;
+      const res = await fetch("/api/trades/shadow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "getShadowStats" }),
+      });
+      const data = await res.json();
+      if (data.success && data.stats.totalTrades >= 10) {
+        setPaperMilestoneData({ count: data.stats.totalTrades, pnl: data.stats.totalPnl });
+      }
+    } catch { /* non-critical */ }
   }
 
   /* ─── Live Scores ─── */
@@ -970,11 +1120,11 @@ function TradingPage() {
   const currentBackPrice =
     isLive && selectedRunner?.ex?.availableToBack?.[0]?.price
       ? selectedRunner.ex.availableToBack[0].price
-      : ladderData?.find((r: LadderRow) => r.isBestBack)?.price ?? 0;
+      : activeLadderData?.find((r: LadderRow) => r.isBestBack)?.price ?? 0;
   const currentLayPrice =
     isLive && selectedRunner?.ex?.availableToLay?.[0]?.price
       ? selectedRunner.ex.availableToLay[0].price
-      : ladderData?.find((r: LadderRow) => r.isBestLay)?.price ?? 0;
+      : activeLadderData?.find((r: LadderRow) => r.isBestLay)?.price ?? 0;
   const greenUpResult = aggregatedPos && aggregatedPos.netSide !== "FLAT" && aggregatedPos.avgEntry > 0
     ? calculateGreenUp(
         aggregatedPos.avgEntry,
@@ -999,8 +1149,8 @@ function TradingPage() {
     sessionMinutes > 0 ? (sessionPnl / (sessionElapsed / 3600)).toFixed(2) : "--";
 
   /* ─── Computed: max size for depth bars ─── */
-  const maxSize = ladderData
-    ? Math.max(...ladderData.map((r) => Math.max(r.backSize, r.laySize)), 1)
+  const maxSize = activeLadderData
+    ? Math.max(...activeLadderData.map((r) => Math.max(r.backSize, r.laySize)), 1)
     : 1;
 
   /* ─── Keyboard shortcuts ─── */
@@ -1011,11 +1161,14 @@ function TradingPage() {
     selectedPlayer,
     isLive,
     marketId,
-    selectedRunner,
-    ladderData,
+    selectedRunner: selectedRunner ?? demoRunner,
+    ladderData: activeLadderData,
     placeTrade,
     placeShadowTrade,
     isShadowMode,
+    isConnected,
+    setPendingPaperTrade,
+    setPendingRealTrade,
     displayPlayers,
     setToast,
     setSelectedStake,
@@ -1059,7 +1212,13 @@ function TradingPage() {
                 size: s.activeStake,
                 player: s.displayPlayers[s.selectedPlayer].name,
               }).then(() => s.fetchTrades());
-            } else if (s.isLive) {
+            } else if (s.isConnected) {
+              try {
+                if (!localStorage.getItem("realTradeConfirmed")) {
+                  s.setPendingRealTrade({ price: bestBack.price, side: "BACK" as const });
+                  break;
+                }
+              } catch { /* SSR guard */ }
               if (s.marketBook?.inplay) {
                 s.addPendingOrder({ id: `${Date.now()}-kb`, side: "BACK", price: bestBack.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
               }
@@ -1071,10 +1230,8 @@ function TradingPage() {
                 size: s.activeStake,
               });
             } else {
-              s.setToast({
-                message: `Demo: BACK £${s.activeStake} @ ${bestBack.price.toFixed(2)}`,
-                type: "success",
-              });
+              // Not connected — offer paper trade
+              s.setPendingPaperTrade({ price: bestBack.price, side: "BACK" as const });
             }
           }
           break;
@@ -1093,7 +1250,13 @@ function TradingPage() {
                 size: s.activeStake,
                 player: s.displayPlayers[s.selectedPlayer].name,
               }).then(() => s.fetchTrades());
-            } else if (s.isLive) {
+            } else if (s.isConnected) {
+              try {
+                if (!localStorage.getItem("realTradeConfirmed")) {
+                  s.setPendingRealTrade({ price: bestLay.price, side: "LAY" as const });
+                  break;
+                }
+              } catch { /* SSR guard */ }
               if (s.marketBook?.inplay) {
                 s.addPendingOrder({ id: `${Date.now()}-kb`, side: "LAY", price: bestLay.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
               }
@@ -1105,10 +1268,8 @@ function TradingPage() {
                 size: s.activeStake,
               });
             } else {
-              s.setToast({
-                message: `Demo: LAY £${s.activeStake} @ ${bestLay.price.toFixed(2)}`,
-                type: "success",
-              });
+              // Not connected — offer paper trade
+              s.setPendingPaperTrade({ price: bestLay.price, side: "LAY" as const });
             }
           }
           break;
@@ -1294,8 +1455,8 @@ function TradingPage() {
 
       {/* Ladder Body */}
       <div className="max-h-[640px] overflow-y-auto">
-        {ladderData && ladderData.length > 0 ? (
-          ladderData.map((row) => {
+        {activeLadderData && activeLadderData.length > 0 ? (
+          activeLadderData.map((row) => {
             const unmatched = unmatchedByPrice.get(row.price);
             return (
             <div
@@ -2273,6 +2434,47 @@ function TradingPage() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* ─── Paper Trade Modal ─── */}
+      {pendingPaperTrade && (
+        <PaperTradeModal
+          side={pendingPaperTrade.side}
+          price={pendingPaperTrade.price}
+          stake={activeStake}
+          playerName={displayPlayers[selectedPlayer].name}
+          onConfirm={() => {
+            executePaperTrade(pendingPaperTrade.price, pendingPaperTrade.side);
+            setPendingPaperTrade(null);
+          }}
+          onCancel={() => setPendingPaperTrade(null)}
+        />
+      )}
+
+      {/* ─── Real Trade Confirm Modal ─── */}
+      {pendingRealTrade && (
+        <RealTradeConfirmModal
+          side={pendingRealTrade.side}
+          price={pendingRealTrade.price}
+          stake={activeStake}
+          onConfirm={(dontAskAgain) => {
+            executeConfirmedRealTrade(pendingRealTrade.price, pendingRealTrade.side, dontAskAgain);
+            setPendingRealTrade(null);
+          }}
+          onCancel={() => setPendingRealTrade(null)}
+        />
+      )}
+
+      {/* ─── Paper Trading Milestone ─── */}
+      {paperMilestoneData && !paperMilestoneDismissed && (
+        <PaperMilestonePrompt
+          tradeCount={paperMilestoneData.count}
+          totalPnl={paperMilestoneData.pnl}
+          onDismiss={() => {
+            setPaperMilestoneDismissed(true);
+            try { localStorage.setItem("paperMilestoneDismissed", "true"); } catch { /* SSR guard */ }
+          }}
+        />
       )}
 
       {/* ─── Market Status Bar ─── */}
