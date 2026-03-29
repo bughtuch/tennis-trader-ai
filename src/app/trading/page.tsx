@@ -18,6 +18,7 @@ import DailyPnLDashboard from "@/components/DailyPnLDashboard";
 import PaperTradeModal from "@/components/PaperTradeModal";
 import RealTradeConfirmModal from "@/components/RealTradeConfirmModal";
 import PaperMilestonePrompt from "@/components/PaperMilestonePrompt";
+import PostTradeReview from "@/components/PostTradeReview";
 
 
 interface SupabaseTrade {
@@ -363,6 +364,60 @@ function TradingPage() {
       }
     } catch { /* non-critical */ }
   }
+
+  /* ─── Post-Trade Review: deeper AI analysis after trade closure ─── */
+  const [postTradeReviews, setPostTradeReviews] = useState<Record<string, string>>({});
+  const [postTradeLoading, setPostTradeLoading] = useState<Record<string, boolean>>({});
+  const reviewFetchedRef = useRef<Set<string>>(new Set());
+
+  async function fetchPostTradeReview(trade: SupabaseTrade) {
+    if (reviewFetchedRef.current.has(trade.id)) return;
+    reviewFetchedRef.current.add(trade.id);
+    setPostTradeLoading((prev) => ({ ...prev, [trade.id]: true }));
+    try {
+      const holdMs = trade.closed_at && trade.created_at
+        ? new Date(trade.closed_at).getTime() - new Date(trade.created_at).getTime()
+        : 0;
+      const res = await fetch("/api/ai/coach-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          side: trade.side,
+          entry_price: trade.entry_price,
+          exit_price: trade.exit_price,
+          stake: trade.stake,
+          pnl: trade.pnl ?? 0,
+          player: trade.player ?? "Unknown",
+          greened_up: trade.greened_up,
+          hold_seconds: Math.round(holdMs / 1000),
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.review) {
+        setPostTradeReviews((prev) => ({ ...prev, [trade.id]: data.review }));
+        // Save to coach_insight column
+        const supabase = createClient();
+        await supabase
+          .from("trades")
+          .update({ coach_insight: data.review })
+          .eq("id", trade.id);
+      }
+    } catch { /* non-critical */ }
+    setPostTradeLoading((prev) => ({ ...prev, [trade.id]: false }));
+  }
+
+  // Trigger post-trade review for newly closed trades
+  const prevTradeCountRef = useRef(0);
+  useEffect(() => {
+    if (tradeHistory.length > prevTradeCountRef.current && tradeHistory.length > 0) {
+      const latest = tradeHistory[0]; // most recent closed trade
+      if (latest.closed_at && !reviewFetchedRef.current.has(latest.id)) {
+        fetchPostTradeReview(latest);
+      }
+    }
+    prevTradeCountRef.current = tradeHistory.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradeHistory.length]);
 
   async function closeTradeAsGreenUp(tradeId: string, exitPrice: number, pnl: number) {
     const supabase = createClient();
@@ -2135,7 +2190,7 @@ function TradingPage() {
                     {Math.abs(trade.pnl ?? 0).toFixed(2)}
                   </span>
                 </div>
-                {insight && (
+                {insight && !postTradeReviews[trade.id] && (
                   <div className={`mt-1.5 flex items-start gap-1.5 text-[10px] leading-relaxed ${
                     fadingInsightId === trade.id ? "animate-fade-in" : ""
                   }`}>
@@ -2143,6 +2198,10 @@ function TradingPage() {
                     <span style={{ color: "#C8B89A" }}>{insight}</span>
                   </div>
                 )}
+                <PostTradeReview
+                  review={postTradeReviews[trade.id] ?? null}
+                  loading={postTradeLoading[trade.id] ?? false}
+                />
               </div>
               );
             })
