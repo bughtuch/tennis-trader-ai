@@ -14,6 +14,7 @@ import SetWinningPrice from "@/components/SetWinningPrice";
 import ScaleOutButtons from "@/components/ScaleOutButtons";
 import StrategyDetector from "@/components/StrategyDetector";
 import ChangeoverAlert from "@/components/ChangeoverAlert";
+import DailyPnLDashboard from "@/components/DailyPnLDashboard";
 
 
 interface SupabaseTrade {
@@ -2161,6 +2162,9 @@ function TradingPage() {
           )}
         </div>
       </div>
+
+      {/* Daily P&L Dashboard */}
+      <DailyPnLDashboard localClosedTrades={tradeHistory} />
     </div>
   );
 
