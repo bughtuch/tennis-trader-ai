@@ -637,13 +637,34 @@ function SettingsPage() {
                   <span className="text-xs font-medium text-amber-400">Session expired — reconnect below</span>
                 </div>
               ) : (
-                <p className="text-xs text-gray-500">Connect your Betfair account to start trading. Enter your Betfair credentials below.</p>
+                <p className="text-xs text-gray-500">Connect your Betfair account to start trading.</p>
               )}
               {authError && (
                 <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
                   {authError}
                 </div>
               )}
+
+              {/* OAuth login — recommended */}
+              <a
+                href="/api/betfair/auth/redirect"
+                className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[#FFB80C] to-[#E5A500] hover:from-[#E5A500] hover:to-[#CC9200] transition-all flex items-center justify-center gap-2 shadow-lg"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Connect via Betfair (Recommended)
+              </a>
+              <p className="text-[10px] text-gray-600 text-center">Securely connects via Betfair&apos;s official OAuth — no credentials stored</p>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3 py-1">
+                <div className="flex-1 h-px bg-gray-800" />
+                <span className="text-[10px] text-gray-600 uppercase tracking-wider">Or connect with credentials</span>
+                <div className="flex-1 h-px bg-gray-800" />
+              </div>
+
+              {/* Direct login form — kept as fallback */}
               <div className="space-y-2">
                 <Label>Betfair Username</Label>
                 <TextInput
@@ -662,7 +683,7 @@ function SettingsPage() {
               <button
                 onClick={handleConnect}
                 disabled={loginLoading}
-                className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-300 bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 {loginLoading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -673,7 +694,7 @@ function SettingsPage() {
                     Connecting...
                   </span>
                 ) : (
-                  "Connect Betfair Account"
+                  "Connect with Credentials"
                 )}
               </button>
             </div>
