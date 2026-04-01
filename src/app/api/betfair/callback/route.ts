@@ -10,14 +10,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(settingsUrl);
   }
 
-  const appKey = process.env.BETFAIR_APP_KEY;
-  const redirectUri = process.env.BETFAIR_REDIRECT_URI;
-
-  if (!appKey || !redirectUri) {
-    settingsUrl.searchParams.set("betfair", "error");
-    settingsUrl.searchParams.set("message", "OAuth not configured");
-    return NextResponse.redirect(settingsUrl);
-  }
+  const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCih";
+  // Must match EXACTLY what Betfair has registered, including trailing ?
+  const redirectUri = "https://tennistraderai.com/api/betfair/callback?";
 
   try {
     // Exchange authorization code for session token
