@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "edge";
 
-const BETFAIR_APP_KEY = "fCsY8wIPysRCih";
+const BETFAIR_APP_KEY = "fCsY8wIPysRCihHi";
 
 export async function POST(req: NextRequest) {
   try {

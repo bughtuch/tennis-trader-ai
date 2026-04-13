@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(settingsUrl);
   }
 
-  const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCih";
+  const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCihHi";
   // Must match EXACTLY what Betfair has registered, including trailing ?
   const redirectUri = "https://tennistraderai.com/api/betfair/callback?";
 
