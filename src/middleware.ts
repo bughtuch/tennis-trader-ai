@@ -26,7 +26,7 @@ function buildCsp(nonce: string): string {
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
-    `style-src 'self' 'nonce-${nonce}'`,
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     "connect-src 'self' https://api.betfair.com https://identitysso.betfair.com https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://api.api-tennis.com https://api.stripe.com",
