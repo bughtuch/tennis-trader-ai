@@ -18,6 +18,18 @@ export async function GET(req: NextRequest) {
 
   try {
     // Exchange authorization code for session token
+    // Build body manually to avoid URLSearchParams double-encoding the redirect_uri
+    const formBody = [
+      `client_id=${vendorId}`,
+      `client_secret=${vendorSecret}`,
+      `grant_type=authorization_code`,
+      `code=${encodeURIComponent(code)}`,
+      `redirect_uri=${encodeURIComponent(redirectUri)}`,
+    ].join("&");
+
+    console.log("[Betfair OAuth] Token exchange POST to https://identitysso.betfair.com/api/token");
+    console.log("[Betfair OAuth] Body:", formBody);
+
     const tokenRes = await fetch(
       "https://identitysso.betfair.com/api/token",
       {
@@ -27,17 +39,23 @@ export async function GET(req: NextRequest) {
           "Accept": "application/json",
           "X-Application": appKey,
         },
-        body: new URLSearchParams({
-          client_id: vendorId,
-          client_secret: vendorSecret,
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: redirectUri,
-        }).toString(),
+        body: formBody,
       }
     );
 
-    const tokenData = await tokenRes.json();
+    console.log("[Betfair OAuth] Response status:", tokenRes.status);
+    const tokenText = await tokenRes.text();
+    console.log("[Betfair OAuth] Response body (first 200):", tokenText.substring(0, 200));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let tokenData: any;
+    try {
+      tokenData = JSON.parse(tokenText);
+    } catch {
+      settingsUrl.searchParams.set("betfair", "error");
+      settingsUrl.searchParams.set("message", `Token endpoint returned non-JSON (status ${tokenRes.status})`);
+      return NextResponse.redirect(settingsUrl);
+    }
 
     if (tokenData.status !== "SUCCESS" || !tokenData.token) {
       settingsUrl.searchParams.set("betfair", "error");
