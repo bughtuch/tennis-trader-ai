@@ -1,4 +1,4 @@
-// Auth-only middleware — subscription gating moved to feature-level components
+// Auth + CSP middleware
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -19,11 +19,49 @@ function isPublic(pathname: string) {
   );
 }
 
+/* ─── CSP with per-request nonce ─── */
+
+function buildCsp(nonce: string): string {
+  const isDev = process.env.NODE_ENV === "development";
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    `style-src 'self' 'nonce-${nonce}'`,
+    "img-src 'self' data: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://api.betfair.com https://identitysso.betfair.com https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://api.api-tennis.com https://api.stripe.com",
+    "frame-src 'self' https://js.stripe.com https://identitysso.betfair.com",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
+function applyNonceHeaders(
+  request: NextRequest,
+  response: NextResponse,
+  nonce: string
+) {
+  const csp = buildCsp(nonce);
+  request.headers.set("x-nonce", nonce);
+  response.headers.set("x-nonce", nonce);
+  response.headers.set("Content-Security-Policy", csp);
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Generate a unique nonce for this request
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+
   if (isPublic(pathname)) {
-    return NextResponse.next();
+    const response = NextResponse.next({
+      request: { headers: request.headers },
+    });
+    applyNonceHeaders(request, response, nonce);
+    return response;
   }
 
   let response = NextResponse.next({
@@ -64,6 +102,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  applyNonceHeaders(request, response, nonce);
   return response;
 }
 
