@@ -10,8 +10,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(settingsUrl);
   }
 
-  const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCihHi";
+  const vendorId = "157798";
   const vendorSecret = process.env.BETFAIR_VENDOR_SECRET ?? "a3114dca-8775-4a6b-80d3-db338edd8cf5";
+  const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCihHi";
   // Must match EXACTLY what Betfair has registered, including trailing ?
   const redirectUri = "https://tennistraderai.com/api/betfair/callback?";
 
@@ -23,10 +24,11 @@ export async function GET(req: NextRequest) {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "application/json",
           "X-Application": appKey,
         },
         body: new URLSearchParams({
-          client_id: appKey,
+          client_id: vendorId,
           client_secret: vendorSecret,
           grant_type: "authorization_code",
           code,
