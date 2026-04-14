@@ -97,10 +97,10 @@ export async function GET(req: NextRequest) {
       console.error("[Betfair OAuth Callback] Profile update failed:", dbErr);
     }
 
-    // Redirect to save-token page which saves to localStorage then goes to /settings
-    const saveUrl = new URL("/api/betfair/save-token", req.url);
-    saveUrl.searchParams.set("token", sessionToken);
-    return NextResponse.redirect(saveUrl);
+    // Redirect straight to settings — token is already in Supabase,
+    // settings page reads it on mount and copies to localStorage
+    settingsUrl.searchParams.set("betfair", "connected");
+    return NextResponse.redirect(settingsUrl);
   } catch (err) {
     console.error("[Betfair OAuth Callback] Error:", err);
     settingsUrl.searchParams.set("betfair", "error");

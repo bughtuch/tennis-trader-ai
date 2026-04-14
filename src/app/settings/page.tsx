@@ -250,6 +250,12 @@ function SettingsPage() {
               new Date(new Date(data.betfair_connected_at).getTime() + 8 * 3600000).toISOString()
             );
           }
+          // Sync token to localStorage so other pages (markets, trading) can use it
+          try {
+            localStorage.setItem("betfair_token", data.betfair_session_token);
+            localStorage.setItem("betfair_connected_at", data.betfair_connected_at ?? new Date().toISOString());
+            if (data.betfair_username) localStorage.setItem("betfair_username", data.betfair_username);
+          } catch { /* SSR guard */ }
         }
       } else {
         setBetfairConnected(false);
@@ -257,6 +263,25 @@ function SettingsPage() {
         setBetfairExpiry(null);
       }
     }
+  }, []);
+
+  // Re-read Supabase profile and sync token to localStorage (used after OAuth redirect)
+  const syncBetfairTokenToLocalStorage = useCallback(async () => {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("betfair_session_token, betfair_connected_at, betfair_username")
+        .eq("id", user.id)
+        .single();
+      if (data?.betfair_session_token) {
+        localStorage.setItem("betfair_token", data.betfair_session_token);
+        localStorage.setItem("betfair_connected_at", data.betfair_connected_at ?? new Date().toISOString());
+        if (data.betfair_username) localStorage.setItem("betfair_username", data.betfair_username);
+      }
+    } catch { /* non-critical */ }
   }, []);
 
   useEffect(() => {
@@ -316,20 +341,14 @@ function SettingsPage() {
     if (!betfairStatus) return;
 
     if (betfairStatus === "connected") {
-      // Save OAuth token to localStorage (same as direct login flow)
-      const oauthToken = searchParams.get("token");
-      if (oauthToken) {
-        try {
-          localStorage.setItem("betfair_token", oauthToken);
-          localStorage.setItem("betfair_connected_at", new Date().toISOString());
-        } catch { /* SSR guard */ }
-        setBetfairConnected(true);
-        setBetfairExpiry(new Date(Date.now() + 4 * 3600000).toISOString());
-      }
+      // Token is saved in Supabase by the callback route — reload profile to pick it up
+      loadProfile().then(() => {
+        // After profile loads, sync Supabase token to localStorage for other pages
+        syncBetfairTokenToLocalStorage();
+      });
       setSaveMessage("Betfair connected successfully!");
       setTimeout(() => setSaveMessage(null), 5000);
       restoreSession();
-      loadProfile();
     } else if (betfairStatus === "error") {
       const message = searchParams.get("message") ?? "Connection failed";
       setAuthError(message);
