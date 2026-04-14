@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
     // Use user's token if available, otherwise fall back to vendor session for public market data
     // Priority: header (from localStorage via frontend) > cookie > vendor session
-    const VENDOR_SESSION = "UzQJUeW2N2THhqeLD4R5GbKXa/MgxOOjuLoz44f3w5s=";
+    const VENDOR_SESSION = "6gI2QVT80KvjC84XfTu4DlrbZyCaIBXKAOc3Cs8yIYs=";
     const sessionToken =
       req.headers.get("x-betfair-token") ??
       req.cookies.get("betfair_session")?.value ??

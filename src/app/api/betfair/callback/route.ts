@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "edge";
 
 // Hardcoded to prove OAuth works — edge runtime can't read env vars
-const VENDOR_SESSION = "UzQJUeW2N2THhqeLD4R5GbKXa/MgxOOjuLoz44f3w5s=";
+const VENDOR_SESSION = "6gI2QVT80KvjC84XfTu4DlrbZyCaIBXKAOc3Cs8yIYs=";
 const APP_KEY = "fCsY8wIPysRCihHi";
 const VENDOR_ID = "157798";
 const VENDOR_SECRET = "a3114dca-8775-4a6b-80d3-db338edd8cf5";
