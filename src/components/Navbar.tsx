@@ -8,6 +8,7 @@ import { useAppStore } from "@/lib/store";
 import type { User } from "@supabase/supabase-js";
 
 const navLinks = [
+  { href: "/dashboard", label: "Home" },
   { href: "/markets", label: "Markets" },
   { href: "/trading", label: "Trading" },
   { href: "/trading-dna", label: "DNA" },
