@@ -85,6 +85,16 @@ CREATE TABLE trading_dna (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- App config (vendor session, etc.)
+CREATE TABLE app_config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO app_config (key, value) VALUES ('vendor_session', '6gI2QVT80KvjC84XfTu4DlrbZyCaIBXKAOc3Cs8yIYs=')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
+
 -- RLS policies
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
@@ -100,3 +110,8 @@ CREATE POLICY "Users read own briefings" ON briefings FOR SELECT USING (auth.uid
 CREATE POLICY "Users insert own briefings" ON briefings FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users read own trading_dna" ON trading_dna FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users insert own trading_dna" ON trading_dna FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+ALTER TABLE app_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read app_config" ON app_config FOR SELECT USING (true);
+CREATE POLICY "Allow public update app_config" ON app_config FOR UPDATE USING (true);
+CREATE POLICY "Allow public insert app_config" ON app_config FOR INSERT WITH CHECK (true);

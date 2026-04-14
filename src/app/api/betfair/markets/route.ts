@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getVendorSession } from "@/lib/betfair-vendor";
 
 export const runtime = "edge";
 
@@ -19,13 +20,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action, marketIds } = body;
 
-    // Use user's token if available, otherwise fall back to vendor session for public market data
-    // Priority: header (from localStorage via frontend) > cookie > vendor session
-    const VENDOR_SESSION = "6gI2QVT80KvjC84XfTu4DlrbZyCaIBXKAOc3Cs8yIYs=";
-    const sessionToken =
+    // Priority: header (from localStorage via frontend) > cookie > vendor session from Supabase
+    const userToken =
       req.headers.get("x-betfair-token") ??
-      req.cookies.get("betfair_session")?.value ??
-      VENDOR_SESSION;
+      req.cookies.get("betfair_session")?.value;
+    const sessionToken = userToken ?? (await getVendorSession()) ?? "";
+    if (!sessionToken) {
+      return NextResponse.json(
+        { success: false, error: "No Betfair session available" },
+        { status: 503 }
+      );
+    }
 
     const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCihHi";
     if (!appKey) {

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getVendorSession } from "@/lib/betfair-vendor";
 
 export const runtime = "edge";
 
-// Hardcoded to prove OAuth works — edge runtime can't read env vars
-const VENDOR_SESSION = "6gI2QVT80KvjC84XfTu4DlrbZyCaIBXKAOc3Cs8yIYs=";
 const APP_KEY = "fCsY8wIPysRCihHi";
 const VENDOR_ID = "157798";
 const VENDOR_SECRET = "a3114dca-8775-4a6b-80d3-db338edd8cf5";
@@ -29,6 +28,13 @@ export async function GET(req: NextRequest) {
     console.log("[Betfair OAuth] Token exchange...");
     console.log("[Betfair OAuth] Request body:", JSON.stringify(requestBody));
 
+    const vendorSession = await getVendorSession();
+    if (!vendorSession) {
+      settingsUrl.searchParams.set("betfair", "error");
+      settingsUrl.searchParams.set("message", "Vendor session unavailable");
+      return NextResponse.redirect(settingsUrl);
+    }
+
     const tokenRes = await fetch(
       "https://api.betfair.com/exchange/account/rest/v1.0/token/",
       {
@@ -37,7 +43,7 @@ export async function GET(req: NextRequest) {
           "Content-Type": "application/json",
           "Accept": "application/json",
           "X-Application": APP_KEY,
-          "X-Authentication": VENDOR_SESSION,
+          "X-Authentication": vendorSession,
         },
         body: JSON.stringify(requestBody),
       }
