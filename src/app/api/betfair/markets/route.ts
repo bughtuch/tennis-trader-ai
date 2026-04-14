@@ -144,7 +144,8 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      return NextResponse.json({ success: true, marketBooks: parsed.result ?? [] });
+      const marketBooks = parsed.result ?? [];
+      return NextResponse.json({ success: true, marketBooks });
     }
 
     return NextResponse.json(

@@ -211,10 +211,10 @@ export default function MarketsPage() {
         return;
       }
 
-      // Fetch market books for odds (batch in groups of 10 to stay within Betfair limits)
+      // Fetch market books for odds (batch in groups of 5 to stay within Betfair API limits)
       const allMarketIds: string[] = catData.markets.map((m: { marketId: string }) => m.marketId);
       const bookMap = new Map();
-      const BATCH_SIZE = 10;
+      const BATCH_SIZE = 5;
       try {
         const batches: string[][] = [];
         for (let i = 0; i < allMarketIds.length; i += BATCH_SIZE) {
@@ -227,7 +227,8 @@ export default function MarketsPage() {
               headers,
               body: JSON.stringify({ action: "getMarketBook", marketIds: batchIds }),
             });
-            return bookRes.json();
+            const json = await bookRes.json();
+            return json;
           })
         );
         for (const bookData of results) {
@@ -238,7 +239,7 @@ export default function MarketsPage() {
           }
         }
       } catch {
-        // Odds fetch failed — show markets without odds
+        // Non-critical: markets still show, just without odds
       }
 
       // Merge catalogue + books
