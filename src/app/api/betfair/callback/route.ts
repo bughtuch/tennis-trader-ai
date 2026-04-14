@@ -91,19 +91,10 @@ export async function GET(req: NextRequest) {
       console.error("[Betfair OAuth Callback] Profile update failed:", dbErr);
     }
 
-    // Set session cookie and redirect to settings
+    // Redirect to settings with token in URL so client can save to localStorage
     settingsUrl.searchParams.set("betfair", "connected");
-    const response = NextResponse.redirect(settingsUrl);
-
-    response.cookies.set("betfair_session", sessionToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      maxAge: 4 * 60 * 60,
-      path: "/",
-    });
-
-    return response;
+    settingsUrl.searchParams.set("token", sessionToken);
+    return NextResponse.redirect(settingsUrl);
   } catch (err) {
     console.error("[Betfair OAuth Callback] Error:", err);
     settingsUrl.searchParams.set("betfair", "error");

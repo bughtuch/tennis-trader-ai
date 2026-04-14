@@ -316,6 +316,16 @@ function SettingsPage() {
     if (!betfairStatus) return;
 
     if (betfairStatus === "connected") {
+      // Save OAuth token to localStorage (same as direct login flow)
+      const oauthToken = searchParams.get("token");
+      if (oauthToken) {
+        try {
+          localStorage.setItem("betfair_token", oauthToken);
+          localStorage.setItem("betfair_connected_at", new Date().toISOString());
+        } catch { /* SSR guard */ }
+        setBetfairConnected(true);
+        setBetfairExpiry(new Date(Date.now() + 4 * 3600000).toISOString());
+      }
       setSaveMessage("Betfair connected successfully!");
       setTimeout(() => setSaveMessage(null), 5000);
       restoreSession();
@@ -324,7 +334,7 @@ function SettingsPage() {
       const message = searchParams.get("message") ?? "Connection failed";
       setAuthError(message);
     }
-    // Clean URL
+    // Clean URL (remove token from address bar)
     window.history.replaceState({}, "", "/settings");
   }, [searchParams, restoreSession, loadProfile, setAuthError]);
 
