@@ -31,7 +31,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { previousSnapshot } = body;
 
-    const sessionToken = req.cookies.get("betfair_session")?.value;
+    const sessionToken =
+      req.headers.get("x-betfair-token") ??
+      req.cookies.get("betfair_session")?.value;
     if (!sessionToken) {
       return NextResponse.json(
         { success: false, error: "Not authenticated" },

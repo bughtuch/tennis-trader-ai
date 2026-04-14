@@ -20,10 +20,11 @@ export async function POST(req: NextRequest) {
     const { action, marketIds } = body;
 
     // Use user's token if available, otherwise fall back to vendor session for public market data
+    // Priority: header (from localStorage via frontend) > cookie > vendor session
     const VENDOR_SESSION = "UzQJUeW2N2THhqeLD4R5GbKXa/MgxOOjuLoz44f3w5s=";
     const sessionToken =
-      req.cookies.get("betfair_session")?.value ??
       req.headers.get("x-betfair-token") ??
+      req.cookies.get("betfair_session")?.value ??
       VENDOR_SESSION;
 
     const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCihHi";

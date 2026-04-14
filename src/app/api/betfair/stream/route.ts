@@ -21,7 +21,9 @@ const MAX_LIFETIME_MS = 280_000; // close before maxDuration
 const HEARTBEAT_INTERVAL_MS = 15_000;
 
 export async function GET(req: NextRequest) {
-  const sessionToken = req.cookies.get("betfair_session")?.value;
+  const sessionToken =
+    req.headers.get("x-betfair-token") ??
+    req.cookies.get("betfair_session")?.value;
   if (!sessionToken) {
     return new Response(JSON.stringify({ error: "Not authenticated" }), {
       status: 401,
