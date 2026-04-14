@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Standard Node runtime — env vars work, Supabase cookies work
+// Vendor login is delegated to /api/betfair/vendor-login (edge runtime)
+
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const settingsUrl = new URL("/settings", req.url);
@@ -13,52 +16,22 @@ export async function GET(req: NextRequest) {
   const vendorId = "157798";
   const vendorSecret = process.env.BETFAIR_VENDOR_SECRET || "a3114dca-8775-4a6b-80d3-db338edd8cf5";
   const appKey = process.env.BETFAIR_APP_KEY || "fCsY8wIPysRCihHi";
-  const vendorUsername = process.env.BETFAIR_VENDOR_USERNAME || "totalis";
-  const vendorPassword = process.env.BETFAIR_VENDOR_PASSWORD || "Poppiegirl13@";
 
   try {
-    // Step 1: Login as vendor to get a fresh session token
-    console.log("[Betfair OAuth] Step 1: Logging in as vendor...");
+    // Step 1: Get vendor session via edge function (unblocked IPs)
+    console.log("[Betfair OAuth] Step 1: Getting vendor session via edge...");
+    const baseUrl = req.nextUrl.origin;
+    const vendorRes = await fetch(`${baseUrl}/api/betfair/vendor-login`);
+    const vendorData = await vendorRes.json();
 
-    const loginRes = await fetch("https://identitysso.betfair.com/api/login", {
-      method: "POST",
-      headers: {
-        "X-Application": appKey,
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Accept": "application/json",
-      },
-      body: new URLSearchParams({
-        username: vendorUsername,
-        password: vendorPassword,
-      }).toString(),
-      redirect: "follow",
-    });
-
-    const loginText = await loginRes.text();
-    console.log("[Betfair OAuth] Vendor login status:", loginRes.status);
-    console.log("[Betfair OAuth] Vendor login response:", loginText.substring(0, 200));
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let loginData: any;
-    try {
-      loginData = JSON.parse(loginText);
-    } catch {
-      return NextResponse.json({
-        error: "Vendor login returned non-JSON",
-        status: loginRes.status,
-        response: loginText.substring(0, 500),
-      }, { status: 502 });
-    }
-
-    if (loginData.status !== "SUCCESS" || !loginData.token) {
+    if (!vendorData.success || !vendorData.token) {
       return NextResponse.json({
         error: "Vendor login failed",
-        status: loginRes.status,
-        response: loginText.substring(0, 500),
+        detail: vendorData,
       }, { status: 502 });
     }
 
-    const vendorSessionToken = loginData.token;
+    const vendorSessionToken = vendorData.token;
     console.log("[Betfair OAuth] Vendor session obtained");
 
     // Step 2: Exchange authorization code for user access token
