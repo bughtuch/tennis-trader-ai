@@ -121,9 +121,6 @@ export default function SettingsPageWrapper() {
 function SettingsPage() {
   /* Betfair connection — Supabase is source of truth */
   const { authError, setAuthError, logout, restoreSession } = useAppStore();
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [betfairUsernameInput, setBetfairUsernameInput] = useState("");
-  const [betfairPasswordInput, setBetfairPasswordInput] = useState("");
 
   /* Connection state read from Supabase profile (not Zustand) */
   const [betfairConnected, setBetfairConnected] = useState(false);
@@ -534,46 +531,6 @@ function SettingsPage() {
     setRestoreLoading(false);
   }
 
-  async function handleConnect() {
-    if (!betfairUsernameInput || !betfairPasswordInput) {
-      setAuthError("Please enter your Betfair username and password.");
-      return;
-    }
-    setLoginLoading(true);
-    setAuthError(null);
-    try {
-      const res = await fetch("/api/betfair/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: betfairUsernameInput, password: betfairPasswordInput }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        // Persist token to localStorage so it survives page reloads
-        try {
-          localStorage.setItem("betfair_token", data.token);
-          localStorage.setItem("betfair_username", data.username ?? betfairUsernameInput);
-          localStorage.setItem("betfair_connected_at", new Date().toISOString());
-        } catch { /* SSR guard */ }
-        setBetfairConnected(true);
-        setBetfairUsername(data.username ?? betfairUsernameInput);
-        const expiry = new Date(Date.now() + 8 * 3600000).toISOString();
-        setBetfairExpiry(expiry);
-        setBetfairUsernameInput("");
-        setBetfairPasswordInput("");
-        setSaveMessage("Betfair connected successfully!");
-        setTimeout(() => setSaveMessage(null), 5000);
-        restoreSession();
-        loadProfile();
-      } else {
-        setAuthError(data.error ?? "Login failed");
-      }
-    } catch {
-      setAuthError("Network error. Please try again.");
-    }
-    setLoginLoading(false);
-  }
-
   async function handleDisconnect() {
     await logout();
     try {
@@ -674,47 +631,6 @@ function SettingsPage() {
                 Connect via Betfair (Recommended)
               </a>
               <p className="text-[10px] text-gray-600 text-center">Securely connects via Betfair&apos;s official OAuth — no credentials stored</p>
-
-              {/* Divider */}
-              <div className="flex items-center gap-3 py-1">
-                <div className="flex-1 h-px bg-gray-800" />
-                <span className="text-[10px] text-gray-600 uppercase tracking-wider">Or connect with credentials</span>
-                <div className="flex-1 h-px bg-gray-800" />
-              </div>
-
-              {/* Direct login form — kept as fallback */}
-              <div className="space-y-2">
-                <Label>Betfair Username</Label>
-                <TextInput
-                  value={betfairUsernameInput}
-                  onChange={setBetfairUsernameInput}
-                  placeholder="Your Betfair username"
-                />
-                <Label>Betfair Password</Label>
-                <TextInput
-                  value={betfairPasswordInput}
-                  onChange={setBetfairPasswordInput}
-                  placeholder="Your Betfair password"
-                  type="password"
-                />
-              </div>
-              <button
-                onClick={handleConnect}
-                disabled={loginLoading}
-                className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-300 bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >
-                {loginLoading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Connecting...
-                  </span>
-                ) : (
-                  "Connect with Credentials"
-                )}
-              </button>
             </div>
           )}
         </Card>
