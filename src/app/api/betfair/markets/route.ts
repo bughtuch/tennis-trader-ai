@@ -20,17 +20,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action, marketIds } = body;
 
-    // Priority: header (from localStorage via frontend) > cookie > vendor session from Supabase
-    const userToken =
+    // Priority: header (from localStorage via frontend) > cookie > vendor session
+    const sessionToken =
       req.headers.get("x-betfair-token") ??
-      req.cookies.get("betfair_session")?.value;
-    const sessionToken = userToken ?? (await getVendorSession()) ?? "";
-    if (!sessionToken) {
-      return NextResponse.json(
-        { success: false, error: "No Betfair session available" },
-        { status: 503 }
-      );
-    }
+      req.cookies.get("betfair_session")?.value ??
+      (await getVendorSession());
 
     const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCihHi";
     if (!appKey) {

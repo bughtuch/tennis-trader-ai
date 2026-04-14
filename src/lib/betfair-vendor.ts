@@ -6,8 +6,11 @@
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-/** Read vendor_session from Supabase app_config */
-export async function getVendorSession(): Promise<string | null> {
+// Hardcoded fallback until app_config table is created in Supabase
+const FALLBACK_VENDOR_SESSION = "6gI2QVT80KvjC84XfTu4DlrbZyCaIBXKAOc3Cs8yIYs=";
+
+/** Read vendor_session from Supabase app_config, with hardcoded fallback */
+export async function getVendorSession(): Promise<string> {
   try {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/app_config?key=eq.vendor_session&select=value`,
@@ -20,11 +23,11 @@ export async function getVendorSession(): Promise<string | null> {
         cache: "no-store",
       }
     );
-    if (!res.ok) return null;
+    if (!res.ok) return FALLBACK_VENDOR_SESSION;
     const rows = await res.json();
-    return rows?.[0]?.value ?? null;
+    return rows?.[0]?.value ?? FALLBACK_VENDOR_SESSION;
   } catch {
-    return null;
+    return FALLBACK_VENDOR_SESSION;
   }
 }
 
