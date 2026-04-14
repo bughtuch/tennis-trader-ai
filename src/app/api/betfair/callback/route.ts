@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
-
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const settingsUrl = new URL("/settings", req.url);
@@ -15,33 +13,26 @@ export async function GET(req: NextRequest) {
   const vendorId = "157798";
   const vendorSecret = process.env.BETFAIR_VENDOR_SECRET ?? "a3114dca-8775-4a6b-80d3-db338edd8cf5";
   const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCihHi";
-  // Must match EXACTLY what Betfair has registered, including trailing ?
-  const redirectUri = "https://tennistraderai.com/api/betfair/callback?";
 
   try {
-    // Exchange authorization code for session token
-    // Build body manually to avoid URLSearchParams double-encoding the redirect_uri
-    const formBody = [
-      `client_id=${vendorId}`,
-      `client_secret=${vendorSecret}`,
-      `grant_type=authorization_code`,
-      `code=${encodeURIComponent(code)}`,
-      `redirect_uri=${encodeURIComponent(redirectUri)}`,
-    ].join("&");
-
-    console.log("[Betfair OAuth] Token exchange POST to https://identitysso.betfair.com/api/token");
-    console.log("[Betfair OAuth] Body:", formBody);
+    // Exchange authorization code for access token
+    console.log("[Betfair OAuth] Token exchange POST to https://api.betfair.com/exchange/account/rest/v1.0/token/");
 
     const tokenRes = await fetch(
-      "https://identitysso.betfair.com/api/token",
+      "https://api.betfair.com/exchange/account/rest/v1.0/token/",
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type": "application/json",
           "Accept": "application/json",
           "X-Application": appKey,
         },
-        body: formBody,
+        body: JSON.stringify({
+          client_id: vendorId,
+          grant_type: "AUTHORIZATION_CODE",
+          code,
+          client_secret: vendorSecret,
+        }),
       }
     );
 
@@ -59,16 +50,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(settingsUrl);
     }
 
-    if (tokenData.status !== "SUCCESS" || !tokenData.token) {
+    if (!tokenData.access_token) {
       settingsUrl.searchParams.set("betfair", "error");
       settingsUrl.searchParams.set(
         "message",
-        tokenData.error ?? `Token exchange failed (${tokenData.status})`
+        tokenData.error ?? tokenData.detail ?? `Token exchange failed (status ${tokenRes.status})`
       );
       return NextResponse.redirect(settingsUrl);
     }
 
-    const sessionToken = tokenData.token;
+    const sessionToken = tokenData.access_token;
 
     // Save to Supabase profile
     try {
@@ -99,7 +90,7 @@ export async function GET(req: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 8 * 60 * 60,
+      maxAge: 4 * 60 * 60, // 4 hours (expires_in: 14400)
       path: "/",
     });
 
