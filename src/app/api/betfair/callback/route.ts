@@ -18,7 +18,15 @@ export async function GET(req: NextRequest) {
 
   try {
     // Exchange authorization code for access token
+    const requestBody = {
+      client_id: vendorId,
+      grant_type: "AUTHORIZATION_CODE",
+      code,
+      client_secret: vendorSecret,
+    };
+
     console.log("[Betfair OAuth] Token exchange POST to https://api.betfair.com/exchange/account/rest/v1.0/token/");
+    console.log("[Betfair OAuth] Request body:", JSON.stringify(requestBody));
 
     const tokenRes = await fetch(
       "https://api.betfair.com/exchange/account/rest/v1.0/token/",
@@ -29,36 +37,32 @@ export async function GET(req: NextRequest) {
           "Accept": "application/json",
           "X-Application": appKey,
         },
-        body: JSON.stringify({
-          client_id: vendorId,
-          grant_type: "AUTHORIZATION_CODE",
-          code,
-          client_secret: vendorSecret,
-        }),
+        body: JSON.stringify(requestBody),
       }
     );
 
-    console.log("[Betfair OAuth] Response status:", tokenRes.status);
     const tokenText = await tokenRes.text();
-    console.log("[Betfair OAuth] Response body (first 200):", tokenText.substring(0, 200));
+    console.log("[Betfair OAuth] Response status:", tokenRes.status);
+    console.log("[Betfair OAuth] Response text:", tokenText);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let tokenData: any;
     try {
       tokenData = JSON.parse(tokenText);
     } catch {
-      settingsUrl.searchParams.set("betfair", "error");
-      settingsUrl.searchParams.set("message", `Token endpoint returned non-JSON (status ${tokenRes.status})`);
-      return NextResponse.redirect(settingsUrl);
+      return NextResponse.json({
+        error: "Token exchange failed — non-JSON response",
+        status: tokenRes.status,
+        response: tokenText.substring(0, 500),
+      }, { status: 502 });
     }
 
     if (!tokenData.access_token) {
-      settingsUrl.searchParams.set("betfair", "error");
-      settingsUrl.searchParams.set(
-        "message",
-        tokenData.error ?? tokenData.detail ?? `Token exchange failed (status ${tokenRes.status})`
-      );
-      return NextResponse.redirect(settingsUrl);
+      return NextResponse.json({
+        error: "Token exchange failed — no access_token",
+        status: tokenRes.status,
+        response: tokenText.substring(0, 500),
+      }, { status: 502 });
     }
 
     const sessionToken = tokenData.access_token;
