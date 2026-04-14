@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Standard Node runtime — env vars work, Supabase cookies work
-// Vendor login is delegated to /api/betfair/vendor-login (edge runtime)
-
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const settingsUrl = new URL("/settings", req.url);
@@ -13,36 +10,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(settingsUrl);
   }
 
-  const vendorId = "157798";
-  const vendorSecret = process.env.BETFAIR_VENDOR_SECRET || "a3114dca-8775-4a6b-80d3-db338edd8cf5";
-  const appKey = process.env.BETFAIR_APP_KEY || "fCsY8wIPysRCihHi";
+  const vendorSession = process.env.BETFAIR_VENDOR_SESSION;
+  if (!vendorSession) {
+    return NextResponse.json({ error: "BETFAIR_VENDOR_SESSION env var not set" }, { status: 500 });
+  }
 
   try {
-    // Step 1: Get vendor session via edge function (unblocked IPs)
-    console.log("[Betfair OAuth] Step 1: Getting vendor session via edge...");
-    const baseUrl = req.nextUrl.origin;
-    const vendorRes = await fetch(`${baseUrl}/api/betfair/vendor-login`);
-    const vendorData = await vendorRes.json();
-
-    if (!vendorData.success || !vendorData.token) {
-      return NextResponse.json({
-        error: "Vendor login failed",
-        detail: vendorData,
-      }, { status: 502 });
-    }
-
-    const vendorSessionToken = vendorData.token;
-    console.log("[Betfair OAuth] Vendor session obtained");
-
-    // Step 2: Exchange authorization code for user access token
     const requestBody = {
-      client_id: vendorId,
+      client_id: "157798",
       grant_type: "AUTHORIZATION_CODE",
       code,
-      client_secret: vendorSecret,
+      client_secret: "a3114dca-8775-4a6b-80d3-db338edd8cf5",
     };
 
-    console.log("[Betfair OAuth] Step 2: Token exchange...");
+    console.log("[Betfair OAuth] Token exchange...");
     console.log("[Betfair OAuth] Request body:", JSON.stringify(requestBody));
 
     const tokenRes = await fetch(
@@ -52,16 +33,16 @@ export async function GET(req: NextRequest) {
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
-          "X-Application": appKey,
-          "X-Authentication": vendorSessionToken,
+          "X-Application": "fCsY8wIPysRCihHi",
+          "X-Authentication": vendorSession,
         },
         body: JSON.stringify(requestBody),
       }
     );
 
     const tokenText = await tokenRes.text();
-    console.log("[Betfair OAuth] Token exchange status:", tokenRes.status);
-    console.log("[Betfair OAuth] Token exchange response:", tokenText);
+    console.log("[Betfair OAuth] Response status:", tokenRes.status);
+    console.log("[Betfair OAuth] Response:", tokenText);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let tokenData: any;
@@ -84,7 +65,7 @@ export async function GET(req: NextRequest) {
     }
 
     const sessionToken = tokenData.access_token;
-    console.log("[Betfair OAuth] User access token obtained");
+    console.log("[Betfair OAuth] Access token obtained");
 
     // Save to Supabase profile
     try {
@@ -115,7 +96,7 @@ export async function GET(req: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 4 * 60 * 60, // 4 hours (expires_in: 14400)
+      maxAge: 4 * 60 * 60,
       path: "/",
     });
 
