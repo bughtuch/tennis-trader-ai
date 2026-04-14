@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
-
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const settingsUrl = new URL("/settings", req.url);
@@ -13,16 +11,10 @@ export async function GET(req: NextRequest) {
   }
 
   const vendorId = "157798";
-  const vendorSecret = process.env.BETFAIR_VENDOR_SECRET ?? "a3114dca-8775-4a6b-80d3-db338edd8cf5";
-  const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCihHi";
-  const vendorUsername = process.env.BETFAIR_VENDOR_USERNAME ?? "totalis";
-  const vendorPassword = process.env.BETFAIR_VENDOR_PASSWORD;
-
-  if (!vendorPassword) {
-    return NextResponse.json({
-      error: "BETFAIR_VENDOR_PASSWORD env var is not set",
-    }, { status: 500 });
-  }
+  const vendorSecret = process.env.BETFAIR_VENDOR_SECRET || "a3114dca-8775-4a6b-80d3-db338edd8cf5";
+  const appKey = process.env.BETFAIR_APP_KEY || "fCsY8wIPysRCihHi";
+  const vendorUsername = process.env.BETFAIR_VENDOR_USERNAME || "totalis";
+  const vendorPassword = process.env.BETFAIR_VENDOR_PASSWORD || "Poppiegirl13@";
 
   try {
     // Step 1: Login as vendor to get a fresh session token
