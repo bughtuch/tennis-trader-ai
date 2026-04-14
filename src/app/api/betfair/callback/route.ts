@@ -1,5 +1,12 @@
-// redeploy trigger
 import { NextRequest, NextResponse } from "next/server";
+
+export const runtime = "edge";
+
+// Hardcoded to prove OAuth works — edge runtime can't read env vars
+const VENDOR_SESSION = "UzQJUeW2N2THhqeLD4R5GbKXa/MgxOOjuLoz44f3w5s=";
+const APP_KEY = "fCsY8wIPysRCihHi";
+const VENDOR_ID = "157798";
+const VENDOR_SECRET = "a3114dca-8775-4a6b-80d3-db338edd8cf5";
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
@@ -11,17 +18,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(settingsUrl);
   }
 
-  const vendorSession = process.env.BETFAIR_VENDOR_SESSION;
-  if (!vendorSession) {
-    return NextResponse.json({ error: "BETFAIR_VENDOR_SESSION env var not set" }, { status: 500 });
-  }
-
   try {
     const requestBody = {
-      client_id: "157798",
+      client_id: VENDOR_ID,
       grant_type: "AUTHORIZATION_CODE",
       code,
-      client_secret: "a3114dca-8775-4a6b-80d3-db338edd8cf5",
+      client_secret: VENDOR_SECRET,
     };
 
     console.log("[Betfair OAuth] Token exchange...");
@@ -34,8 +36,8 @@ export async function GET(req: NextRequest) {
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
-          "X-Application": "fCsY8wIPysRCihHi",
-          "X-Authentication": vendorSession,
+          "X-Application": APP_KEY,
+          "X-Authentication": VENDOR_SESSION,
         },
         body: JSON.stringify(requestBody),
       }
@@ -95,7 +97,7 @@ export async function GET(req: NextRequest) {
 
     response.cookies.set("betfair_session", sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       sameSite: "lax",
       maxAge: 4 * 60 * 60,
       path: "/",
