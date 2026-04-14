@@ -60,7 +60,7 @@ export default function Home() {
               href="/auth/signup"
               className="group relative w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold text-lg text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02]"
             >
-              Start with Shadow Mode &mdash; Free
+              Start Paper Trading &mdash; Free
               <span className="ml-2 inline-block transition-transform group-hover:translate-x-1">
                 &rarr;
               </span>
@@ -201,7 +201,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ───────── Shadow Mode ───────── */}
+      {/* ───────── Paper Trading ───────── */}
       <section className="py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-purple-500/5 rounded-full blur-3xl" />
 
@@ -210,7 +210,7 @@ export default function Home() {
             {/* Left - Copy */}
             <div>
               <p className="text-[10px] tracking-[0.2em] uppercase text-purple-400 font-medium mb-3 font-[family-name:var(--font-jetbrains)]">
-                SHADOW MODE
+                PAPER TRADING
               </p>
               <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 font-[family-name:var(--font-jakarta)]">
                 Learn before you earn
@@ -221,25 +221,25 @@ export default function Home() {
                 without risking a penny.
               </p>
               <p className="text-gray-400 mb-8 leading-relaxed font-[family-name:var(--font-dm)]">
-                After 10 shadow trades, you&apos;ll know if tennis trading is for you. No risk.
+                After 10 paper trades, you&apos;ll know if tennis trading is for you. No risk.
               </p>
               <Link
                 href="/auth/signup"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl text-white font-semibold transition-all duration-300 hover:shadow-[0_0_30px_rgba(139,92,246,0.3)] hover:scale-[1.02]"
               >
-                Start Shadow Trading &mdash; Free
+                Start Paper Trading &mdash; Free
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                 </svg>
               </Link>
             </div>
 
-            {/* Right - Mock Shadow Trade Card */}
+            {/* Right - Paper Trade Card */}
             <div className="bg-gray-900/70 border border-gray-800/50 rounded-2xl p-6 space-y-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-                  <span className="text-sm text-purple-400 font-semibold font-[family-name:var(--font-jetbrains)]">SHADOW MODE</span>
+                  <span className="text-sm text-purple-400 font-semibold font-[family-name:var(--font-jetbrains)]">PAPER MODE</span>
                 </div>
                 <span className="text-xs text-gray-500 font-[family-name:var(--font-dm)]">No real money</span>
               </div>
@@ -465,7 +465,7 @@ export default function Home() {
                   <ComparisonRow feature="No download required" us={true} angel={false} geeks={false} />
                   <ComparisonRow feature="AI trading signals" us={true} angel={false} geeks={false} />
                   <ComparisonRow feature="AI exit strategies" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="Shadow mode (paper trading)" us={true} angel={false} geeks={false} />
+                  <ComparisonRow feature="Paper trading mode" us={true} angel={false} geeks={false} />
                   <ComparisonRow feature="Trading DNA analytics" us={true} angel={false} geeks={false} />
                   <ComparisonRow feature="Streak protection" us={true} angel={false} geeks={false} />
                   <ComparisonRow feature="Post-trade AI coaching" us={true} angel={false} geeks={false} />
@@ -490,7 +490,7 @@ export default function Home() {
               One plan. Everything included.
             </h2>
             <p className="text-gray-400 max-w-lg mx-auto font-[family-name:var(--font-dm)]">
-              Start free with Shadow Mode. Subscribe when you&apos;re ready to go live.
+              Start free with Paper Trading. Subscribe when you&apos;re ready to go live.
             </p>
           </div>
 
@@ -526,7 +526,7 @@ export default function Home() {
                   "Trading DNA analysis",
                   "AI Coach post-trade review",
                   "Pre-match AI briefings",
-                  "Shadow mode (paper trading)",
+                  "Paper trading mode",
                   "Streak Protection",
                   "Works on Mac, iPhone, iPad",
                   "Priority support",
@@ -556,11 +556,11 @@ export default function Home() {
                 href="/auth/signup"
                 className="block w-full py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02]"
               >
-                Start with Shadow Mode &mdash; Free
+                Start Paper Trading &mdash; Free
               </Link>
 
               <p className="text-center text-xs text-gray-600 mt-4 font-[family-name:var(--font-dm)]">
-                Shadow Mode is free forever. Subscribe when you&apos;re ready for live trading.
+                Paper trading is free forever. Subscribe when you&apos;re ready for live trading.
               </p>
 
               {/* Affiliate teaser */}
@@ -626,13 +626,13 @@ export default function Home() {
             Ready to trade tennis on your terms?
           </h2>
           <p className="text-gray-400 max-w-lg mx-auto mb-8 font-[family-name:var(--font-dm)]">
-            Start with Shadow Mode for free. Practice with real odds, zero risk. Subscribe when you&apos;re ready.
+            Start with Paper Trading for free. Practice with real odds, zero risk. Subscribe when you&apos;re ready.
           </p>
           <Link
             href="/auth/signup"
             className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold text-lg transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02]"
           >
-            Start with Shadow Mode &mdash; Free
+            Start Paper Trading &mdash; Free
             <svg
               className="w-5 h-5"
               fill="none"

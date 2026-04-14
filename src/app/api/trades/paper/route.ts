@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action } = body;
 
-    /* ─── Place Shadow Trade ─── */
-    if (action === "placeShadowTrade") {
+    /* ─── Place Paper Trade ─── */
+    if (action === "placePaperTrade" || action === "placeShadowTrade") {
       const { marketId, selectionId, side, price, size, player } = body;
 
       if (!marketId || !selectionId || !side || !price || !size) {
@@ -53,8 +53,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    /* ─── Close Shadow Trade (green-up) ─── */
-    if (action === "closeShadowTrade") {
+    /* ─── Close Paper Trade (green-up) ─── */
+    if (action === "closePaperTrade" || action === "closeShadowTrade") {
       const { tradeId, exitPrice, pnl } = body;
 
       if (!tradeId || !Number.isFinite(exitPrice) || !Number.isFinite(pnl)) {
@@ -92,8 +92,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    /* ─── Get Shadow Stats ─── */
-    if (action === "getShadowStats") {
+    /* ─── Get Paper Stats ─── */
+    if (action === "getPaperStats" || action === "getShadowStats") {
       const { data: trades } = await supabase
         .from("trades")
         .select("pnl")

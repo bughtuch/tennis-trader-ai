@@ -138,10 +138,8 @@ interface AppState {
   streamStatus: "disconnected" | "connecting" | "connected" | "fallback";
   isStreaming: boolean;
 
-  // Shadow Mode
-  shadowMode: boolean;
-  setShadowMode: (enabled: boolean) => void;
-  placeShadowTrade: (params: {
+  // Paper Trading
+  placePaperTrade: (params: {
     marketId: string;
     selectionId: number;
     side: "BACK" | "LAY";
@@ -427,18 +425,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   streamStatus: "disconnected",
   isStreaming: false,
 
-  // ─── Shadow Mode ───
-  shadowMode: false,
-  setShadowMode: (enabled) => set({ shadowMode: enabled }),
-
-  placeShadowTrade: async ({ marketId, selectionId, side, price, size, player }) => {
+  // ─── Paper Trading ───
+  placePaperTrade: async ({ marketId, selectionId, side, price, size, player }) => {
     set({ tradeLoading: true, tradeError: null, lastTradeSuccess: null });
     try {
-      const res = await fetch("/api/trades/shadow", {
+      const res = await fetch("/api/trades/paper", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "placeShadowTrade",
+          action: "placePaperTrade",
           marketId,
           selectionId,
           side,
@@ -451,14 +446,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (data.success) {
         set({
           tradeLoading: false,
-          lastTradeSuccess: `SHADOW ${side} £${size} @ ${price.toFixed(2)} recorded`,
+          lastTradeSuccess: `PAPER ${side} £${size} @ ${price.toFixed(2)} recorded`,
         });
         return true;
       }
-      set({ tradeError: data.error ?? "Shadow trade failed", tradeLoading: false });
+      set({ tradeError: data.error ?? "Paper trade failed", tradeLoading: false });
       return false;
     } catch {
-      set({ tradeError: "Network error placing shadow trade", tradeLoading: false });
+      set({ tradeError: "Network error placing paper trade", tradeLoading: false });
       return false;
     }
   },

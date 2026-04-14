@@ -19,51 +19,6 @@ interface Market {
   matchedVolume: string;
 }
 
-/* ─── Mock data (fallback when not connected) ─── */
-
-const MOCK_MARKETS: Market[] = [
-  {
-    id: "demo-1",
-    tournament: "ATP Finals",
-    tournamentColor: "bg-blue-500/15 text-blue-400",
-    player1: { name: "Novak Djokovic", odds: 1.54 },
-    player2: { name: "Carlos Alcaraz", odds: 2.72 },
-    isLive: true,
-    startTime: null,
-    matchedVolume: "£142K",
-  },
-  {
-    id: "demo-2",
-    tournament: "ATP Finals",
-    tournamentColor: "bg-blue-500/15 text-blue-400",
-    player1: { name: "Jannik Sinner", odds: 1.38 },
-    player2: { name: "Daniil Medvedev", odds: 3.25 },
-    isLive: true,
-    startTime: null,
-    matchedVolume: "£98K",
-  },
-  {
-    id: "demo-3",
-    tournament: "Australian Open",
-    tournamentColor: "bg-blue-500/15 text-blue-400",
-    player1: { name: "Casper Ruud", odds: 2.1 },
-    player2: { name: "Taylor Fritz", odds: 1.82 },
-    isLive: false,
-    startTime: "Starts in 2h 15m",
-    matchedVolume: "£34K",
-  },
-  {
-    id: "demo-4",
-    tournament: "WTA Finals",
-    tournamentColor: "bg-purple-500/15 text-purple-400",
-    player1: { name: "Iga Swiatek", odds: 1.65 },
-    player2: { name: "Coco Gauff", odds: 2.34 },
-    isLive: false,
-    startTime: "Starts in 4h 30m",
-    matchedVolume: "£21K",
-  },
-];
-
 /* ─── Helpers ─── */
 
 function formatVolume(v: number) {
@@ -166,7 +121,6 @@ export default function MarketsPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [markets, setMarkets] = useState<Market[]>([]);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastMarket, setLastMarket] = useState<LastMarket | null>(null);
 
@@ -240,15 +194,7 @@ export default function MarketsPage() {
   const loadMarkets = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Check if Betfair session is active (via useBetfairToken hook)
-      if (!betfairConnected) {
-        setIsDemoMode(true);
-        setMarkets(MOCK_MARKETS);
-        setLoading(false);
-        return;
-      }
-
-      // 2. Fetch market catalogue
+      // Always fetch real Betfair markets (API falls back to vendor session if user not connected)
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (betfairToken) headers["x-betfair-token"] = betfairToken;
 
@@ -260,13 +206,12 @@ export default function MarketsPage() {
       const catData = await catRes.json();
 
       if (!catData.success || !catData.markets?.length) {
-        setIsDemoMode(true);
-        setMarkets(MOCK_MARKETS);
+        setMarkets([]);
         setLoading(false);
         return;
       }
 
-      // 3. Fetch market books for odds (batch in groups of 10 to stay within Betfair limits)
+      // Fetch market books for odds (batch in groups of 10 to stay within Betfair limits)
       const allMarketIds: string[] = catData.markets.map((m: { marketId: string }) => m.marketId);
       const bookMap = new Map();
       const BATCH_SIZE = 10;
@@ -296,7 +241,7 @@ export default function MarketsPage() {
         // Odds fetch failed — show markets without odds
       }
 
-      // 4. Merge catalogue + books
+      // Merge catalogue + books
       const mapped = catData.markets
         .map((cat: { marketId: string }) => mapBetfairToMarket(cat, bookMap.get(cat.marketId)))
         .filter((m: Market | null): m is Market => m !== null);
@@ -309,14 +254,12 @@ export default function MarketsPage() {
       });
 
       setMarkets(mapped);
-      setIsDemoMode(false);
     } catch {
-      setIsDemoMode(true);
-      setMarkets(MOCK_MARKETS);
+      setMarkets([]);
     } finally {
       setLoading(false);
     }
-  }, [betfairConnected, betfairToken]);
+  }, [betfairToken]);
 
   useEffect(() => {
     loadMarkets();
@@ -360,15 +303,12 @@ export default function MarketsPage() {
         </div>
       </div>
 
-      {/* Demo Mode Banner */}
-      {isDemoMode && (
-        <div className="border-b border-amber-500/20 bg-amber-500/5">
+      {/* Not Connected Banner */}
+      {!betfairConnected && (
+        <div className="border-b border-blue-500/20 bg-blue-500/5">
           <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">
-              DEMO
-            </span>
-            <span className="text-xs text-amber-400/80">
-              Connect Betfair in Settings for live markets
+            <span className="text-xs text-blue-400/80">
+              Connect your Betfair account in Settings to trade
             </span>
           </div>
         </div>

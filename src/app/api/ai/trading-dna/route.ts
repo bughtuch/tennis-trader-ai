@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       stake: t.stake,
       pnl: t.pnl,
       greened_up: t.greened_up,
-      shadow: t.is_shadow,
+      paper: t.is_shadow,
       time: t.closed_at,
     }));
 

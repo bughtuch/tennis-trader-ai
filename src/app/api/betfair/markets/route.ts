@@ -19,15 +19,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action, marketIds } = body;
 
+    // Use user's token if available, otherwise fall back to vendor session for public market data
+    const VENDOR_SESSION = "UzQJUeW2N2THhqeLD4R5GbKXa/MgxOOjuLoz44f3w5s=";
     const sessionToken =
       req.cookies.get("betfair_session")?.value ??
-      req.headers.get("x-betfair-token");
-    if (!sessionToken) {
-      return NextResponse.json(
-        { success: false, error: "Not authenticated. Please log in first." },
-        { status: 401 }
-      );
-    }
+      req.headers.get("x-betfair-token") ??
+      VENDOR_SESSION;
 
     const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCihHi";
     if (!appKey) {

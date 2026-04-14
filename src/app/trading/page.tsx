@@ -200,8 +200,8 @@ function TradingPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /* ─── Shadow Mode ─── */
-  const [isShadowMode, setIsShadowMode] = useState(false);
+  /* ─── Paper Trading Mode ─── */
+  const [isPaperMode, setIsPaperMode] = useState(false);
 
   /* ─── Paper / Real Trade Modals ─── */
   const [pendingPaperTrade, setPendingPaperTrade] = useState<{ price: number; side: "BACK" | "LAY" } | null>(null);
@@ -223,11 +223,11 @@ function TradingPage() {
       if (!user) return;
       const { data } = await supabase
         .from("profiles")
-        .select("shadow_mode, streak_protection_enabled, streak_threshold")
+        .select("streak_protection_enabled, streak_threshold")
         .eq("id", user.id)
         .single();
       if (data) {
-        setIsShadowMode(data.shadow_mode ?? true);
+        setIsPaperMode(true);
         setStreakProtectionEnabled(data.streak_protection_enabled ?? true);
         setStreakThreshold(data.streak_threshold ?? 3);
       }
@@ -302,7 +302,7 @@ function TradingPage() {
       .select("*")
       .eq("user_id", user.id)
       .eq("status", "open")
-      .eq("is_shadow", isShadowMode)
+      .eq("is_shadow", isPaperMode)
       .order("created_at", { ascending: false });
     if (open) setOpenPositions(open);
 
@@ -311,11 +311,11 @@ function TradingPage() {
       .select("*")
       .eq("user_id", user.id)
       .eq("status", "closed")
-      .eq("is_shadow", isShadowMode)
+      .eq("is_shadow", isPaperMode)
       .order("closed_at", { ascending: false })
       .limit(20);
     if (closed) setTradeHistory(closed);
-  }, [isShadowMode]);
+  }, [isPaperMode]);
 
   useEffect(() => {
     fetchTrades();
@@ -512,7 +512,7 @@ function TradingPage() {
     marketBook,
     fetchMarketBook,
     placeTrade,
-    placeShadowTrade,
+    placePaperTrade,
     tradeLoading,
     tradeError,
     lastTradeSuccess,
@@ -685,18 +685,18 @@ function TradingPage() {
     },
   };
 
-  /* ─── Demo ladder & runner for paper trading when not connected ─── */
-  const demoPlayerOdds = {
+  /* ─── Fallback ladder & runner for paper trading when not connected ─── */
+  const fallbackPlayerOdds = {
     player1: livePlayerOdds.player1 || urlP1Odds,
     player2: livePlayerOdds.player2 || urlP2Odds,
   };
-  const demoSelectedOdds = demoPlayerOdds[selectedPlayer];
+  const fallbackSelectedOdds = fallbackPlayerOdds[selectedPlayer];
 
-  const demoLadderData = useMemo((): LadderRow[] | null => {
+  const fallbackLadderData = useMemo((): LadderRow[] | null => {
     if (ladderData && ladderData.length > 0) return null; // real ladder exists
-    if (!demoSelectedOdds || demoSelectedOdds <= 1.01) return null;
+    if (!fallbackSelectedOdds || fallbackSelectedOdds <= 1.01) return null;
 
-    const center = roundToTick(demoSelectedOdds);
+    const center = roundToTick(fallbackSelectedOdds);
     const TICKS = 8;
     const low = moveByTicks(center, -TICKS);
     const high = moveByTicks(center, TICKS);
@@ -718,23 +718,23 @@ function TradingPage() {
       tick = next;
     }
     return rows;
-  }, [ladderData, demoSelectedOdds]);
+  }, [ladderData, fallbackSelectedOdds]);
 
-  // Use demo ladder when real ladder is empty
-  const activeLadderData = (ladderData && ladderData.length > 0) ? ladderData : demoLadderData;
+  // Use fallback ladder when real ladder is empty
+  const activeLadderData = (ladderData && ladderData.length > 0) ? ladderData : fallbackLadderData;
 
-  // Demo runner for paper trades when no Betfair connection
-  const demoRunner = useMemo(() => {
+  // Fallback runner for paper trades when no Betfair connection
+  const fallbackRunner = useMemo(() => {
     if (selectedRunner) return null;
-    if (!marketId || !demoSelectedOdds || demoSelectedOdds <= 1.01) return null;
+    if (!marketId || !fallbackSelectedOdds || fallbackSelectedOdds <= 1.01) return null;
     return {
       selectionId: selectedPlayer === "player1" ? 99001 : 99002,
     };
-  }, [selectedRunner, marketId, selectedPlayer, demoSelectedOdds]);
+  }, [selectedRunner, marketId, selectedPlayer, fallbackSelectedOdds]);
 
-  const activeRunner = selectedRunner ?? demoRunner;
+  const activeRunner = selectedRunner ?? fallbackRunner;
 
-  // Update displayPlayers to include demo odds when no live data
+  // Update displayPlayers to include URL odds when no live data
   const activeDisplayPlayers = {
     player1: {
       ...displayPlayers.player1,
@@ -856,7 +856,7 @@ function TradingPage() {
   /* ─── Handle trade click ─── */
   async function handleTradeClick(price: number, side: "BACK" | "LAY") {
     if (!marketId || !selectedRunner) {
-      // Paper trade fallback: if no real runner but demo runner exists
+      // Paper trade fallback: if no real runner but fallback runner exists
       if (marketId && activeRunner && !selectedRunner) {
         setPendingPaperTrade({ price, side });
         return;
@@ -870,9 +870,9 @@ function TradingPage() {
       return;
     }
 
-    if (isShadowMode) {
+    if (isPaperMode) {
       const playerName = displayPlayers[selectedPlayer].name;
-      await placeShadowTrade({
+      await placePaperTrade({
         marketId,
         selectionId: selectedRunner.selectionId,
         side,
@@ -916,14 +916,14 @@ function TradingPage() {
   /* ─── Paper trade execution (from modal confirm) ─── */
   async function executePaperTrade(price: number, side: "BACK" | "LAY") {
     if (!marketId) return;
-    const runner = selectedRunner ?? demoRunner;
+    const runner = selectedRunner ?? fallbackRunner;
     if (!runner) return;
 
-    // Activate shadow mode so positions panel shows paper trades
-    if (!isShadowMode) setIsShadowMode(true);
+    // Activate paper mode so positions panel shows paper trades
+    if (!isPaperMode) setIsPaperMode(true);
 
     const playerName = displayPlayers[selectedPlayer].name;
-    await placeShadowTrade({
+    await placePaperTrade({
       marketId,
       selectionId: runner.selectionId,
       side,
@@ -958,10 +958,10 @@ function TradingPage() {
   async function checkPaperMilestone() {
     try {
       if (localStorage.getItem("paperMilestoneDismissed")) return;
-      const res = await fetch("/api/trades/shadow", {
+      const res = await fetch("/api/trades/paper", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "getShadowStats" }),
+        body: JSON.stringify({ action: "getPaperStats" }),
       });
       const data = await res.json();
       if (data.success && data.stats.totalTrades >= 10) {
@@ -1236,11 +1236,11 @@ function TradingPage() {
     selectedPlayer,
     isLive,
     marketId,
-    selectedRunner: selectedRunner ?? demoRunner,
+    selectedRunner: selectedRunner ?? fallbackRunner,
     ladderData: activeLadderData,
     placeTrade,
-    placeShadowTrade,
-    isShadowMode,
+    placePaperTrade,
+    isPaperMode,
     isConnected,
     setPendingPaperTrade,
     setPendingRealTrade,
@@ -1278,8 +1278,8 @@ function TradingPage() {
             return;
           }
           if (bestBack && s.marketId && s.selectedRunner) {
-            if (s.isShadowMode) {
-              s.placeShadowTrade({
+            if (s.isPaperMode) {
+              s.placePaperTrade({
                 marketId: s.marketId,
                 selectionId: s.selectedRunner.selectionId,
                 side: "BACK",
@@ -1316,8 +1316,8 @@ function TradingPage() {
             return;
           }
           if (bestLay && s.marketId && s.selectedRunner) {
-            if (s.isShadowMode) {
-              s.placeShadowTrade({
+            if (s.isPaperMode) {
+              s.placePaperTrade({
                 marketId: s.marketId,
                 selectionId: s.selectedRunner.selectionId,
                 side: "LAY",
@@ -1356,19 +1356,19 @@ function TradingPage() {
           break;
         case "g":
           if (s.greenUpResult && s.marketId && s.selectedRunner) {
-            if (s.isShadowMode) {
-              // Shadow green-up
+            if (s.isPaperMode) {
+              // Paper green-up
               const runnerPositions = s.openPositions.filter(
                 (p: SupabaseTrade) =>
                   p.selection_id === String(s.selectedRunner.selectionId)
               );
               Promise.all(
                 runnerPositions.map((pos: SupabaseTrade) =>
-                  fetch("/api/trades/shadow", {
+                  fetch("/api/trades/paper", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                      action: "closeShadowTrade",
+                      action: "closePaperTrade",
                       tradeId: pos.id,
                       exitPrice: s.currentLayPrice,
                       pnl: s.greenUpResult!.equalProfit,
@@ -1388,7 +1388,7 @@ function TradingPage() {
                 )
               ).then(() => {
                 s.setToast({
-                  message: `SHADOW green-up: lock £${s.greenUpResult!.equalProfit.toFixed(2)}`,
+                  message: `PAPER green-up: lock £${s.greenUpResult!.equalProfit.toFixed(2)}`,
                   type: "success",
                 });
                 s.fetchTrades();
@@ -1730,14 +1730,14 @@ function TradingPage() {
             onClick={async () => {
               if (!marketId || !selectedRunner) return;
 
-              if (isShadowMode) {
-                // Shadow green-up: close all open positions via API
+              if (isPaperMode) {
+                // Paper green-up: close all open positions via API
                 for (const pos of selectedRunnerPositions) {
-                  await fetch("/api/trades/shadow", {
+                  await fetch("/api/trades/paper", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                      action: "closeShadowTrade",
+                      action: "closePaperTrade",
                       tradeId: pos.id,
                       exitPrice: currentLayPrice,
                       pnl: greenUpResult.equalProfit,
@@ -1756,7 +1756,7 @@ function TradingPage() {
                   });
                 }
                 setToast({
-                  message: `SHADOW green-up: lock £${greenUpResult.equalProfit.toFixed(2)}`,
+                  message: `PAPER green-up: lock £${greenUpResult.equalProfit.toFixed(2)}`,
                   type: "success",
                 });
                 setTimeout(() => setToast(null), 4000);
@@ -1790,7 +1790,7 @@ function TradingPage() {
                 : "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 shadow-[0_0_20px_rgba(239,68,68,0.3)]"
             }`}
           >
-            {isShadowMode && <span className="mr-1">SHADOW</span>}
+            {isPaperMode && <span className="mr-1">PAPER</span>}
             {greenUpResult.greenUpSide} £{greenUpResult.greenUpStake.toFixed(2)} @{" "}
             {currentLayPrice.toFixed(2)} → Lock{" "}
             {greenUpResult.equalProfit >= 0 ? "+" : ""}£
@@ -1809,9 +1809,9 @@ function TradingPage() {
               tradeLoading={tradeLoading}
               onScaleOut={async (side, price, size) => {
                 if (!marketId || !selectedRunner) return false;
-                if (isShadowMode) {
+                if (isPaperMode) {
                   const playerName = displayPlayers[selectedPlayer].name;
-                  await placeShadowTrade({
+                  await placePaperTrade({
                     marketId,
                     selectionId: selectedRunner.selectionId,
                     side,
@@ -2114,14 +2114,14 @@ function TradingPage() {
               <div
                 key={pos.id}
                 className={`rounded-xl p-3 ${
-                  isShadowMode
+                  isPaperMode
                     ? "bg-purple-500/5 border border-purple-500/20"
                     : "bg-blue-500/5 border border-blue-500/20"
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    {isShadowMode && <span className="text-sm">👻</span>}
+                    {isPaperMode && <span className="text-sm">👻</span>}
                     <span
                       className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                         pos.side === "BACK"
@@ -2135,8 +2135,8 @@ function TradingPage() {
                       {pos.player ?? pos.selection_id}
                     </span>
                   </div>
-                  <span className={`font-mono text-xs ${isShadowMode ? "text-purple-400" : "text-gray-500"}`}>
-                    {isShadowMode ? "Shadow" : "Open"}
+                  <span className={`font-mono text-xs ${isPaperMode ? "text-purple-400" : "text-gray-500"}`}>
+                    {isPaperMode ? "Paper" : "Open"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-gray-500">
@@ -2445,12 +2445,12 @@ function TradingPage() {
         </div>
       )}
 
-      {/* Shadow Mode Banner */}
-      {isShadowMode && (
+      {/* Paper Mode Banner */}
+      {isPaperMode && (
         <div className="border-b border-purple-500/20 bg-purple-500/5">
           <div className="px-2 md:px-4 py-1.5 flex items-center gap-2">
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400">
-              SHADOW MODE
+              PAPER MODE
             </span>
             <span className="text-xs text-purple-400/80">
               Practice trading with real odds. No money moves.
@@ -2459,15 +2459,15 @@ function TradingPage() {
         </div>
       )}
 
-      {/* Demo Mode Banner */}
-      {!isLive && !isShadowMode && (
+      {/* Not Connected Banner */}
+      {!isLive && !isPaperMode && (
         <div className="border-b border-amber-500/20 bg-amber-500/5">
           <div className="px-2 md:px-4 py-1.5 flex items-center gap-2">
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">
-              DEMO
+              NOT CONNECTED
             </span>
             <span className="text-xs text-amber-400/80">
-              Demo mode -- connect Betfair in Settings for live trading
+              Connect Betfair in Settings for live trading
             </span>
           </div>
         </div>
@@ -2865,8 +2865,8 @@ function TradingPage() {
                 tradeLoading={tradeLoading}
                 onExecute={async (side, price, size) => {
                   if (!marketId || !selectedRunner) return;
-                  if (isShadowMode) {
-                    await placeShadowTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size, player: displayPlayers[selectedPlayer].name });
+                  if (isPaperMode) {
+                    await placePaperTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size, player: displayPlayers[selectedPlayer].name });
                     fetchTrades();
                   } else if (isLive) {
                     await placeTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size });
@@ -2904,8 +2904,8 @@ function TradingPage() {
                   tradeLoading={tradeLoading}
                   onExecute={async (side, price, size) => {
                     if (!marketId || !selectedRunner) return;
-                    if (isShadowMode) {
-                      await placeShadowTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size, player: displayPlayers[selectedPlayer].name });
+                    if (isPaperMode) {
+                      await placePaperTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size, player: displayPlayers[selectedPlayer].name });
                       fetchTrades();
                     } else if (isLive) {
                       await placeTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size });
