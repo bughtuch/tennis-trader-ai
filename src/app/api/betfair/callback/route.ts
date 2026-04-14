@@ -76,30 +76,9 @@ export async function GET(req: NextRequest) {
     const sessionToken = tokenData.access_token;
     console.log("[Betfair OAuth] Access token obtained");
 
-    // Save to Supabase profile
-    try {
-      const { createServerClient } = await import("@/lib/supabase-server");
-      const supabase = await createServerClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        await supabase
-          .from("profiles")
-          .update({
-            betfair_connected: true,
-            betfair_session_token: sessionToken,
-            betfair_connected_at: new Date().toISOString(),
-          })
-          .eq("id", user.id);
-      }
-    } catch (dbErr) {
-      console.error("[Betfair OAuth Callback] Profile update failed:", dbErr);
-    }
-
-    // Redirect straight to settings — token is already in Supabase,
-    // settings page reads it on mount and copies to localStorage
+    // Pass token to settings page via URL — client-side React saves to localStorage
     settingsUrl.searchParams.set("betfair", "connected");
+    settingsUrl.searchParams.set("bt", sessionToken);
     return NextResponse.redirect(settingsUrl);
   } catch (err) {
     console.error("[Betfair OAuth Callback] Error:", err);

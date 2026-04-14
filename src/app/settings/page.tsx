@@ -265,25 +265,6 @@ function SettingsPage() {
     }
   }, []);
 
-  // Re-read Supabase profile and sync token to localStorage (used after OAuth redirect)
-  const syncBetfairTokenToLocalStorage = useCallback(async () => {
-    try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("betfair_session_token, betfair_connected_at, betfair_username")
-        .eq("id", user.id)
-        .single();
-      if (data?.betfair_session_token) {
-        localStorage.setItem("betfair_token", data.betfair_session_token);
-        localStorage.setItem("betfair_connected_at", data.betfair_connected_at ?? new Date().toISOString());
-        if (data.betfair_username) localStorage.setItem("betfair_username", data.betfair_username);
-      }
-    } catch { /* non-critical */ }
-  }, []);
-
   useEffect(() => {
     loadProfile();
     // Check localStorage for persisted Betfair session (faster than Supabase)
@@ -341,11 +322,19 @@ function SettingsPage() {
     if (!betfairStatus) return;
 
     if (betfairStatus === "connected") {
-      // Token is saved in Supabase by the callback route — reload profile to pick it up
-      loadProfile().then(() => {
-        // After profile loads, sync Supabase token to localStorage for other pages
-        syncBetfairTokenToLocalStorage();
-      });
+      // Save OAuth token from URL to localStorage
+      const bt = searchParams.get("bt");
+      if (bt) {
+        try {
+          localStorage.setItem("betfair_token", bt);
+          localStorage.setItem("betfair_connected_at", new Date().toISOString());
+          localStorage.setItem("betfair_username", "Connected via OAuth");
+          window.history.replaceState({}, "", "/settings");
+        } catch { /* SSR guard */ }
+        setBetfairConnected(true);
+        setBetfairExpiry(new Date(Date.now() + 8 * 3600000).toISOString());
+        setBetfairUsername("Connected via OAuth");
+      }
       setSaveMessage("Betfair connected successfully!");
       setTimeout(() => setSaveMessage(null), 5000);
       restoreSession();
