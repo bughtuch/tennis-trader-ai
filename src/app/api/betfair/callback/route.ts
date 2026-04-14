@@ -15,9 +15,61 @@ export async function GET(req: NextRequest) {
   const vendorId = "157798";
   const vendorSecret = process.env.BETFAIR_VENDOR_SECRET ?? "a3114dca-8775-4a6b-80d3-db338edd8cf5";
   const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCihHi";
+  const vendorUsername = process.env.BETFAIR_VENDOR_USERNAME ?? "totalis";
+  const vendorPassword = process.env.BETFAIR_VENDOR_PASSWORD;
+
+  if (!vendorPassword) {
+    return NextResponse.json({
+      error: "BETFAIR_VENDOR_PASSWORD env var is not set",
+    }, { status: 500 });
+  }
 
   try {
-    // Exchange authorization code for access token
+    // Step 1: Login as vendor to get a fresh session token
+    console.log("[Betfair OAuth] Step 1: Logging in as vendor...");
+
+    const loginRes = await fetch("https://identitysso.betfair.com/api/login", {
+      method: "POST",
+      headers: {
+        "X-Application": appKey,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+      },
+      body: new URLSearchParams({
+        username: vendorUsername,
+        password: vendorPassword,
+      }).toString(),
+      redirect: "follow",
+    });
+
+    const loginText = await loginRes.text();
+    console.log("[Betfair OAuth] Vendor login status:", loginRes.status);
+    console.log("[Betfair OAuth] Vendor login response:", loginText.substring(0, 200));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let loginData: any;
+    try {
+      loginData = JSON.parse(loginText);
+    } catch {
+      return NextResponse.json({
+        error: "Vendor login returned non-JSON",
+        status: loginRes.status,
+        response: loginText.substring(0, 500),
+      }, { status: 502 });
+    }
+
+    if (loginData.status !== "SUCCESS" || !loginData.token) {
+      return NextResponse.json({
+        error: "Vendor login failed",
+        status: loginRes.status,
+        response: loginText.substring(0, 500),
+      }, { status: 502 });
+    }
+
+    const vendorSessionToken = loginData.token;
+    console.log("[Betfair OAuth] Vendor session obtained");
+
+    // Step 2: Exchange authorization code for user access token
     const requestBody = {
       client_id: vendorId,
       grant_type: "AUTHORIZATION_CODE",
@@ -25,7 +77,7 @@ export async function GET(req: NextRequest) {
       client_secret: vendorSecret,
     };
 
-    console.log("[Betfair OAuth] Token exchange POST to https://api.betfair.com/exchange/account/rest/v1.0/token/");
+    console.log("[Betfair OAuth] Step 2: Token exchange...");
     console.log("[Betfair OAuth] Request body:", JSON.stringify(requestBody));
 
     const tokenRes = await fetch(
@@ -36,14 +88,15 @@ export async function GET(req: NextRequest) {
           "Content-Type": "application/json",
           "Accept": "application/json",
           "X-Application": appKey,
+          "X-Authentication": vendorSessionToken,
         },
         body: JSON.stringify(requestBody),
       }
     );
 
     const tokenText = await tokenRes.text();
-    console.log("[Betfair OAuth] Response status:", tokenRes.status);
-    console.log("[Betfair OAuth] Response text:", tokenText);
+    console.log("[Betfair OAuth] Token exchange status:", tokenRes.status);
+    console.log("[Betfair OAuth] Token exchange response:", tokenText);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let tokenData: any;
@@ -66,6 +119,7 @@ export async function GET(req: NextRequest) {
     }
 
     const sessionToken = tokenData.access_token;
+    console.log("[Betfair OAuth] User access token obtained");
 
     // Save to Supabase profile
     try {
