@@ -19,7 +19,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action, marketIds } = body;
 
-    const sessionToken = req.cookies.get("betfair_session")?.value;
+    const sessionToken =
+      req.cookies.get("betfair_session")?.value ??
+      req.headers.get("x-betfair-token");
     if (!sessionToken) {
       return NextResponse.json(
         { success: false, error: "Not authenticated. Please log in first." },
@@ -27,7 +29,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const appKey = process.env.BETFAIR_APP_KEY;
+    const appKey = process.env.BETFAIR_APP_KEY ?? "fCsY8wIPysRCihHi";
     if (!appKey) {
       return NextResponse.json(
         { success: false, error: "BETFAIR_APP_KEY is not configured" },

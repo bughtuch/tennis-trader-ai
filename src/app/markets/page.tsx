@@ -162,7 +162,7 @@ interface LastMarket {
 
 export default function MarketsPage() {
   const router = useRouter();
-  const { isConnected: betfairConnected } = useBetfairToken();
+  const { isConnected: betfairConnected, token: betfairToken } = useBetfairToken();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [markets, setMarkets] = useState<Market[]>([]);
@@ -248,10 +248,13 @@ export default function MarketsPage() {
         return;
       }
 
-      // 2. Fetch market catalogue (session token sent via httpOnly cookie)
+      // 2. Fetch market catalogue
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (betfairToken) headers["x-betfair-token"] = betfairToken;
+
       const catRes = await fetch("/api/betfair/markets", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ action: "listMarkets" }),
       });
       const catData = await catRes.json();
@@ -276,7 +279,7 @@ export default function MarketsPage() {
           batches.map(async (batchIds) => {
             const bookRes = await fetch("/api/betfair/markets", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers,
               body: JSON.stringify({ action: "getMarketBook", marketIds: batchIds }),
             });
             return bookRes.json();
@@ -313,7 +316,7 @@ export default function MarketsPage() {
     } finally {
       setLoading(false);
     }
-  }, [betfairConnected]);
+  }, [betfairConnected, betfairToken]);
 
   useEffect(() => {
     loadMarkets();
