@@ -23,6 +23,7 @@ import SubscribeGate from "@/components/SubscribeGate";
 import GameMatrix from "@/components/GameMatrix";
 import AutomationRules from "@/components/AutomationRules";
 import LiveScoreBar from "@/components/LiveScoreBar";
+import { calculateOptimisedGreenUp } from "@/lib/tradingMaths";
 
 
 interface SupabaseTrade {
@@ -1214,6 +1215,15 @@ function TradingPage() {
       )
     : null;
 
+  const optimisedGreenResult = aggregatedPos && aggregatedPos.netSide !== "FLAT" && aggregatedPos.avgEntry > 0
+    ? calculateOptimisedGreenUp(
+        aggregatedPos.avgEntry,
+        aggregatedPos.netStake,
+        aggregatedPos.netSide as "BACK" | "LAY",
+        currentLayPrice > 0 ? currentLayPrice : aggregatedPos.avgEntry
+      )
+    : null;
+
   /* ─── Computed: session P&L from real closed trades ─── */
   const sessionPnl = tradeHistory.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
   const winCount = tradeHistory.filter((t) => (t.pnl ?? 0) > 0).length;
@@ -1805,6 +1815,82 @@ function TradingPage() {
             Win: £{greenUpResult.profitIfWin.toFixed(2)} / Lose: £
             {greenUpResult.profitIfLose.toFixed(2)}
           </div>
+          {/* Optimised Green-Up Button */}
+          {optimisedGreenResult && (
+            <div className="mt-2">
+              <button
+                onClick={async () => {
+                  if (!marketId || !selectedRunner) return;
+                  const expectedPnl = greenUpResult?.equalProfit ?? 0;
+
+                  if (isPaperMode) {
+                    for (const pos of selectedRunnerPositions) {
+                      await fetch("/api/trades/paper", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          action: "closePaperTrade",
+                          tradeId: pos.id,
+                          exitPrice: currentLayPrice,
+                          pnl: expectedPnl,
+                        }),
+                      });
+                      fetchCoachInsight({
+                        id: pos.id,
+                        side: pos.side,
+                        entry_price: pos.entry_price,
+                        exit_price: currentLayPrice,
+                        stake: pos.stake,
+                        pnl: expectedPnl,
+                        player: pos.player,
+                        greened_up: true,
+                      });
+                    }
+                    setToast({
+                      message: `PAPER optimised green: ${optimisedGreenResult.profitIfWin >= 0 ? "+" : "-"}£${Math.abs(optimisedGreenResult.profitIfWin).toFixed(2)} on ${displayPlayers[selectedPlayer].short}, ${optimisedGreenResult.profitIfLose >= 0 ? "+" : "-"}£${Math.abs(optimisedGreenResult.profitIfLose).toFixed(2)} on ${displayPlayers[selectedPlayer === "player1" ? "player2" : "player1"].short}`,
+                      type: "success",
+                    });
+                    setTimeout(() => setToast(null), 4000);
+                    fetchTrades();
+                    return;
+                  }
+
+                  if (isLive) {
+                    const success = await placeTrade({
+                      marketId,
+                      selectionId: selectedRunner.selectionId,
+                      side: optimisedGreenResult.greenUpSide,
+                      price: currentLayPrice,
+                      size: optimisedGreenResult.greenUpStake,
+                    });
+                    if (success) {
+                      for (const pos of selectedRunnerPositions) {
+                        await closeTradeAsGreenUp(
+                          pos.id,
+                          currentLayPrice,
+                          expectedPnl
+                        );
+                      }
+                    }
+                  }
+                }}
+                disabled={tradeLoading}
+                className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 shadow-[0_0_20px_rgba(245,158,11,0.25)]"
+              >
+                {isPaperMode && <span className="mr-1">PAPER</span>}
+                OPTIMISED: {optimisedGreenResult.profitIfWin >= 0 ? "+" : "-"}£
+                {Math.abs(optimisedGreenResult.profitIfWin).toFixed(2)} on{" "}
+                {displayPlayers[selectedPlayer].short},{" "}
+                {optimisedGreenResult.profitIfLose >= 0 ? "+" : "-"}£
+                {Math.abs(optimisedGreenResult.profitIfLose).toFixed(2)} on{" "}
+                {displayPlayers[selectedPlayer === "player1" ? "player2" : "player1"].short}
+              </button>
+              <div className="mt-1 text-center text-[10px] text-gray-500 font-mono">
+                {optimisedGreenResult.greenUpSide} £{optimisedGreenResult.greenUpStake.toFixed(2)} @{" "}
+                {currentLayPrice.toFixed(2)} | probability-weighted
+              </div>
+            </div>
+          )}
           {aggregatedPos && aggregatedPos.netSide !== "FLAT" && (
             <ScaleOutButtons
               netStake={aggregatedPos.netStake}

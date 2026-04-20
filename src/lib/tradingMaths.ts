@@ -139,7 +139,48 @@ export function calculateGreenUp(
   return { greenUpStake, greenUpSide, profitIfWin, profitIfLose, equalProfit };
 }
 
-/* ─── 5. calculatePosition ─── */
+/* ─── 4b. calculateOptimisedGreenUp ─── */
+
+/**
+ * Optimised green-up: instead of equal profit on both outcomes,
+ * weights profit toward the more likely winner using implied probability.
+ * Same expected value as equal green-up, but higher payout on the probable outcome.
+ */
+export function calculateOptimisedGreenUp(
+  entryPrice: number,
+  entryStake: number,
+  entrySide: Side,
+  currentPrice: number
+): {
+  greenUpStake: number;
+  greenUpSide: Side;
+  profitIfWin: number;
+  profitIfLose: number;
+} {
+  const greenUpSide: Side = entrySide === "BACK" ? "LAY" : "BACK";
+
+  // Implied probability ratio: p(win) / p(lose) = 1 / (currentPrice - 1)
+  const r = 1 / (currentPrice - 1);
+
+  // Optimised stake: distributes profit proportional to probability
+  // Derivation: set profitIfWin / profitIfLose = r, solve for stake
+  const greenUpStake = r2((entryStake * (r + entryPrice - 1)) / (r + currentPrice - 1));
+
+  let profitIfWin: number;
+  let profitIfLose: number;
+
+  if (entrySide === "BACK") {
+    profitIfWin = r2(entryStake * (entryPrice - 1) - greenUpStake * (currentPrice - 1));
+    profitIfLose = r2(greenUpStake - entryStake);
+  } else {
+    profitIfWin = r2(greenUpStake * (currentPrice - 1) - entryStake * (entryPrice - 1));
+    profitIfLose = r2(entryStake - greenUpStake);
+  }
+
+  return { greenUpStake, greenUpSide, profitIfWin, profitIfLose };
+}
+
+/* ─── 5. calculatePosition ──�� */
 
 export function calculatePosition(
   entryPrice: number,
