@@ -8,17 +8,37 @@ export default function ContactPage() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSent(true);
+    setSending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, message }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSent(true);
+      } else {
+        setError(data.error ?? "Failed to send message");
+      }
+    } catch {
+      setError("Network error — please try again");
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
     <main className="min-h-screen pt-14 bg-[#030712]">
       <div className="max-w-2xl mx-auto px-4 py-12">
         <h1 className="text-3xl font-bold text-white mb-2">Get in Touch</h1>
-        <p className="text-xs text-gray-500 mb-1">Bug Hutch Ltd</p>
+        <p className="text-xs text-gray-500 mb-1">Bug Hutch Ltd, England &amp; Wales</p>
         <p className="text-gray-400 mb-10">
           Have a question, suggestion, or need help? We&apos;d love to hear from you.
         </p>
@@ -86,13 +106,17 @@ export default function ContactPage() {
                 className="w-full bg-gray-800/50 border border-gray-700/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all resize-none"
               />
             </div>
+            {error && (
+              <p className="text-sm text-red-400 text-center">{error}</p>
+            )}
             <button
               type="submit"
-              className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 transition-all"
+              disabled={sending}
+              className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              Send Message
+              {sending ? "Sending..." : "Send Message"}
             </button>
-            <p className="text-xs text-gray-500 text-center">We typically respond within 24 hours</p>
+            <p className="text-xs text-gray-500 text-center">We aim to respond within 24 hours</p>
           </form>
         )}
 
