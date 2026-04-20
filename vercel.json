@@ -4,5 +4,14 @@
       "path": "/api/cron/vendor-keepalive",
       "schedule": "*/20 * * * *"
     }
-  ]
+  ],
+  "functions": {
+    "src/app/api/betfair/callback/route.ts": {
+      "maxDuration": 30,
+      "regions": ["lhr1"]
+    },
+    "src/app/api/betfair/markets/route.ts": {
+      "regions": ["lhr1"]
+    }
+  }
 }
