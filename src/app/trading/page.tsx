@@ -291,7 +291,8 @@ function TradingPage() {
   const [openPositions, setOpenPositions] = useState<SupabaseTrade[]>([]);
   const [tradeHistory, setTradeHistory] = useState<SupabaseTrade[]>([]);
 
-  const fetchTrades = useCallback(async () => {
+  const fetchTrades = useCallback(async (forceMode?: boolean) => {
+    const shadow = forceMode ?? isPaperMode;
     const supabase = createClient();
     const {
       data: { user },
@@ -303,7 +304,7 @@ function TradingPage() {
       .select("*")
       .eq("user_id", user.id)
       .eq("status", "open")
-      .eq("is_shadow", isPaperMode)
+      .eq("is_shadow", shadow)
       .order("created_at", { ascending: false });
     if (open) setOpenPositions(open);
 
@@ -312,7 +313,7 @@ function TradingPage() {
       .select("*")
       .eq("user_id", user.id)
       .eq("status", "closed")
-      .eq("is_shadow", isPaperMode)
+      .eq("is_shadow", shadow)
       .order("closed_at", { ascending: false })
       .limit(20);
     if (closed) setTradeHistory(closed);
@@ -932,7 +933,7 @@ function TradingPage() {
       size: activeStake,
       player: playerName,
     });
-    fetchTrades();
+    fetchTrades(true); // force paper mode fetch even if state hasn't updated yet
     checkPaperMilestone();
   }
 
@@ -2113,7 +2114,21 @@ function TradingPage() {
           {openPositions.length === 0 ? (
             <p className="text-xs text-gray-500 text-center py-2">No open positions</p>
           ) : (
-            openPositions.map((pos) => (
+            openPositions.map((pos) => {
+              // Live unrealized P&L for this position
+              const posPlayerKey = pos.player === displayPlayers.player1.name ? "player1" : "player2";
+              const currentOdds = displayPlayers[posPlayerKey]?.odds;
+              let livePnl: number | null = null;
+              if (currentOdds && currentOdds > 0 && pos.entry_price && pos.stake) {
+                if (pos.side === "BACK") {
+                  const greenStake = (pos.stake * pos.entry_price) / currentOdds;
+                  livePnl = Math.round((greenStake - pos.stake) * 100) / 100;
+                } else {
+                  const greenStake = (pos.stake * pos.entry_price) / currentOdds;
+                  livePnl = Math.round((pos.stake - greenStake) * 100) / 100;
+                }
+              }
+              return (
               <div
                 key={pos.id}
                 className={`rounded-xl p-3 ${
@@ -2124,7 +2139,6 @@ function TradingPage() {
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    {isPaperMode && <span className="text-sm">👻</span>}
                     <span
                       className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                         pos.side === "BACK"
@@ -2138,9 +2152,18 @@ function TradingPage() {
                       {pos.player ?? pos.selection_id}
                     </span>
                   </div>
-                  <span className={`font-mono text-xs ${isPaperMode ? "text-purple-400" : "text-gray-500"}`}>
-                    {isPaperMode ? "Paper" : "Open"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {livePnl !== null && (
+                      <span className={`text-xs font-mono font-bold ${livePnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {livePnl >= 0 ? "+" : ""}£{livePnl.toFixed(2)}
+                      </span>
+                    )}
+                    {isPaperMode ? (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-700/50 text-gray-400 font-semibold">PAPER</span>
+                    ) : (
+                      <span className="font-mono text-xs text-gray-500">Open</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-gray-500">
                   <span>
@@ -2154,7 +2177,8 @@ function TradingPage() {
                   </span>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
