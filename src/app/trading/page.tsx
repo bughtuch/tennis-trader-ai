@@ -2189,7 +2189,11 @@ function TradingPage() {
             openPositions.map((pos) => {
               // Live unrealized P&L for this position
               const posPlayerKey = pos.player === displayPlayers.player1.name ? "player1" : "player2";
-              const currentOdds = displayPlayers[posPlayerKey]?.odds;
+              // Use live odds, fall back to URL odds, then ladder price for selected player
+              let currentOdds = displayPlayers[posPlayerKey]?.odds || activeDisplayPlayers[posPlayerKey]?.odds;
+              if ((!currentOdds || currentOdds <= 0) && posPlayerKey === selectedPlayer) {
+                currentOdds = currentLayPrice;
+              }
               let livePnl: number | null = null;
               if (currentOdds && currentOdds > 0 && pos.entry_price && pos.stake) {
                 if (pos.side === "BACK") {
@@ -2332,6 +2336,21 @@ function TradingPage() {
             })
           )}
         </div>
+        {isPaperMode && (openPositions.length > 0 || tradeHistory.length > 0) && (
+          <div className="px-4 pb-3">
+            <button
+              onClick={() => {
+                localStorage.removeItem("paper_trades");
+                fetchTrades();
+                setToast({ message: "All paper trades cleared", type: "success" });
+                setTimeout(() => setToast(null), 4000);
+              }}
+              className="w-full py-2 rounded-lg text-[10px] font-medium text-red-400/70 hover:text-red-400 border border-red-500/10 hover:border-red-500/30 bg-red-500/5 hover:bg-red-500/10 transition-colors"
+            >
+              Clear All Paper Trades
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Trade History */}
