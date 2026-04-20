@@ -2842,6 +2842,49 @@ function TradingPage() {
         isInPlay={!!marketBook?.inplay}
       />
 
+      {/* ─── YOUR POSITION ─── */}
+      {openPositions.length > 0 && outcomePnl && (
+        <div className="border-b border-gray-800/50 bg-gray-900/40">
+          <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-3">
+            <div className="rounded-xl border border-gray-700/50 bg-gray-800/30 p-4 space-y-2">
+              <div className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium">YOUR POSITION</div>
+              {/* Show each open position entry */}
+              {openPositions.slice(0, 3).map((pos) => (
+                <div key={pos.id} className="text-xs text-gray-400">
+                  {pos.side === "BACK" ? "Backed" : "Laid"}{" "}
+                  <span className="text-white font-medium">{pos.player}</span>{" "}
+                  <span className="text-gray-500">£{pos.stake?.toFixed(2)} at {pos.entry_price?.toFixed(2)}</span>
+                </div>
+              ))}
+              {openPositions.length > 3 && (
+                <div className="text-[10px] text-gray-600">+{openPositions.length - 3} more</div>
+              )}
+              {/* Outcome P&L */}
+              <div className="flex gap-4 pt-1">
+                <div>
+                  <span className="text-xs text-gray-500">If {displayPlayers.player1.name} wins: </span>
+                  <span className={`text-lg font-bold font-mono ${outcomePnl.ifPlayer1Wins >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {outcomePnl.ifPlayer1Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer1Wins.toFixed(2)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">If {displayPlayers.player2.name} wins: </span>
+                  <span className={`text-lg font-bold font-mono ${outcomePnl.ifPlayer2Wins >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {outcomePnl.ifPlayer2Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer2Wins.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              {/* Locked profit if both sides are green */}
+              {outcomePnl.ifPlayer1Wins > 0 && outcomePnl.ifPlayer2Wins > 0 && (
+                <div className="text-sm font-semibold text-green-400 pt-1">
+                  Locked profit: +£{Math.min(outcomePnl.ifPlayer1Wins, outcomePnl.ifPlayer2Wins).toFixed(2)} on both runners
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── Content Area ─── */}
       <div className="max-w-full overflow-x-hidden">
         {/* DESKTOP ONLY: Three-column grid (1920px+) */}
