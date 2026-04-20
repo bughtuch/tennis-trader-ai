@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { createClient } from "@/lib/supabase";
+import { addPaperTrade } from "@/lib/paperTrades";
 
 /* ─── Types ─── */
 
@@ -429,31 +430,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   placePaperTrade: async ({ marketId, selectionId, side, price, size, player }) => {
     set({ tradeLoading: true, tradeError: null, lastTradeSuccess: null });
     try {
-      const res = await fetch("/api/trades/paper", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "placePaperTrade",
-          marketId,
-          selectionId,
-          side,
-          price,
-          size,
-          player,
-        }),
+      addPaperTrade({
+        market_id: marketId,
+        selection_id: String(selectionId),
+        side,
+        entry_price: price,
+        stake: size,
+        player,
       });
-      const data = await res.json();
-      if (data.success) {
-        set({
-          tradeLoading: false,
-          lastTradeSuccess: `PAPER ${side} £${size} @ ${price.toFixed(2)} recorded`,
-        });
-        return true;
-      }
-      set({ tradeError: data.error ?? "Paper trade failed", tradeLoading: false });
-      return false;
+      set({
+        tradeLoading: false,
+        lastTradeSuccess: `PAPER ${side} £${size} @ ${price.toFixed(2)} recorded`,
+      });
+      return true;
     } catch {
-      set({ tradeError: "Network error placing paper trade", tradeLoading: false });
+      set({ tradeError: "Failed to save paper trade", tradeLoading: false });
       return false;
     }
   },

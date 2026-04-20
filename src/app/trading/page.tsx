@@ -24,6 +24,7 @@ import GameMatrix from "@/components/GameMatrix";
 import AutomationRules from "@/components/AutomationRules";
 import LiveScoreBar from "@/components/LiveScoreBar";
 import { calculateOptimisedGreenUp } from "@/lib/tradingMaths";
+import { getOpenPaperTrades, getClosedPaperTrades, closePaperTrade as closePaperTradeLocal, getPaperStats } from "@/lib/paperTrades";
 
 
 interface SupabaseTrade {
@@ -297,6 +298,15 @@ function TradingPage() {
 
   const fetchTrades = useCallback(async (forceMode?: boolean) => {
     const shadow = forceMode ?? isPaperMode;
+
+    if (shadow) {
+      // Paper mode: read from localStorage
+      setOpenPositions(getOpenPaperTrades() as unknown as SupabaseTrade[]);
+      setTradeHistory(getClosedPaperTrades(20) as unknown as SupabaseTrade[]);
+      return;
+    }
+
+    // Real mode: read from Supabase
     const supabase = createClient();
     const {
       data: { user },
@@ -308,7 +318,7 @@ function TradingPage() {
       .select("*")
       .eq("user_id", user.id)
       .eq("status", "open")
-      .eq("is_shadow", shadow)
+      .eq("is_shadow", false)
       .order("created_at", { ascending: false });
     if (open) setOpenPositions(open);
 
@@ -317,7 +327,7 @@ function TradingPage() {
       .select("*")
       .eq("user_id", user.id)
       .eq("status", "closed")
-      .eq("is_shadow", shadow)
+      .eq("is_shadow", false)
       .order("closed_at", { ascending: false })
       .limit(20);
     if (closed) setTradeHistory(closed);
@@ -961,17 +971,12 @@ function TradingPage() {
   }
 
   /* ─── Paper trade milestone check ─── */
-  async function checkPaperMilestone() {
+  function checkPaperMilestone() {
     try {
       if (localStorage.getItem("paperMilestoneDismissed")) return;
-      const res = await fetch("/api/trades/paper", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "getPaperStats" }),
-      });
-      const data = await res.json();
-      if (data.success && data.stats.totalTrades >= 10) {
-        setPaperMilestoneData({ count: data.stats.totalTrades, pnl: data.stats.totalPnl });
+      const stats = getPaperStats();
+      if (stats.totalTrades >= 10) {
+        setPaperMilestoneData({ count: stats.totalTrades, pnl: stats.totalPnl });
       }
     } catch { /* non-critical */ }
   }
@@ -1372,42 +1377,29 @@ function TradingPage() {
         case "g":
           if (s.greenUpResult && s.marketId && s.selectedRunner) {
             if (s.isPaperMode) {
-              // Paper green-up
+              // Paper green-up via localStorage
               const runnerPositions = s.openPositions.filter(
                 (p: SupabaseTrade) =>
                   p.selection_id === String(s.selectedRunner.selectionId)
               );
-              Promise.all(
-                runnerPositions.map((pos: SupabaseTrade) =>
-                  fetch("/api/trades/paper", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      action: "closePaperTrade",
-                      tradeId: pos.id,
-                      exitPrice: s.currentLayPrice,
-                      pnl: s.greenUpResult!.equalProfit,
-                    }),
-                  }).then(() => {
-                    s.fetchCoachInsight({
-                      id: pos.id,
-                      side: pos.side,
-                      entry_price: pos.entry_price,
-                      exit_price: s.currentLayPrice,
-                      stake: pos.stake,
-                      pnl: s.greenUpResult!.equalProfit,
-                      player: pos.player,
-                      greened_up: true,
-                    });
-                  })
-                )
-              ).then(() => {
-                s.setToast({
-                  message: `PAPER green-up: lock £${s.greenUpResult!.equalProfit.toFixed(2)}`,
-                  type: "success",
+              for (const pos of runnerPositions) {
+                closePaperTradeLocal(pos.id, s.currentLayPrice, s.greenUpResult!.equalProfit, true);
+                s.fetchCoachInsight({
+                  id: pos.id,
+                  side: pos.side,
+                  entry_price: pos.entry_price,
+                  exit_price: s.currentLayPrice,
+                  stake: pos.stake,
+                  pnl: s.greenUpResult!.equalProfit,
+                  player: pos.player,
+                  greened_up: true,
                 });
-                s.fetchTrades();
+              }
+              s.setToast({
+                message: `PAPER green-up: lock £${s.greenUpResult!.equalProfit.toFixed(2)}`,
+                type: "success",
               });
+              s.fetchTrades();
             } else if (s.isLive) {
               s.placeTrade({
                 marketId: s.marketId,
@@ -1746,19 +1738,9 @@ function TradingPage() {
               if (!marketId || !selectedRunner) return;
 
               if (isPaperMode) {
-                // Paper green-up: close all open positions via API
+                // Paper green-up: close all open positions via localStorage
                 for (const pos of selectedRunnerPositions) {
-                  await fetch("/api/trades/paper", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      action: "closePaperTrade",
-                      tradeId: pos.id,
-                      exitPrice: currentLayPrice,
-                      pnl: greenUpResult.equalProfit,
-                    }),
-                  });
-                  // Fire coach insight in background
+                  closePaperTradeLocal(pos.id, currentLayPrice, greenUpResult.equalProfit, true);
                   fetchCoachInsight({
                     id: pos.id,
                     side: pos.side,
@@ -1825,16 +1807,7 @@ function TradingPage() {
 
                   if (isPaperMode) {
                     for (const pos of selectedRunnerPositions) {
-                      await fetch("/api/trades/paper", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          action: "closePaperTrade",
-                          tradeId: pos.id,
-                          exitPrice: currentLayPrice,
-                          pnl: expectedPnl,
-                        }),
-                      });
+                      closePaperTradeLocal(pos.id, currentLayPrice, expectedPnl, true);
                       fetchCoachInsight({
                         id: pos.id,
                         side: pos.side,
