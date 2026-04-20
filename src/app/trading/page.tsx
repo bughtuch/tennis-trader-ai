@@ -22,6 +22,7 @@ import PostTradeReview from "@/components/PostTradeReview";
 import SubscribeGate from "@/components/SubscribeGate";
 import GameMatrix from "@/components/GameMatrix";
 import AutomationRules from "@/components/AutomationRules";
+import LiveScoreBar from "@/components/LiveScoreBar";
 
 
 interface SupabaseTrade {
@@ -2926,6 +2927,14 @@ function TradingPage() {
           <div className="flex gap-4">
             <div className="w-1/4 min-w-0">{aiPanel}</div>
             <div className="w-1/2 min-w-0 space-y-4">
+              <LiveScoreBar
+                player1Name={displayPlayers.player1.name}
+                player2Name={displayPlayers.player2.name}
+                player1Odds={displayPlayers.player1.odds}
+                player2Odds={displayPlayers.player2.odds}
+                isInPlay={!!marketBook?.inplay}
+                score={liveScore?.available ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+              />
               {ladderPanel}
               <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
               <ServeHoldStats
@@ -2974,6 +2983,14 @@ function TradingPage() {
           <div className="transition-opacity duration-200 ease-in-out space-y-4">
             {activeTab === "ladder" && (
               <>
+                <LiveScoreBar
+                  player1Name={displayPlayers.player1.name}
+                  player2Name={displayPlayers.player2.name}
+                  player1Odds={displayPlayers.player1.odds}
+                  player2Odds={displayPlayers.player2.odds}
+                  isInPlay={!!marketBook?.inplay}
+                  score={liveScore?.available ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+                />
                 {ladderPanel}
                 <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
                 <ServeHoldStats
