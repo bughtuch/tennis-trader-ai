@@ -36,19 +36,24 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const requestBody = {
-      client_id: VENDOR_ID,
-      grant_type: "AUTHORIZATION_CODE",
-      code,
-      client_secret: VENDOR_SECRET,
-    };
-
     console.log("[Betfair OAuth] Logging in as vendor for fresh session...");
     const vendorSession = await freshVendorSession();
     console.log("[Betfair OAuth] Fresh vendor session obtained, exchanging code...");
 
+    const rpcBody = {
+      jsonrpc: "2.0",
+      method: "AccountAPING/v1.0/token",
+      params: {
+        client_id: VENDOR_ID,
+        grant_type: "AUTHORIZATION_CODE",
+        code,
+        client_secret: VENDOR_SECRET,
+      },
+      id: 1,
+    };
+
     const tokenRes = await fetch(
-      "https://api.betfair.com/exchange/account/rest/v1.0/token/",
+      "https://api.betfair.com/exchange/account/json-rpc/v1",
       {
         method: "POST",
         headers: {
@@ -57,7 +62,7 @@ export async function GET(req: NextRequest) {
           "X-Application": APP_KEY,
           "X-Authentication": vendorSession,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(rpcBody),
       }
     );
 
@@ -77,7 +82,15 @@ export async function GET(req: NextRequest) {
       }, { status: 502 });
     }
 
-    if (!tokenData.access_token) {
+    if (tokenData.error) {
+      return NextResponse.json({
+        error: "Token exchange failed",
+        detail: tokenData.error?.data?.exceptionname ?? tokenData.error?.message ?? "Unknown error",
+        response: tokenText.substring(0, 500),
+      }, { status: 502 });
+    }
+
+    if (!tokenData.result?.access_token) {
       return NextResponse.json({
         error: "Token exchange failed — no access_token",
         status: tokenRes.status,
@@ -85,7 +98,7 @@ export async function GET(req: NextRequest) {
       }, { status: 502 });
     }
 
-    const sessionToken = tokenData.access_token;
+    const sessionToken = tokenData.result.access_token;
     console.log("[Betfair OAuth] Access token obtained");
 
     // Pass token to settings page via URL — client-side React saves to localStorage
