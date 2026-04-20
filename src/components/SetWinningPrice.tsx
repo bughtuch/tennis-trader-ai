@@ -3,8 +3,8 @@
 import { useMemo } from "react";
 import { roundToTick } from "@/lib/tradingMaths";
 
-const WIN_SET_MULTIPLIER = 0.65; // odds compress ~35% on set win
-const LOSE_SET_MULTIPLIER = 1.45; // odds expand ~45% on set loss
+const WIN_SET_MULTIPLIER = 0.78; // odds compress ~22% on set win
+const LOSE_SET_MULTIPLIER = 1.35; // odds expand ~35% on set loss
 
 interface SetWinningPriceProps {
   player1Name: string;
