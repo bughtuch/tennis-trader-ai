@@ -1,29 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
-
 const APP_KEY = "fCsY8wIPysRCihHi";
 const VENDOR_ID = "157798";
 const VENDOR_SECRET = "a3114dca-8775-4a6b-80d3-db338edd8cf5";
-
-async function freshVendorSession(): Promise<string> {
-  const res = await fetch("https://identitysso.betfair.com/api/login", {
-    method: "POST",
-    headers: {
-      "X-Application": APP_KEY,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      username: "totalis",
-      password: "Poppiegirl13@",
-    }),
-  });
-  const data = await res.json();
-  if (data.status !== "SUCCESS" || !data.token) {
-    throw new Error(`Vendor login failed: ${data.error ?? data.status}`);
-  }
-  return data.token;
-}
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
@@ -36,10 +15,18 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    console.log("[Betfair OAuth] Logging in as vendor for fresh session...");
-    const vendorSession = await freshVendorSession();
+    // Step 1: Get fresh vendor session via edge route
+    console.log("[Betfair OAuth] Fetching fresh vendor session...");
+    const vendorUrl = new URL("/api/betfair/vendor-session", req.url).toString();
+    const vendorRes = await fetch(vendorUrl, { method: "POST" });
+    const vendorData = await vendorRes.json();
+    if (!vendorData.token) {
+      throw new Error(vendorData.error ?? "Vendor session unavailable");
+    }
+    const vendorSession = vendorData.token;
     console.log("[Betfair OAuth] Fresh vendor session obtained, exchanging code...");
 
+    // Step 2: Token exchange via JSON-RPC (standard Node runtime)
     const rpcBody = {
       jsonrpc: "2.0",
       method: "AccountAPING/v1.0/token",
