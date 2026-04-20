@@ -20,6 +20,7 @@ import RealTradeConfirmModal from "@/components/RealTradeConfirmModal";
 import PaperMilestonePrompt from "@/components/PaperMilestonePrompt";
 import PostTradeReview from "@/components/PostTradeReview";
 import SubscribeGate from "@/components/SubscribeGate";
+import GameMatrix from "@/components/GameMatrix";
 
 
 interface SupabaseTrade {
@@ -2947,6 +2948,13 @@ function TradingPage() {
                 }}
               />
               </SubscribeGate>
+              <GameMatrix
+                playerName={displayPlayers[selectedPlayer].name}
+                currentOdds={displayPlayers[selectedPlayer].odds}
+                server={liveScore?.server}
+                selectedPlayer={selectedPlayer}
+                gameScore={liveScore?.gameScore}
+              />
             </div>
             <div className="w-1/4 min-w-0">{positionsPanel}</div>
           </div>
@@ -2988,6 +2996,13 @@ function TradingPage() {
                   }}
                 />
                 </SubscribeGate>
+                <GameMatrix
+                  playerName={displayPlayers[selectedPlayer].name}
+                  currentOdds={displayPlayers[selectedPlayer].odds}
+                  server={liveScore?.server}
+                  selectedPlayer={selectedPlayer}
+                  gameScore={liveScore?.gameScore}
+                />
               </>
             )}
             {activeTab === "ai" && aiPanel}
