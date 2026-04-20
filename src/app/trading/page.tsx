@@ -785,8 +785,9 @@ function TradingPage() {
 
   /* ─── Selected runner positions & aggregated position (Feature 2) ─── */
   const selectedRunnerPositions = openPositions.filter((p) => {
-    if (!selectedRunner) return false;
-    return p.selection_id === String(selectedRunner.selectionId);
+    const runner = selectedRunner ?? fallbackRunner;
+    if (!runner) return false;
+    return p.selection_id === String(runner.selectionId);
   });
 
   function getAggregatedPosition() {
@@ -1735,7 +1736,7 @@ function TradingPage() {
         <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
           <button
             onClick={async () => {
-              if (!marketId || !selectedRunner) return;
+              if (!marketId || !(selectedRunner ?? fallbackRunner)) return;
 
               if (isPaperMode) {
                 // Paper green-up: close all open positions via localStorage
@@ -1761,7 +1762,7 @@ function TradingPage() {
                 return;
               }
 
-              if (isLive) {
+              if (isLive && selectedRunner) {
                 const success = await placeTrade({
                   marketId,
                   selectionId: selectedRunner.selectionId,
@@ -1802,7 +1803,7 @@ function TradingPage() {
             <div className="mt-2">
               <button
                 onClick={async () => {
-                  if (!marketId || !selectedRunner) return;
+                  if (!marketId || !(selectedRunner ?? fallbackRunner)) return;
                   const expectedPnl = greenUpResult?.equalProfit ?? 0;
 
                   if (isPaperMode) {
@@ -1828,7 +1829,7 @@ function TradingPage() {
                     return;
                   }
 
-                  if (isLive) {
+                  if (isLive && selectedRunner) {
                     const success = await placeTrade({
                       marketId,
                       selectionId: selectedRunner.selectionId,
@@ -1872,12 +1873,13 @@ function TradingPage() {
               scaleOutPrice={currentLayPrice}
               tradeLoading={tradeLoading}
               onScaleOut={async (side, price, size) => {
-                if (!marketId || !selectedRunner) return false;
+                const runner = selectedRunner ?? fallbackRunner;
+                if (!marketId || !runner) return false;
                 if (isPaperMode) {
                   const playerName = displayPlayers[selectedPlayer].name;
                   await placePaperTrade({
                     marketId,
-                    selectionId: selectedRunner.selectionId,
+                    selectionId: runner.selectionId,
                     side,
                     price,
                     size,
@@ -1886,7 +1888,7 @@ function TradingPage() {
                   fetchTrades();
                   return true;
                 }
-                if (isLive) {
+                if (isLive && selectedRunner) {
                   const success = await placeTrade({
                     marketId,
                     selectionId: selectedRunner.selectionId,
