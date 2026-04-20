@@ -21,6 +21,7 @@ import PaperMilestonePrompt from "@/components/PaperMilestonePrompt";
 import PostTradeReview from "@/components/PostTradeReview";
 import SubscribeGate from "@/components/SubscribeGate";
 import GameMatrix from "@/components/GameMatrix";
+import AutomationRules from "@/components/AutomationRules";
 
 
 interface SupabaseTrade {
@@ -1854,6 +1855,7 @@ function TradingPage() {
   /* ─────────────────────────────────────────────────────────── */
 
   const aiPanel = (
+    <>
     <SubscribeGate feature="AI Signals" description="Real-time AI trading signals, pre-match briefings, and coaching powered by Claude">
     <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden max-w-md mx-auto">
       <div className="px-4 py-3 border-b border-gray-800/50">
@@ -2041,6 +2043,13 @@ function TradingPage() {
       </div>
     </div>
     </SubscribeGate>
+    <AutomationRules
+      playerName={displayPlayers[selectedPlayer].name}
+      currentOdds={displayPlayers[selectedPlayer].odds}
+      selectedPlayer={selectedPlayer}
+      marketId={marketId}
+    />
+    </>
   );
 
   /* ─────────────────────────────────────────────────────────── */
