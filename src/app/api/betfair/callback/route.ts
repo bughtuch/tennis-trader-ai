@@ -1,11 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getVendorSession } from "@/lib/betfair-vendor";
 
 export const runtime = "edge";
 
 const APP_KEY = "fCsY8wIPysRCihHi";
 const VENDOR_ID = "157798";
 const VENDOR_SECRET = "a3114dca-8775-4a6b-80d3-db338edd8cf5";
+
+async function freshVendorSession(): Promise<string> {
+  const res = await fetch("https://identitysso.betfair.com/api/login", {
+    method: "POST",
+    headers: {
+      "X-Application": APP_KEY,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      username: "totalis",
+      password: "Poppiegirl13@",
+    }),
+  });
+  const data = await res.json();
+  if (data.status !== "SUCCESS" || !data.token) {
+    throw new Error(`Vendor login failed: ${data.error ?? data.status}`);
+  }
+  return data.token;
+}
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
@@ -25,15 +43,9 @@ export async function GET(req: NextRequest) {
       client_secret: VENDOR_SECRET,
     };
 
-    console.log("[Betfair OAuth] Token exchange...");
-    console.log("[Betfair OAuth] Request body:", JSON.stringify(requestBody));
-
-    const vendorSession = await getVendorSession();
-    if (!vendorSession) {
-      settingsUrl.searchParams.set("betfair", "error");
-      settingsUrl.searchParams.set("message", "Vendor session unavailable");
-      return NextResponse.redirect(settingsUrl);
-    }
+    console.log("[Betfair OAuth] Logging in as vendor for fresh session...");
+    const vendorSession = await freshVendorSession();
+    console.log("[Betfair OAuth] Fresh vendor session obtained, exchanging code...");
 
     const tokenRes = await fetch(
       "https://api.betfair.com/exchange/account/rest/v1.0/token/",
