@@ -2209,7 +2209,8 @@ function TradingPage() {
                     : "bg-blue-500/5 border border-blue-500/20"
                 }`}
               >
-                <div className="flex items-center justify-between mb-2">
+                {/* Header: side, player, P&L, badge */}
+                <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
                     <span
                       className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
@@ -2223,31 +2224,109 @@ function TradingPage() {
                     <span className="text-xs text-white font-medium">
                       {pos.player ?? pos.selection_id}
                     </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {livePnl !== null && (
-                      <span className={`text-xs font-mono font-bold ${livePnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        {livePnl >= 0 ? "+" : ""}£{livePnl.toFixed(2)}
-                      </span>
-                    )}
-                    {isPaperMode ? (
+                    {isPaperMode && (
                       <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-700/50 text-gray-400 font-semibold">PAPER</span>
-                    ) : (
-                      <span className="font-mono text-xs text-gray-500">Open</span>
                     )}
                   </div>
+                  {livePnl !== null && (
+                    <span className={`text-xs font-mono font-bold ${livePnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {livePnl >= 0 ? "+" : "-"}£{Math.abs(livePnl).toFixed(2)}
+                    </span>
+                  )}
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-gray-500">
-                  <span>
-                    £{pos.stake} @ {pos.entry_price}
-                  </span>
-                  <span className="text-gray-600">
-                    {new Date(pos.created_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
+
+                {/* Entry / current / P&L line */}
+                <div className="text-[11px] text-gray-500 font-mono mb-2.5">
+                  £{pos.stake} @ {pos.entry_price}
+                  {currentOdds && currentOdds > 1 && (
+                    <span className="ml-1.5">
+                      | Current: <span className="text-gray-300">{currentOdds.toFixed(2)}</span>
+                    </span>
+                  )}
+                  {livePnl !== null && (
+                    <span className="ml-1.5">
+                      | P&L: <span className={livePnl >= 0 ? "text-green-400" : "text-red-400"}>
+                        {livePnl >= 0 ? "+" : "-"}£{Math.abs(livePnl).toFixed(2)}
+                      </span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Action buttons: GREEN UP + CLOSE */}
+                {currentOdds && currentOdds > 1 && pos.entry_price && pos.stake && (
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      onClick={async () => {
+                        if (isPaperMode) {
+                          closePaperTradeLocal(pos.id, currentOdds, livePnl ?? 0, true);
+                          fetchTrades();
+                          setToast({ message: `Green-up: ${livePnl !== null && livePnl >= 0 ? "+" : ""}£${(livePnl ?? 0).toFixed(2)}`, type: "success" });
+                          setTimeout(() => setToast(null), 4000);
+                        } else if (isLive && selectedRunner) {
+                          const gSide = pos.side === "BACK" ? "LAY" : "BACK";
+                          const gStake = Math.round(((pos.stake ?? 0) * (pos.entry_price ?? 0)) / currentOdds * 100) / 100;
+                          const success = await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: gSide as "BACK" | "LAY", price: currentOdds, size: gStake });
+                          if (success) { await closeTradeAsGreenUp(pos.id, currentOdds, livePnl ?? 0); }
+                        }
+                      }}
+                      disabled={tradeLoading}
+                      className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold text-white bg-green-600/80 hover:bg-green-500 transition-colors disabled:opacity-40"
+                    >
+                      GREEN UP {livePnl !== null ? `${livePnl >= 0 ? "+" : "-"}£${Math.abs(livePnl).toFixed(2)}` : ""}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (isPaperMode) {
+                          closePaperTradeLocal(pos.id, currentOdds, livePnl ?? 0, false);
+                          fetchTrades();
+                          setToast({ message: `Closed: ${livePnl !== null && livePnl >= 0 ? "+" : ""}£${(livePnl ?? 0).toFixed(2)}`, type: "success" });
+                          setTimeout(() => setToast(null), 4000);
+                        } else if (isLive && selectedRunner) {
+                          const cSide = pos.side === "BACK" ? "LAY" : "BACK";
+                          const success = await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: cSide as "BACK" | "LAY", price: currentOdds, size: pos.stake ?? 0 });
+                          if (success) { await closeTradeAsGreenUp(pos.id, currentOdds, livePnl ?? 0); }
+                        }
+                      }}
+                      disabled={tradeLoading}
+                      className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-white bg-gray-600/80 hover:bg-gray-500 transition-colors disabled:opacity-40"
+                    >
+                      CLOSE
+                    </button>
+                  </div>
+                )}
+
+                {/* Scale-out buttons */}
+                {currentOdds && currentOdds > 1 && pos.entry_price && pos.stake && (
+                  <div className="flex gap-1.5">
+                    <span className="text-[10px] text-gray-600 self-center mr-0.5">Scale:</span>
+                    {[0.25, 0.40, 0.50, 0.75].map((pct) => {
+                      const scaleStake = Math.round(((pos.stake ?? 0) * pct) * 100) / 100;
+                      return (
+                        <button
+                          key={pct}
+                          onClick={async () => {
+                            const scaleSide = pos.side === "BACK" ? "LAY" : "BACK";
+                            if (isPaperMode) {
+                              const runner = selectedRunner ?? fallbackRunner;
+                              if (!marketId || !runner) return;
+                              await placePaperTrade({ marketId, selectionId: runner.selectionId, side: scaleSide as "BACK" | "LAY", price: currentOdds, size: scaleStake, player: pos.player ?? "" });
+                              fetchTrades();
+                              setToast({ message: `Scaled out ${Math.round(pct * 100)}%: ${scaleSide} £${scaleStake.toFixed(2)}`, type: "success" });
+                              setTimeout(() => setToast(null), 4000);
+                            } else if (isLive && selectedRunner) {
+                              await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: scaleSide as "BACK" | "LAY", price: currentOdds, size: scaleStake });
+                              fetchTrades();
+                            }
+                          }}
+                          disabled={tradeLoading}
+                          className="px-2 py-1 rounded text-[10px] font-mono font-medium text-gray-400 bg-gray-800/60 hover:bg-gray-700 hover:text-white transition-colors disabled:opacity-40"
+                        >
+                          {Math.round(pct * 100)}%
+                        </button>
+                      );
                     })}
-                  </span>
-                </div>
+                  </div>
+                )}
               </div>
               );
             })
