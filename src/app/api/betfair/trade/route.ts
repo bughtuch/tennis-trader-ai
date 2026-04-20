@@ -38,6 +38,32 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "placeTrade") {
+      // Subscription check — only subscribers can place real trades
+      const { createServerClient } = await import("@supabase/ssr");
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} } }
+      );
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json(
+          { success: false, error: "Sign in required" },
+          { status: 403 }
+        );
+      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("subscription_status")
+        .eq("id", user.id)
+        .single();
+      if (profile?.subscription_status !== "active") {
+        return NextResponse.json(
+          { success: false, error: "Subscription required to place real trades" },
+          { status: 403 }
+        );
+      }
+
       if (!marketId || !instructions || !Array.isArray(instructions)) {
         return NextResponse.json(
           {

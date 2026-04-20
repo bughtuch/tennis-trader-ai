@@ -19,6 +19,7 @@ import PaperTradeModal from "@/components/PaperTradeModal";
 import RealTradeConfirmModal from "@/components/RealTradeConfirmModal";
 import PaperMilestonePrompt from "@/components/PaperMilestonePrompt";
 import PostTradeReview from "@/components/PostTradeReview";
+import SubscribeGate from "@/components/SubscribeGate";
 
 
 interface SupabaseTrade {
@@ -1851,6 +1852,7 @@ function TradingPage() {
   /* ─────────────────────────────────────────────────────────── */
 
   const aiPanel = (
+    <SubscribeGate feature="AI Signals" description="Real-time AI trading signals, pre-match briefings, and coaching powered by Claude">
     <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden max-w-md mx-auto">
       <div className="px-4 py-3 border-b border-gray-800/50">
         <div className="flex items-center justify-between">
@@ -2036,6 +2038,7 @@ function TradingPage() {
         )}
       </div>
     </div>
+    </SubscribeGate>
   );
 
   /* ─────────────────────────────────────────────────────────── */
@@ -2230,6 +2233,7 @@ function TradingPage() {
       </div>
 
       {/* AI Guardian */}
+      <SubscribeGate feature="AI Guardian" description="AI-powered position analysis with exit strategy recommendations">
       <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/50">
           <div className="flex items-center justify-between">
@@ -2402,6 +2406,7 @@ function TradingPage() {
           )}
         </div>
       </div>
+      </SubscribeGate>
 
       {/* Daily P&L Dashboard */}
       <DailyPnLDashboard localClosedTrades={tradeHistory} />
@@ -2854,6 +2859,7 @@ function TradingPage() {
                 isInPlay={!!marketBook?.inplay}
                 server={liveScore?.server}
               />
+              <SubscribeGate feature="Strategy Detector" description="Automated strategy detection based on live match conditions">
               <StrategyDetector
                 playerName={displayPlayers[selectedPlayer].name}
                 playerOdds={displayPlayers[selectedPlayer].odds}
@@ -2873,6 +2879,7 @@ function TradingPage() {
                   }
                 }}
               />
+              </SubscribeGate>
             </div>
             <div className="w-1/4 min-w-0">{positionsPanel}</div>
           </div>
@@ -2893,6 +2900,7 @@ function TradingPage() {
                   isInPlay={!!marketBook?.inplay}
                   server={liveScore?.server}
                 />
+                <SubscribeGate feature="Strategy Detector" description="Automated strategy detection based on live match conditions">
                 <StrategyDetector
                   playerName={displayPlayers[selectedPlayer].name}
                   playerOdds={displayPlayers[selectedPlayer].odds}
@@ -2912,6 +2920,7 @@ function TradingPage() {
                     }
                   }}
                 />
+                </SubscribeGate>
               </>
             )}
             {activeTab === "ai" && aiPanel}

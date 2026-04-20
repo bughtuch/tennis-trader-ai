@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import SubscribeGate from "@/components/SubscribeGate";
 
 interface DnaData {
   bestSurface: string;
@@ -151,6 +152,7 @@ export default function TradingDnaPage() {
         </div>
       </div>
 
+      <SubscribeGate feature="Trading DNA" description="AI analysis of your trading patterns, strengths, and areas to improve">
       <div className="max-w-lg mx-auto px-4 py-4 space-y-4">
         {/* AI Summary */}
         {dna?.oneLineSummary && (
@@ -216,6 +218,7 @@ export default function TradingDnaPage() {
           Your DNA updates daily as you trade more
         </p>
       </div>
+      </SubscribeGate>
     </main>
   );
 }

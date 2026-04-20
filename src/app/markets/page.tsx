@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import MatchSelectionGuide from "@/components/MatchSelectionGuide";
+import SubscribeGate from "@/components/SubscribeGate";
 
 /* ─── Types ─── */
 
@@ -364,6 +365,7 @@ export default function MarketsPage() {
                 : "Starting scanner..."}
             </span>
           </div>
+          <SubscribeGate feature="Market Scanner" description="Real-time alerts for momentum shifts, WOM flips, and volume spikes">
           {scannerAlerts.length > 0 ? (
             <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
               {scannerAlerts.slice(0, 5).map((alert) => {
@@ -416,6 +418,7 @@ export default function MarketsPage() {
                 : "Connecting to scanner..."}
             </p>
           )}
+          </SubscribeGate>
         </div>
       </div>
 
