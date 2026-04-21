@@ -1,43 +1,43 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 
-export default function LoginPage() {
+export default function UpdatePasswordPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const resetSuccess = searchParams.get("reset") === "success";
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+
+    if (password !== confirm) {
+      setError("Passwords do not match");
+      return;
+    }
+
     setLoading(true);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
-      // Surface a clearer message for unconfirmed emails
-      if (error.message.includes("Email not confirmed")) {
-        setError("Please confirm your email before signing in. Check your inbox for the confirmation link.");
-      } else {
-        setError(error.message);
-      }
+      setError(error.message);
       setLoading(false);
       return;
     }
 
-    // Full page reload ensures auth cookies are sent on the next server request
-    window.location.href = "/dashboard";
+    router.push("/auth/login?reset=success");
   }
 
   return (
@@ -45,31 +45,16 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl p-8">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-white mb-2">Welcome back</h1>
+            <h1 className="text-2xl font-bold text-white mb-2">Set new password</h1>
             <p className="text-sm text-gray-400">
-              Sign in to your Tennis Trader AI account
+              Enter your new password below
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1.5">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1.5">
-                Password
+                New password
               </label>
               <input
                 id="password"
@@ -82,11 +67,20 @@ export default function LoginPage() {
               />
             </div>
 
-            {resetSuccess && (
-              <div className="text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-3">
-                Password updated. Sign in with your new password.
-              </div>
-            )}
+            <div>
+              <label htmlFor="confirm" className="block text-sm font-medium text-gray-300 mb-1.5">
+                Confirm password
+              </label>
+              <input
+                id="confirm"
+                type="password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                placeholder="••••••••"
+              />
+            </div>
 
             {error && (
               <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
@@ -99,25 +93,16 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100"
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? "Updating..." : "Update Password"}
             </button>
-          </form>
 
-          <div className="mt-6 text-center space-y-2">
             <Link
-              href="/auth/signup"
-              className="block text-sm text-gray-400 hover:text-white transition-colors"
+              href="/auth/login"
+              className="block text-center text-sm text-gray-400 hover:text-white transition-colors"
             >
-              Don&apos;t have an account?{" "}
-              <span className="text-blue-400 font-medium">Sign up</span>
+              Back to login
             </Link>
-            <Link
-              href="/auth/reset-password"
-              className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
-            >
-              Forgot password?
-            </Link>
-          </div>
+          </form>
         </div>
       </div>
     </div>
