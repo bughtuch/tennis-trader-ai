@@ -7,6 +7,14 @@ import { createClient } from "@/lib/supabase";
 import { useAppStore } from "@/lib/store";
 import type { User } from "@supabase/supabase-js";
 
+/* ─── Inline keyframe for pulsing gold gradient ─── */
+const goProStyle = `
+@keyframes goldPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(234, 179, 8, 0.3); }
+  50% { box-shadow: 0 0 18px rgba(234, 179, 8, 0.5); }
+}
+`;
+
 const navLinks = [
   { href: "/dashboard", label: "Home" },
   { href: "/markets", label: "Markets" },
@@ -19,7 +27,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const { isConnected, restoreSession } = useAppStore();
+  const { isConnected, restoreSession, subscriptionStatus, subscriptionLoaded } = useAppStore();
   const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRestored = useRef(false);
 
@@ -197,6 +205,18 @@ export default function Navbar() {
                 <span className="hidden sm:inline text-sm text-gray-400 max-w-[150px] truncate">
                   {user.email}
                 </span>
+                {subscriptionLoaded && subscriptionStatus !== "active" && (
+                  <>
+                    <style>{goProStyle}</style>
+                    <Link
+                      href="/settings#subscribe"
+                      className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-yellow-900 bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 rounded-lg transition-all hover:from-yellow-300 hover:to-amber-400"
+                      style={{ animation: "goldPulse 2s ease-in-out infinite" }}
+                    >
+                      Go Pro — £37/mo
+                    </Link>
+                  </>
+                )}
                 <button
                   onClick={handleLogout}
                   className="px-3 py-1.5 text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-600 rounded-lg transition-colors"

@@ -214,6 +214,7 @@ function TradingPage() {
   const [pendingRealTrade, setPendingRealTrade] = useState<{ price: number; side: "BACK" | "LAY" } | null>(null);
   const [paperMilestoneData, setPaperMilestoneData] = useState<{ count: number; pnl: number } | null>(null);
   const [paperMilestoneDismissed, setPaperMilestoneDismissed] = useState(false);
+  const [showUpgradeAfterClose, setShowUpgradeAfterClose] = useState(false);
 
   /* ─── Streak Protection Settings ─── */
   const [streakProtectionEnabled, setStreakProtectionEnabled] = useState(true);
@@ -539,6 +540,8 @@ function TradingPage() {
     pendingOrders,
     addPendingOrder,
     removePendingOrder,
+    subscriptionStatus,
+    subscriptionLoaded,
   } = useAppStore();
 
   /* ─── Betfair connection: read from shared hook ─── */
@@ -2266,6 +2269,7 @@ function TradingPage() {
                           fetchTrades();
                           setToast({ message: `Green-up: ${livePnl !== null && livePnl >= 0 ? "+" : ""}£${(livePnl ?? 0).toFixed(2)}`, type: "success" });
                           setTimeout(() => setToast(null), 4000);
+                          if (subscriptionLoaded && subscriptionStatus !== "active") setShowUpgradeAfterClose(true);
                         } else if (isLive && selectedRunner) {
                           const gSide = pos.side === "BACK" ? "LAY" : "BACK";
                           const gStake = Math.round(((pos.stake ?? 0) * (pos.entry_price ?? 0)) / currentOdds * 100) / 100;
@@ -2285,6 +2289,7 @@ function TradingPage() {
                           fetchTrades();
                           setToast({ message: `Closed: ${livePnl !== null && livePnl >= 0 ? "+" : ""}£${(livePnl ?? 0).toFixed(2)}`, type: "success" });
                           setTimeout(() => setToast(null), 4000);
+                          if (subscriptionLoaded && subscriptionStatus !== "active") setShowUpgradeAfterClose(true);
                         } else if (isLive && selectedRunner) {
                           const cSide = pos.side === "BACK" ? "LAY" : "BACK";
                           const success = await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: cSide as "BACK" | "LAY", price: currentOdds, size: pos.stake ?? 0 });
@@ -2349,6 +2354,28 @@ function TradingPage() {
             >
               Clear All Paper Trades
             </button>
+          </div>
+        )}
+        {/* Post-close upgrade prompt */}
+        {showUpgradeAfterClose && (
+          <div className="mx-4 mb-3 p-3 rounded-xl bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-500/10 border border-amber-500/25">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-amber-300">
+                Nice trade! Want to do this with real money?{" "}
+                <Link href="/settings#subscribe" className="font-bold text-amber-200 underline underline-offset-2 hover:text-white transition-colors">
+                  Go Pro — £37/month →
+                </Link>
+              </span>
+              <button
+                onClick={() => setShowUpgradeAfterClose(false)}
+                className="shrink-0 text-amber-400/60 hover:text-amber-300 transition-colors"
+                aria-label="Dismiss"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -2688,6 +2715,20 @@ function TradingPage() {
             >
               Dismiss
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Upgrade Banner for non-subscribers */}
+      {subscriptionLoaded && subscriptionStatus !== "active" && (
+        <div className="border-b border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-500/10">
+          <div className="px-2 md:px-4 py-1.5 flex items-center gap-2">
+            <span className="text-xs text-amber-300">
+              Upgrade to Pro for live trading, AI Signals, and full protection —{" "}
+              <Link href="/settings#subscribe" className="font-bold text-amber-200 underline underline-offset-2 hover:text-white transition-colors">
+                £37/month →
+              </Link>
+            </span>
           </div>
         </div>
       )}

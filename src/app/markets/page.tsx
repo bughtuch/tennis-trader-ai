@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
+import { useAppStore } from "@/lib/store";
 import MatchSelectionGuide from "@/components/MatchSelectionGuide";
 import SubscribeGate from "@/components/SubscribeGate";
 
@@ -119,6 +120,8 @@ interface LastMarket {
 export default function MarketsPage() {
   const router = useRouter();
   const { isConnected: betfairConnected, token: betfairToken } = useBetfairToken();
+  const { subscriptionStatus, subscriptionLoaded } = useAppStore();
+  const [upgradeBannerDismissed, setUpgradeBannerDismissed] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [markets, setMarkets] = useState<Market[]>([]);
@@ -312,6 +315,29 @@ export default function MarketsPage() {
             <span className="text-xs text-blue-400/80">
               Connect your Betfair account in Settings to trade
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Upgrade Banner for non-subscribers */}
+      {subscriptionLoaded && subscriptionStatus !== "active" && !upgradeBannerDismissed && (
+        <div className="border-b border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-500/10">
+          <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-2 flex items-center justify-between gap-2">
+            <span className="text-xs text-amber-300">
+              You&apos;re paper trading. Ready to go live?{" "}
+              <Link href="/settings#subscribe" className="font-bold text-amber-200 underline underline-offset-2 hover:text-white transition-colors">
+                Subscribe — £37/month →
+              </Link>
+            </span>
+            <button
+              onClick={() => setUpgradeBannerDismissed(true)}
+              className="shrink-0 text-amber-400/60 hover:text-amber-300 transition-colors"
+              aria-label="Dismiss"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
       )}
