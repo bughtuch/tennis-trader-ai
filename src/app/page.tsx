@@ -4,151 +4,56 @@ import Footer from "@/components/Footer";
 export default function Home() {
   return (
     <main className="min-h-screen">
-      {/* ───────── Hero ───────── */}
+      {/* ───────── HERO ───────── */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        {/* Animated gradient background */}
         <div className="absolute inset-0 animated-gradient-bg" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-green-500/8 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/3 right-1/4 w-96 h-96 bg-blue-500/8 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "2s" }} />
+        <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-purple-500/6 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "4s" }} />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:64px_64px]" />
 
-        {/* Glow orbs */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
-        <div
-          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse"
-          style={{ animationDelay: "2s" }}
-        />
-        <div
-          className="absolute top-1/2 right-1/3 w-64 h-64 bg-pink-500/8 rounded-full blur-3xl animate-pulse"
-          style={{ animationDelay: "4s" }}
-        />
-
-        {/* Grid overlay */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
-
-        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gray-900/60 border border-gray-800/50 backdrop-blur-sm mb-8 fade-in-up">
+        <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gray-900/60 border border-gray-800/50 backdrop-blur-sm mb-10 fade-in-up">
             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-sm text-gray-300 font-[family-name:var(--font-dm)]">
-              Live on Betfair Exchange
-            </span>
+            <span className="text-sm text-gray-300">Live on Betfair Exchange</span>
           </div>
 
-          {/* Headline */}
-          <h1
-            className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 fade-in-up font-[family-name:var(--font-jakarta)]"
-            style={{ animationDelay: "0.1s" }}
-          >
-            Tennis Trading on
+          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 fade-in-up" style={{ animationDelay: "0.1s" }}>
+            The first AI trading system
             <br />
-            <span className="gradient-text">Any Device. Finally.</span>
+            <span className="gradient-text">for tennis.</span>
           </h1>
 
-          {/* Subtitle */}
-          <p
-            className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed fade-in-up font-[family-name:var(--font-dm)]"
-            style={{ animationDelay: "0.2s" }}
-          >
-            The first AI-powered tennis trading platform for Mac, iPhone, iPad,
-            and every browser. No downloads. No Windows. Just trade.
+          <p className="text-xl sm:text-2xl text-gray-300 mb-3 fade-in-up" style={{ animationDelay: "0.2s" }}>
+            Not just a ladder. A system that trades with you.
+          </p>
+          <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-4 fade-in-up" style={{ animationDelay: "0.25s" }}>
+            Trade faster. Exit smarter. Protect your bankroll automatically.
+          </p>
+          <p className="text-sm text-gray-500 max-w-xl mx-auto mb-10 fade-in-up" style={{ animationDelay: "0.3s" }}>
+            Works on Mac, iPhone, iPad, Windows, Android &mdash; any browser. No downloads.
           </p>
 
-          {/* CTAs */}
-          <div
-            className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6 fade-in-up"
-            style={{ animationDelay: "0.3s" }}
-          >
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-4 fade-in-up" style={{ animationDelay: "0.35s" }}>
             <Link
               href="/auth/signup"
-              className="group relative w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold text-lg text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02]"
+              className="group w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl text-white font-semibold text-lg text-center transition-all duration-300 hover:shadow-[0_0_40px_rgba(34,197,94,0.35)] hover:scale-[1.02]"
             >
               Start Paper Trading &mdash; Free
-              <span className="ml-2 inline-block transition-transform group-hover:translate-x-1">
-                &rarr;
-              </span>
+              <span className="ml-2 inline-block transition-transform group-hover:translate-x-1">&rarr;</span>
             </Link>
-            <Link
-              href="#features"
-              className="w-full sm:w-auto px-8 py-4 rounded-xl text-gray-300 font-medium text-lg text-center border border-gray-800 hover:border-gray-700 hover:bg-gray-900/50 transition-all duration-300"
+            <a
+              href="#the-shift"
+              className="w-full sm:w-auto px-8 py-4 rounded-xl text-gray-300 font-medium text-lg text-center border border-gray-800 hover:border-gray-600 hover:bg-gray-900/50 transition-all duration-300"
             >
-              See Features
-            </Link>
+              See How It Works
+            </a>
           </div>
-
-          {/* No card required */}
-          <p
-            className="text-sm text-gray-500 mb-16 fade-in-up font-[family-name:var(--font-dm)]"
-            style={{ animationDelay: "0.35s" }}
-          >
-            No credit card required. Practice with real odds, zero risk.
+          <p className="text-sm text-gray-600 fade-in-up" style={{ animationDelay: "0.4s" }}>
+            No risk. No card. Real Betfair odds.
           </p>
-
-          {/* Device Mockups */}
-          <div
-            className="flex items-end justify-center gap-4 sm:gap-6 fade-in-up"
-            style={{ animationDelay: "0.4s" }}
-          >
-            {/* Phone */}
-            <div className="w-16 sm:w-20 h-28 sm:h-36 bg-gray-900/80 border border-gray-700/50 rounded-xl flex flex-col items-center justify-center p-1.5 shadow-2xl">
-              <div className="w-full h-full bg-gray-800/50 rounded-lg flex items-center justify-center">
-                <div className="space-y-0.5">
-                  <div className="w-6 sm:w-8 h-1 bg-green-500/40 rounded-full" />
-                  <div className="w-6 sm:w-8 h-1 bg-red-500/40 rounded-full" />
-                  <div className="w-6 sm:w-8 h-1 bg-blue-500/40 rounded-full" />
-                  <div className="w-6 sm:w-8 h-1 bg-green-500/30 rounded-full" />
-                </div>
-              </div>
-            </div>
-            {/* Tablet */}
-            <div className="w-32 sm:w-44 h-24 sm:h-32 bg-gray-900/80 border border-gray-700/50 rounded-xl flex flex-col items-center justify-center p-2 shadow-2xl">
-              <div className="w-full h-full bg-gray-800/50 rounded-lg flex items-center justify-center gap-2">
-                <div className="space-y-0.5 flex-1">
-                  <div className="h-1 bg-green-500/40 rounded-full" />
-                  <div className="h-1 bg-red-500/40 rounded-full" />
-                  <div className="h-1 bg-blue-500/40 rounded-full" />
-                  <div className="h-1 bg-green-500/30 rounded-full" />
-                  <div className="h-1 bg-red-500/30 rounded-full" />
-                </div>
-                <div className="w-8 sm:w-12 h-full bg-gray-700/30 rounded flex items-center justify-center">
-                  <div className="text-[6px] text-gray-500 font-[family-name:var(--font-jetbrains)]">
-                    WOM
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* Laptop */}
-            <div className="w-48 sm:w-64 flex flex-col items-center">
-              <div className="w-full h-28 sm:h-40 bg-gray-900/80 border border-gray-700/50 rounded-t-xl flex items-center justify-center p-2 shadow-2xl">
-                <div className="w-full h-full bg-gray-800/50 rounded-lg flex items-center gap-2 p-2">
-                  <div className="space-y-0.5 flex-1">
-                    <div className="h-1.5 bg-green-500/40 rounded-full" />
-                    <div className="h-1.5 bg-red-500/40 rounded-full" />
-                    <div className="h-1.5 bg-blue-500/40 rounded-full" />
-                    <div className="h-1.5 bg-green-500/30 rounded-full" />
-                    <div className="h-1.5 bg-red-500/30 rounded-full" />
-                    <div className="h-1.5 bg-amber-500/30 rounded-full" />
-                  </div>
-                  <div className="w-16 sm:w-24 h-full bg-gray-700/30 rounded flex flex-col items-center justify-center gap-1 p-1">
-                    <div className="text-[7px] text-gray-500 font-[family-name:var(--font-jetbrains)]">
-                      LADDER
-                    </div>
-                    <div className="w-full space-y-0.5">
-                      <div className="flex gap-0.5">
-                        <div className="flex-1 h-1 bg-blue-500/30 rounded-full" />
-                        <div className="flex-1 h-1 bg-pink-500/30 rounded-full" />
-                      </div>
-                      <div className="flex gap-0.5">
-                        <div className="flex-1 h-1 bg-blue-500/20 rounded-full" />
-                        <div className="flex-1 h-1 bg-pink-500/20 rounded-full" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="w-[110%] h-2 bg-gray-800/80 rounded-b-lg border-x border-b border-gray-700/30" />
-            </div>
-          </div>
         </div>
 
-        {/* Scroll indicator */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 fade-in-up" style={{ animationDelay: "1s" }}>
           <div className="w-6 h-10 rounded-full border-2 border-gray-700 flex items-start justify-center p-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" />
@@ -156,322 +61,267 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ───────── Platform Section ───────── */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-b border-gray-800/50">
+      {/* ───────── TRUST STRIP ───────── */}
+      <section className="py-10 px-4 sm:px-6 border-b border-gray-800/50 bg-gray-950/50">
         <div className="max-w-4xl mx-auto text-center">
-          <p className="text-[10px] tracking-[0.2em] uppercase text-blue-400 font-medium mb-3 font-[family-name:var(--font-jetbrains)]">
-            CROSS-PLATFORM
+          <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8 mb-4">
+            {["Mac", "Windows", "iPhone", "iPad", "Android", "Chrome", "Safari"].map((d) => (
+              <span key={d} className="text-xs text-gray-500 font-medium tracking-wide uppercase">{d}</span>
+            ))}
+          </div>
+          <p className="text-xs text-gray-600">
+            Live on Betfair Exchange &bull; Betfair Certified &bull; No downloads. No Windows setup.
           </p>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 font-[family-name:var(--font-jakarta)]">
-            Works everywhere your competitors don&apos;t
-          </h2>
-          <p className="text-gray-400 max-w-xl mx-auto mb-12 font-[family-name:var(--font-dm)]">
-            Every other tennis trading app requires Windows. We work on everything.
-          </p>
+        </div>
+      </section>
 
-          <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
-            {[
-              { name: "Mac", icon: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" },
-              { name: "Windows", icon: "M3 12V5.5l8-1.1V12H3zm0 .5V19l8 1.1V12.5H3zm8.5-7.7L21 3.5V12h-9.5V4.8zm0 7.7V20l9.5 1.5V12.5h-9.5z" },
-              { name: "iPhone", icon: "M7 2h10a2 2 0 012 2v16a2 2 0 01-2 2H7a2 2 0 01-2-2V4a2 2 0 012-2zm3 18h4" },
-              { name: "iPad", icon: "M6 2h12a2 2 0 012 2v16a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm6 17h.01" },
-              { name: "Android", icon: "M7 2h10a2 2 0 012 2v16a2 2 0 01-2 2H7a2 2 0 01-2-2V4a2 2 0 012-2zm5 18h.01M9 2v1m6-1v1" },
-              { name: "Chrome", icon: "M12 2a10 10 0 100 20 10 10 0 000-20zm0 6a4 4 0 110 8 4 4 0 010-8z" },
-              { name: "Safari", icon: "M12 2a10 10 0 100 20 10 10 0 000-20zm0 5l2 5-5 2-2-5 5-2z" },
-            ].map((device) => (
-              <div
-                key={device.name}
-                className="flex flex-col items-center gap-2 group"
-              >
-                <div className="w-12 h-12 rounded-xl bg-gray-900/50 border border-gray-800/50 flex items-center justify-center group-hover:border-blue-500/30 transition-colors">
-                  <svg
-                    className="w-6 h-6 text-gray-400 group-hover:text-blue-400 transition-colors"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d={device.icon} />
+      {/* ───────── THE SHIFT ───────── */}
+      <section id="the-shift" className="py-28 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-8 leading-tight">
+            Most trading tools help you place bets.
+            <br />
+            <span className="text-gray-500">They don&apos;t help you trade well.</span>
+          </h2>
+          <p className="text-lg text-gray-400 mb-4 leading-relaxed max-w-2xl mx-auto">
+            That&apos;s why most traders lose. They stay in too long. Chase losses. Panic exit. Overtrade after a win.
+          </p>
+          <p className="text-xl text-white font-semibold">
+            Tennis Trader AI fixes all four.
+          </p>
+        </div>
+      </section>
+
+      {/* ───────── FOUR ENGINES ───────── */}
+      <section className="py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <p className="text-[10px] tracking-[0.3em] uppercase text-gray-500 font-medium mb-3">THE SYSTEM</p>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
+              A complete trading system &mdash; not just tools
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* EDGE ENGINE */}
+            <div className="group relative bg-gray-900/60 backdrop-blur-sm rounded-2xl p-8 border border-green-500/10 hover:border-green-500/30 transition-all duration-500 hover:shadow-[0_0_40px_rgba(34,197,94,0.06)]">
+              <div className="absolute inset-0 bg-gradient-to-br from-green-500/[0.03] to-transparent rounded-2xl" />
+              <div className="relative">
+                <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center mb-6">
+                  <svg className="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" />
                   </svg>
                 </div>
-                <span className="text-xs text-gray-500 font-[family-name:var(--font-dm)]">
-                  {device.name}
-                </span>
+                <p className="text-[10px] tracking-[0.2em] uppercase text-green-400 font-medium mb-2">EDGE ENGINE</p>
+                <h3 className="text-xl font-bold mb-3 text-white">Find trades you would never see yourself.</h3>
+                <ul className="space-y-2">
+                  {["AI Signals (pre-match + in-play)", "Market Scanner (all matches, live)", "Strategy detection", "Match selection ranking"].map((f) => (
+                    <li key={f} className="flex items-center gap-2.5 text-sm text-gray-400">
+                      <div className="w-1 h-1 rounded-full bg-green-400 flex-shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* EXECUTION ENGINE */}
+            <div className="group relative bg-gray-900/60 backdrop-blur-sm rounded-2xl p-8 border border-blue-500/10 hover:border-blue-500/30 transition-all duration-500 hover:shadow-[0_0_40px_rgba(59,130,246,0.06)]">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.03] to-transparent rounded-2xl" />
+              <div className="relative">
+                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center mb-6">
+                  <svg className="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                  </svg>
+                </div>
+                <p className="text-[10px] tracking-[0.2em] uppercase text-blue-400 font-medium mb-2">EXECUTION ENGINE</p>
+                <h3 className="text-xl font-bold mb-3 text-white">Act faster than the market can move.</h3>
+                <ul className="space-y-2">
+                  {["Professional 17-row trading ladder", "One-tap green up + optimised greening", "Scale-out exits (25% / 40% / 50% / 75%)", "Keyboard shortcuts + WOM"].map((f) => (
+                    <li key={f} className="flex items-center gap-2.5 text-sm text-gray-400">
+                      <div className="w-1 h-1 rounded-full bg-blue-400 flex-shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* PROTECTION ENGINE */}
+            <div className="group relative bg-gray-900/60 backdrop-blur-sm rounded-2xl p-8 border border-red-500/10 hover:border-red-500/30 transition-all duration-500 hover:shadow-[0_0_40px_rgba(239,68,68,0.06)]">
+              <div className="absolute inset-0 bg-gradient-to-br from-red-500/[0.03] to-transparent rounded-2xl" />
+              <div className="relative">
+                <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center mb-6">
+                  <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                  </svg>
+                </div>
+                <p className="text-[10px] tracking-[0.2em] uppercase text-red-400 font-medium mb-2">PROTECTION ENGINE</p>
+                <h3 className="text-xl font-bold mb-3 text-white">Stops the trades that blow accounts.</h3>
+                <ul className="space-y-2">
+                  {["AI Guardian (4 exit strategies)", "Streak protection (auto cooldown)", "Daily loss limits", "Risk/reward analysis"].map((f) => (
+                    <li key={f} className="flex items-center gap-2.5 text-sm text-gray-400">
+                      <div className="w-1 h-1 rounded-full bg-red-400 flex-shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-4 text-sm text-red-400/80 font-medium italic">
+                  &ldquo;Most apps let you lose. We don&apos;t.&rdquo;
+                </p>
+              </div>
+            </div>
+
+            {/* LEARNING ENGINE */}
+            <div className="group relative bg-gray-900/60 backdrop-blur-sm rounded-2xl p-8 border border-purple-500/10 hover:border-purple-500/30 transition-all duration-500 hover:shadow-[0_0_40px_rgba(139,92,246,0.06)]">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.03] to-transparent rounded-2xl" />
+              <div className="relative">
+                <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center mb-6">
+                  <svg className="w-6 h-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                  </svg>
+                </div>
+                <p className="text-[10px] tracking-[0.2em] uppercase text-purple-400 font-medium mb-2">LEARNING ENGINE</p>
+                <h3 className="text-xl font-bold mb-3 text-white">Gets smarter every time you trade.</h3>
+                <ul className="space-y-2">
+                  {["AI Coach (post-trade review)", "Trading DNA (after 50 trades)", "Profit graph + performance tracking", "Pattern detection (strengths + mistakes)"].map((f) => (
+                    <li key={f} className="flex items-center gap-2.5 text-sm text-gray-400">
+                      <div className="w-1 h-1 rounded-full bg-purple-400 flex-shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ───────── PLATFORM ───────── */}
+      <section className="py-24 px-4 sm:px-6 lg:px-8 border-y border-gray-800/50">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
+            Every other tool was built for Windows.
+            <br />
+            <span className="text-gray-500">We weren&apos;t.</span>
+          </h2>
+          <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-12 my-12">
+            {[
+              { name: "Mac", path: "M4 4h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2zm4 16h8m-4-2v2" },
+              { name: "iPhone", path: "M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zm4 18h.01" },
+              { name: "iPad", path: "M6 2h12a2 2 0 012 2v16a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm6 17h.01" },
+              { name: "Windows", path: "M3 5.5l8-1.1v7.6H3V5.5zm0 7v6.5l8 1.1v-7.6H3zm9-8.2L21 3v9h-9V4.3zm0 8.2V21l9 1.5v-9.5h-9z" },
+              { name: "Android", path: "M7 2h10a2 2 0 012 2v16a2 2 0 01-2 2H7a2 2 0 01-2-2V4a2 2 0 012-2zm5 18h.01" },
+              { name: "Browser", path: "M12 2a10 10 0 100 20 10 10 0 000-20zm0 6a4 4 0 110 8 4 4 0 010-8z" },
+            ].map((d) => (
+              <div key={d.name} className="flex flex-col items-center gap-2.5">
+                <div className="w-14 h-14 rounded-2xl bg-gray-900/60 border border-gray-800/50 flex items-center justify-center">
+                  <svg className="w-7 h-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d={d.path} />
+                  </svg>
+                </div>
+                <span className="text-xs text-gray-500">{d.name}</span>
               </div>
             ))}
           </div>
+          <p className="text-lg text-gray-400">No installs. No setup. No friction.</p>
         </div>
       </section>
 
-      {/* ───────── Paper Trading ───────── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-purple-500/5 rounded-full blur-3xl" />
-
-        <div className="max-w-5xl mx-auto relative">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            {/* Left - Copy */}
-            <div>
-              <p className="text-[10px] tracking-[0.2em] uppercase text-purple-400 font-medium mb-3 font-[family-name:var(--font-jetbrains)]">
-                PAPER TRADING
-              </p>
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 font-[family-name:var(--font-jakarta)]">
-                Learn before you earn
-              </h2>
-              <p className="text-gray-400 mb-6 leading-relaxed font-[family-name:var(--font-dm)]">
-                Practice with real live odds &mdash; no money moves. Track your hypothetical
-                P&amp;L across every trade. See exactly what you would have made or lost,
-                without risking a penny.
-              </p>
-              <p className="text-gray-400 mb-8 leading-relaxed font-[family-name:var(--font-dm)]">
-                After 10 paper trades, you&apos;ll know if tennis trading is for you. No risk.
-              </p>
-              <Link
-                href="/auth/signup"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl text-white font-semibold transition-all duration-300 hover:shadow-[0_0_30px_rgba(139,92,246,0.3)] hover:scale-[1.02]"
-              >
-                Start Paper Trading &mdash; Free
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                </svg>
-              </Link>
-            </div>
-
-            {/* Right - Paper Trade Card */}
-            <div className="bg-gray-900/70 border border-gray-800/50 rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-                  <span className="text-sm text-purple-400 font-semibold font-[family-name:var(--font-jetbrains)]">PAPER MODE</span>
-                </div>
-                <span className="text-xs text-gray-500 font-[family-name:var(--font-dm)]">No real money</span>
-              </div>
-              {/* Mock trades */}
-              {[
-                { match: "Sinner vs Djokovic", entry: "1.85", exit: "1.62", pnl: "+£12.40", win: true },
-                { match: "Alcaraz vs Medvedev", entry: "2.10", exit: "2.34", pnl: "-£5.20", win: false },
-                { match: "Rune vs Tsitsipas", entry: "3.40", exit: "2.90", pnl: "+£8.80", win: true },
-              ].map((trade) => (
-                <div key={trade.match} className="flex items-center justify-between py-2 border-t border-gray-800/30">
-                  <div>
-                    <div className="text-sm text-gray-300 font-[family-name:var(--font-dm)]">{trade.match}</div>
-                    <div className="text-xs text-gray-500 font-[family-name:var(--font-jetbrains)]">
-                      {trade.entry} &rarr; {trade.exit}
-                    </div>
-                  </div>
-                  <span className={`text-sm font-semibold font-[family-name:var(--font-jetbrains)] ${trade.win ? "text-green-400" : "text-red-400"}`}>
-                    {trade.pnl}
-                  </span>
-                </div>
-              ))}
-              <div className="flex items-center justify-between pt-2 border-t border-gray-700/50">
-                <span className="text-sm text-gray-400 font-[family-name:var(--font-dm)]">Session P&amp;L</span>
-                <span className="text-lg font-bold text-green-400 font-[family-name:var(--font-jetbrains)]">+£16.00</span>
-              </div>
-            </div>
-          </div>
+      {/* ───────── PAPER TRADING ───────── */}
+      <section className="py-28 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-green-500/[0.04] rounded-full blur-3xl" />
+        <div className="max-w-3xl mx-auto text-center relative">
+          <p className="text-[10px] tracking-[0.3em] uppercase text-green-400 font-medium mb-4">PAPER TRADING</p>
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-6">
+            Test your edge before risking money.
+          </h2>
+          <p className="text-lg text-gray-400 mb-4 leading-relaxed max-w-2xl mx-auto">
+            Trade real markets. Real odds. Track every paper trade. Know your edge before you risk a penny.
+          </p>
+          <p className="text-gray-500 mb-10">
+            Most traders know within 10 trades if they have an edge.
+          </p>
+          <Link
+            href="/auth/signup"
+            className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl text-white font-semibold text-lg transition-all duration-300 hover:shadow-[0_0_40px_rgba(34,197,94,0.35)] hover:scale-[1.02]"
+          >
+            Start Paper Trading &mdash; Free
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+          </Link>
         </div>
       </section>
 
-      {/* ───────── AI Features 3x2 Grid ───────── */}
-      <section id="features" className="py-24 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <p className="text-[10px] tracking-[0.2em] uppercase text-blue-400 font-medium mb-3 font-[family-name:var(--font-jetbrains)]">
-              SIX AI-POWERED TOOLS
-            </p>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 font-[family-name:var(--font-jakarta)]">
-              Everything you need to trade smarter
-            </h2>
-            <p className="text-gray-400 max-w-lg mx-auto font-[family-name:var(--font-dm)]">
-              Six intelligent tools working together to find, execute, and protect your edge on every match.
-            </p>
+      {/* ───────── BANKROLL PROTECTION ───────── */}
+      <section className="py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto text-center">
+          <p className="text-[10px] tracking-[0.3em] uppercase text-red-400 font-medium mb-4">BANKROLL PROTECTION</p>
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-10">
+            You can&apos;t tilt-trade here.
+          </h2>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-10">
+            {[
+              { text: "3 losses", sub: "warning", color: "border-amber-500/30 bg-amber-500/5", accent: "text-amber-400" },
+              { text: "5 losses", sub: "trading paused", color: "border-red-500/30 bg-red-500/5", accent: "text-red-400" },
+              { text: "Custom", sub: "thresholds", color: "border-blue-500/30 bg-blue-500/5", accent: "text-blue-400" },
+            ].map((item) => (
+              <div key={item.text} className={`flex-1 w-full sm:w-auto rounded-xl border ${item.color} px-6 py-5 text-center`}>
+                <div className={`text-2xl font-bold ${item.accent} mb-1`}>{item.text}</div>
+                <div className="text-sm text-gray-500">{item.sub}</div>
+              </div>
+            ))}
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <FeatureCard
-              icon={
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
-                />
-              }
-              color="green"
-              title="AI Guardian"
-              description="4 intelligent exit strategies. Never guess when to close a position. Exit now, break even, partial hedge, or hold — with AI-calculated P&L for each."
-            />
-
-            <FeatureCard
-              icon={
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4.26 10.147a60.438 60.438 0 00-.491 6.347A48.62 48.62 0 0112 20.904a48.62 48.62 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.636 50.636 0 00-2.658-.813A59.906 59.906 0 0112 3.493a59.903 59.903 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5"
-                />
-              }
-              color="gold"
-              title="AI Coach"
-              description="A personal trading mentor reviewing every trade. Specific to YOUR decisions — not generic advice. Learn from every win and loss."
-            />
-
-            <FeatureCard
-              icon={
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z"
-                />
-              }
-              color="blue"
-              title="AI Signals"
-              description="Real-time edge detection. Pre-match, in-play, and market mispricing alerts. Momentum detection, pattern recognition, and confidence scoring."
-            />
-
-            <FeatureCard
-              icon={
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"
-                />
-              }
-              color="purple"
-              title="Pre-Match Briefing"
-              description="AI-generated trading intelligence 30 minutes before every match. Surface stats, head-to-head, form, and market pricing analysis."
-            />
-
-            <FeatureCard
-              icon={
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"
-                />
-              }
-              color="pink"
-              title="Trading DNA"
-              description="After 50 trades, we know your patterns better than you do. Your personal trading fingerprint — best surfaces, optimal timing, hidden weaknesses."
-            />
-
-            <FeatureCard
-              icon={
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6"
-                />
-              }
-              color="amber"
-              title="Market Scanner"
-              description="Scans every live match simultaneously. Alerts you to momentum shifts, volume spikes, and WOM flips — so you never miss an opportunity."
-            />
-          </div>
+          <p className="text-gray-400 text-lg">
+            Because the best trade after a losing streak is no trade at all.
+          </p>
         </div>
       </section>
 
-      {/* ───────── Streak Protection Showcase ───────── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-amber-500/5 rounded-full blur-3xl" />
-
-        <div className="max-w-5xl mx-auto relative">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            {/* Left - Copy */}
-            <div>
-              <p className="text-[10px] tracking-[0.2em] uppercase text-amber-400 font-medium mb-3 font-[family-name:var(--font-jetbrains)]">
-                BANKROLL PROTECTION
-              </p>
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 font-[family-name:var(--font-jakarta)]">
-                We protect your bankroll
-              </h2>
-              <p className="text-gray-400 mb-4 leading-relaxed font-[family-name:var(--font-dm)]">
-                The only trading app that stops you when you should stop. Because we care
-                about your money, not just ours.
-              </p>
-              <p className="text-gray-400 mb-8 leading-relaxed font-[family-name:var(--font-dm)]">
-                3 losses: warning. 5 losses: 10-minute cooldown. Because the best trade after
-                a losing streak is no trade at all.
-              </p>
-              <div className="space-y-4">
-                {[
-                  { threshold: "3 losses", action: "Amber alert — consider a break", color: "text-amber-400" },
-                  { threshold: "5 losses", action: "Trading paused for 10 minutes", color: "text-red-400" },
-                  { threshold: "Configurable", action: "Set your own threshold in Settings", color: "text-blue-400" },
-                ].map((item) => (
-                  <div key={item.threshold} className="flex items-start gap-3">
-                    <div className={`text-xs font-semibold font-[family-name:var(--font-jetbrains)] ${item.color} mt-0.5 min-w-[90px]`}>
-                      {item.threshold}
-                    </div>
-                    <span className="text-sm text-gray-400 font-[family-name:var(--font-dm)]">{item.action}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Right - Mock UI */}
-            <div className="space-y-4">
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-amber-400 font-semibold text-sm">STREAK ALERT</span>
-                </div>
-                <p className="text-amber-400/80 text-sm font-[family-name:var(--font-dm)]">
-                  3 losses in a row. Traders who pause here recover faster. Consider a break.
-                </p>
-              </div>
-
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6 text-center">
-                <h3 className="text-white font-bold text-lg mb-2 font-[family-name:var(--font-jakarta)]">TRADING PAUSED</h3>
-                <p className="text-red-400/80 text-sm mb-4 font-[family-name:var(--font-dm)]">
-                  5 consecutive losses. Trading disabled for 10 minutes.
-                </p>
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 rounded-lg">
-                  <span className="text-red-400 font-[family-name:var(--font-jetbrains)] text-sm font-bold">7:42</span>
-                  <span className="text-red-400/60 text-xs">remaining</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ───────── Comparison Table ───────── */}
+      {/* ───────── COMPARISON TABLE ───────── */}
       <section className="py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-16">
-            <p className="text-[10px] tracking-[0.2em] uppercase text-blue-400 font-medium mb-3 font-[family-name:var(--font-jetbrains)]">
-              WHY SWITCH
-            </p>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 font-[family-name:var(--font-jakarta)]">
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
               Why traders are switching
             </h2>
-            <p className="text-gray-400 max-w-lg mx-auto font-[family-name:var(--font-dm)]">
-              The tools you&apos;re used to were built a decade ago. Tennis Trader AI was built for how you trade today.
+            <p className="text-gray-400 max-w-lg mx-auto">
+              The old tools were built for another era. This one wasn&apos;t.
             </p>
           </div>
 
           <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm font-[family-name:var(--font-dm)]">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800/50">
                     <th className="text-left px-6 py-4 text-gray-500 font-medium text-xs tracking-wider uppercase">Feature</th>
-                    <th className="text-center px-4 py-4 text-white font-semibold">
-                      <span className="gradient-text">Tennis Trader AI</span>
-                    </th>
+                    <th className="text-center px-4 py-4 text-white font-semibold"><span className="gradient-text">Tennis Trader AI</span></th>
                     <th className="text-center px-4 py-4 text-gray-500 font-medium">Bet Angel</th>
                     <th className="text-center px-4 py-4 text-gray-500 font-medium">Geeks Toy</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800/30">
-                  <ComparisonRow feature="Works on Mac" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="Works on iPhone/iPad" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="No download required" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="AI trading signals" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="AI exit strategies" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="Paper trading mode" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="Trading DNA analytics" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="Streak protection" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="Post-trade AI coaching" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="Market scanner alerts" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="Pre-match AI briefings" us={true} angel={false} geeks={false} />
-                  <ComparisonRow feature="Price" us="£37/mo" angel="£150/yr" geeks="£20/mo" />
+                  {[
+                    { f: "Works on Mac", us: true, a: false, g: false },
+                    { f: "Works on iPhone/iPad", us: true, a: false, g: false },
+                    { f: "No download required", us: true, a: false, g: false },
+                    { f: "AI trading signals", us: true, a: false, g: false },
+                    { f: "AI exit strategies", us: true, a: false, g: false },
+                    { f: "Paper trading", us: true, a: false, g: false },
+                    { f: "Trading DNA", us: true, a: false, g: false },
+                    { f: "Streak protection", us: true, a: false, g: false },
+                    { f: "Post-trade AI coaching", us: true, a: false, g: false },
+                    { f: "Price", us: "£37/mo", a: "£150/yr", g: "£20/mo" },
+                  ].map((row) => (
+                    <tr key={row.f} className="hover:bg-gray-800/20 transition-colors">
+                      <td className="px-6 py-3 text-gray-300 font-medium">{row.f}</td>
+                      <td className="text-center px-4 py-3 font-semibold">{row.us === true ? <span className="text-green-400">&#10003;</span> : typeof row.us === "string" ? <span className="text-gray-300 text-xs font-mono">{row.us}</span> : <span className="text-gray-700">&mdash;</span>}</td>
+                      <td className="text-center px-4 py-3">{row.a === true ? <span className="text-green-400">&#10003;</span> : typeof row.a === "string" ? <span className="text-gray-300 text-xs font-mono">{row.a}</span> : <span className="text-gray-700">&mdash;</span>}</td>
+                      <td className="text-center px-4 py-3">{row.g === true ? <span className="text-green-400">&#10003;</span> : typeof row.g === "string" ? <span className="text-gray-300 text-xs font-mono">{row.g}</span> : <span className="text-gray-700">&mdash;</span>}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -479,139 +329,96 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ───────── Pricing ───────── */}
+      {/* ───────── PRICING ───────── */}
       <section className="py-24 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-16">
-            <p className="text-[10px] tracking-[0.2em] uppercase text-blue-400 font-medium mb-3 font-[family-name:var(--font-jetbrains)]">
-              SIMPLE PRICING
-            </p>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 font-[family-name:var(--font-jakarta)]">
-              One plan. Everything included.
-            </h2>
-            <p className="text-gray-400 max-w-lg mx-auto font-[family-name:var(--font-dm)]">
-              Start free with Paper Trading. Subscribe when you&apos;re ready to go live.
-            </p>
-          </div>
-
-          <div className="max-w-md mx-auto">
-            <div className="relative bg-gray-900/50 border border-gray-800/50 rounded-2xl p-8 hover:border-blue-500/20 transition-all duration-500">
-              {/* Founding member badge */}
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                <div className="px-4 py-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full text-xs font-semibold text-white">
-                  Founding Member Offer
-                </div>
-              </div>
-
-              <div className="text-center mt-4 mb-8">
-                <div className="flex items-center justify-center gap-3 mb-2">
-                  <span className="text-2xl text-gray-500 line-through font-[family-name:var(--font-jetbrains)]">
-                    &pound;47
-                  </span>
-                  <span className="text-5xl font-bold text-white font-[family-name:var(--font-jetbrains)]">&pound;37</span>
-                  <span className="text-gray-400 font-[family-name:var(--font-dm)]">/month</span>
-                </div>
-                <p className="text-sm text-gray-500 font-[family-name:var(--font-dm)]">
-                  Lock in founding member pricing forever
-                </p>
-              </div>
-
-              <div className="space-y-3 mb-8">
-                {[
-                  "AI-powered trade signals",
-                  "Professional trading ladder",
-                  "Real-time Betfair data",
-                  "AI Guardian (4 exit strategies)",
-                  "Market Scanner alerts",
-                  "Trading DNA analysis",
-                  "AI Coach post-trade review",
-                  "Pre-match AI briefings",
-                  "Paper trading mode",
-                  "Streak Protection",
-                  "Works on Mac, iPhone, iPad",
-                  "Priority support",
-                ].map((feature) => (
-                  <div key={feature} className="flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
-                      <svg
-                        className="w-3 h-3 text-green-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={3}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M4.5 12.75l6 6 9-13.5"
-                        />
-                      </svg>
-                    </div>
-                    <span className="text-sm text-gray-300 font-[family-name:var(--font-dm)]">{feature}</span>
-                  </div>
-                ))}
-              </div>
-
-              <Link
-                href="/auth/signup"
-                className="block w-full py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02]"
-              >
-                Start Paper Trading &mdash; Free
-              </Link>
-
-              <p className="text-center text-xs text-gray-600 mt-4 font-[family-name:var(--font-dm)]">
-                Paper trading is free forever. Subscribe when you&apos;re ready for live trading.
-              </p>
-
-              {/* Affiliate teaser */}
-              <div className="mt-6 pt-6 border-t border-gray-800/50 text-center">
-                <p className="text-xs text-gray-500 font-[family-name:var(--font-dm)]">
-                  30% affiliate commission &mdash; earn &pound;11.10/month per referral
-                </p>
+        <div className="max-w-md mx-auto">
+          <div className="relative bg-gray-900/60 backdrop-blur-sm border border-gray-800/50 rounded-2xl p-8 hover:border-green-500/20 transition-all duration-500">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+              <div className="px-4 py-1 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full text-xs font-semibold text-white">
+                Founding Member
               </div>
             </div>
+
+            <div className="text-center mt-4 mb-8">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <span className="text-5xl font-bold text-white font-mono">&pound;37</span>
+                <span className="text-gray-400">/month</span>
+              </div>
+              <p className="text-sm text-gray-500">Lock in founding member pricing forever</p>
+            </div>
+
+            <div className="space-y-3 mb-8">
+              {[
+                "Live trading on Betfair Exchange",
+                "AI Signals (pre-match + in-play)",
+                "AI Guardian (4 exit strategies)",
+                "Full trading system + ladder",
+                "Real Betfair execution",
+                "Trading DNA + AI Coach",
+              ].map((f) => (
+                <div key={f} className="flex items-center gap-3">
+                  <div className="w-5 h-5 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3 h-3 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  </div>
+                  <span className="text-sm text-gray-300">{f}</span>
+                </div>
+              ))}
+            </div>
+
+            <Link
+              href="/settings"
+              className="block w-full py-4 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl text-white font-semibold text-center text-lg transition-all duration-300 hover:shadow-[0_0_40px_rgba(34,197,94,0.35)] hover:scale-[1.02]"
+            >
+              Go Live &mdash; &pound;37/month
+            </Link>
+
+            <p className="text-center text-xs text-gray-600 mt-4">
+              Not ready? <Link href="/auth/signup" className="text-green-400 hover:text-green-300 transition-colors">Start paper trading free</Link> &mdash; no card required.
+            </p>
           </div>
         </div>
       </section>
 
-      {/* ───────── Affiliate Section ───────── */}
+      {/* ───────── AFFILIATE ───────── */}
       <section className="py-24 px-4 sm:px-6 lg:px-8 border-t border-gray-800/50">
         <div className="max-w-4xl mx-auto">
           <div className="bg-gradient-to-br from-gray-900/80 to-gray-900/40 border border-gray-800/50 rounded-2xl p-8 sm:p-12">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
               <div>
-                <p className="text-[10px] tracking-[0.2em] uppercase text-green-400 font-medium mb-3 font-[family-name:var(--font-jetbrains)]">
-                  AFFILIATE PROGRAMME
-                </p>
-                <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 font-[family-name:var(--font-jakarta)]">
+                <p className="text-[10px] tracking-[0.3em] uppercase text-green-400 font-medium mb-3">AFFILIATE PROGRAMME</p>
+                <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
                   Earn while you trade
                 </h2>
-                <p className="text-gray-400 mb-6 leading-relaxed font-[family-name:var(--font-dm)]">
-                  Refer a trader, earn 30% recurring. That&apos;s &pound;11.10 every month per active referral.
+                <p className="text-gray-400 mb-3 text-lg">
+                  30% recurring commission. &pound;11.10 per referral per month.
+                </p>
+                <p className="text-gray-400 mb-6">
+                  10 referrals = &pound;111/month passive income.
                 </p>
                 <Link
                   href="/auth/signup"
                   className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl text-white font-semibold transition-all duration-300 hover:shadow-[0_0_30px_rgba(34,197,94,0.3)] hover:scale-[1.02]"
                 >
-                  Join free to get your referral link
+                  Get your referral link
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                   </svg>
                 </Link>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-800/30 border border-gray-700/30 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-green-400 font-[family-name:var(--font-jetbrains)] mb-1">30%</div>
-                  <div className="text-xs text-gray-500 font-[family-name:var(--font-dm)]">Recurring commission</div>
+                  <div className="text-2xl font-bold text-green-400 font-mono mb-1">30%</div>
+                  <div className="text-xs text-gray-500">Recurring commission</div>
                 </div>
                 <div className="bg-gray-800/30 border border-gray-700/30 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-green-400 font-[family-name:var(--font-jetbrains)] mb-1">&pound;11.10</div>
-                  <div className="text-xs text-gray-500 font-[family-name:var(--font-dm)]">Per referral / month</div>
+                  <div className="text-2xl font-bold text-green-400 font-mono mb-1">&pound;11.10</div>
+                  <div className="text-xs text-gray-500">Per referral / month</div>
                 </div>
                 <div className="col-span-2 bg-gray-800/30 border border-gray-700/30 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-green-400 font-[family-name:var(--font-jetbrains)] mb-1">10 referrals = &pound;111/mo</div>
-                  <div className="text-xs text-gray-500 font-[family-name:var(--font-dm)]">Passive income while you trade</div>
+                  <div className="text-2xl font-bold text-green-400 font-mono mb-1">10 referrals = &pound;111/mo</div>
+                  <div className="text-xs text-gray-500">Passive income while you trade</div>
                 </div>
               </div>
             </div>
@@ -619,81 +426,29 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ───────── Final CTA ───────── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8">
+      {/* ───────── FINAL CTA ───────── */}
+      <section className="py-28 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 font-[family-name:var(--font-jakarta)]">
-            Ready to trade tennis on your terms?
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-4">
+            Ready to trade properly?
           </h2>
-          <p className="text-gray-400 max-w-lg mx-auto mb-8 font-[family-name:var(--font-dm)]">
-            Start with Paper Trading for free. Practice with real odds, zero risk. Subscribe when you&apos;re ready.
+          <p className="text-lg text-gray-400 max-w-lg mx-auto mb-10">
+            Start with paper trading. Upgrade when you see the edge.
           </p>
           <Link
             href="/auth/signup"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl text-white font-semibold text-lg transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-[1.02]"
+            className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl text-white font-semibold text-lg transition-all duration-300 hover:shadow-[0_0_40px_rgba(34,197,94,0.35)] hover:scale-[1.02]"
           >
             Start Paper Trading &mdash; Free
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
-              />
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
             </svg>
           </Link>
         </div>
       </section>
 
-      {/* ───────── Footer ───────── */}
+      {/* ───────── FOOTER ───────── */}
       <Footer />
     </main>
-  );
-}
-
-/* ───────── Helper Components ───────── */
-
-const colorMap: Record<string, { border: string; bg: string; text: string; shadow: string }> = {
-  blue: { border: "hover:border-blue-500/30", bg: "bg-blue-500/10 group-hover:bg-blue-500/20", text: "text-blue-400", shadow: "hover:shadow-[0_0_30px_rgba(59,130,246,0.08)]" },
-  purple: { border: "hover:border-purple-500/30", bg: "bg-purple-500/10 group-hover:bg-purple-500/20", text: "text-purple-400", shadow: "hover:shadow-[0_0_30px_rgba(139,92,246,0.08)]" },
-  green: { border: "hover:border-green-500/30", bg: "bg-green-500/10 group-hover:bg-green-500/20", text: "text-green-400", shadow: "hover:shadow-[0_0_30px_rgba(34,197,94,0.08)]" },
-  amber: { border: "hover:border-amber-500/30", bg: "bg-amber-500/10 group-hover:bg-amber-500/20", text: "text-amber-400", shadow: "hover:shadow-[0_0_30px_rgba(245,158,11,0.08)]" },
-  pink: { border: "hover:border-pink-500/30", bg: "bg-pink-500/10 group-hover:bg-pink-500/20", text: "text-pink-400", shadow: "hover:shadow-[0_0_30px_rgba(236,72,153,0.08)]" },
-  gold: { border: "hover:border-yellow-500/30", bg: "bg-yellow-500/10 group-hover:bg-yellow-500/20", text: "text-yellow-400", shadow: "hover:shadow-[0_0_30px_rgba(234,179,8,0.08)]" },
-};
-
-function FeatureCard({ icon, color, title, description }: { icon: React.ReactNode; color: string; title: string; description: string }) {
-  const c = colorMap[color] ?? colorMap.blue;
-  return (
-    <div className={`group relative bg-gray-900/50 border border-gray-800/50 rounded-2xl p-8 ${c.border} transition-all duration-500 ${c.shadow}`}>
-      <div className={`w-12 h-12 rounded-xl ${c.bg} flex items-center justify-center mb-6 transition-colors`}>
-        <svg className={`w-6 h-6 ${c.text}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          {icon}
-        </svg>
-      </div>
-      <h3 className="text-xl font-semibold mb-3 font-[family-name:var(--font-jakarta)]">{title}</h3>
-      <p className="text-gray-400 leading-relaxed font-[family-name:var(--font-dm)]">{description}</p>
-    </div>
-  );
-}
-
-function ComparisonRow({ feature, us, angel, geeks }: { feature: string; us: boolean | string; angel: boolean | string; geeks: boolean | string }) {
-  const renderCell = (val: boolean | string) => {
-    if (val === true) return <span className="text-green-400">&#10003;</span>;
-    if (val === false) return <span className="text-gray-700">&mdash;</span>;
-    return <span className="text-gray-300 text-xs font-[family-name:var(--font-jetbrains)]">{val}</span>;
-  };
-  return (
-    <tr className="hover:bg-gray-800/20 transition-colors">
-      <td className="px-6 py-3 text-gray-300 font-medium font-[family-name:var(--font-dm)]">{feature}</td>
-      <td className="text-center px-4 py-3 font-semibold">{renderCell(us)}</td>
-      <td className="text-center px-4 py-3">{renderCell(angel)}</td>
-      <td className="text-center px-4 py-3">{renderCell(geeks)}</td>
-    </tr>
   );
 }
