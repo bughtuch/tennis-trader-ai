@@ -542,7 +542,13 @@ function TradingPage() {
     removePendingOrder,
     subscriptionStatus,
     subscriptionLoaded,
+    fetchSubscriptionStatus,
   } = useAppStore();
+
+  // Ensure subscription status is loaded
+  useEffect(() => {
+    if (!subscriptionLoaded) fetchSubscriptionStatus();
+  }, [subscriptionLoaded, fetchSubscriptionStatus]);
 
   /* ─── Betfair connection: read from shared hook ─── */
   const { isConnected: betfairHookConnected } = useBetfairToken();
@@ -653,21 +659,15 @@ function TradingPage() {
           : bestBackPrice || bestLayPrice || 2.0,
       );
 
-      // Generate a continuous tick range: 8 ticks below center, center, 8 ticks above
-      // This gives 17+ rows. Any Betfair data outside this range extends it further.
+      // Generate a continuous tick range: 8 ticks below center, center, 8 ticks above = 17 rows
       const TICKS_EACH_SIDE = 8;
       const ladderLow = moveByTicks(centerPrice, -TICKS_EACH_SIDE);
       const ladderHigh = moveByTicks(centerPrice, TICKS_EACH_SIDE);
 
-      // Also include every price that has volume (extends range if needed)
-      const allDataPrices = new Set([...backMap.keys(), ...layMap.keys()]);
-      const absoluteLow = Math.min(ladderLow, ...(allDataPrices.size > 0 ? allDataPrices : [ladderLow]));
-      const absoluteHigh = Math.max(ladderHigh, ...(allDataPrices.size > 0 ? allDataPrices : [ladderHigh]));
-
-      // Walk every tick from absoluteLow to absoluteHigh
+      // Walk every tick from ladderLow to ladderHigh (capped at 17 rows)
       const rows: LadderRow[] = [];
-      let tick = roundToTick(absoluteLow);
-      while (tick <= absoluteHigh) {
+      let tick = roundToTick(ladderLow);
+      while (tick <= ladderHigh) {
         rows.push({
           price: tick,
           backSize: Math.round(backMap.get(tick) ?? 0),
@@ -2671,8 +2671,8 @@ function TradingPage() {
         </div>
       )}
 
-      {/* Paper Mode Banner */}
-      {isPaperMode && (
+      {/* Paper Mode Banner — only for non-subscribers */}
+      {isPaperMode && subscriptionStatus !== "active" && (
         <div className="border-b border-purple-500/20 bg-purple-500/5">
           <div className="px-2 md:px-4 py-1.5 flex items-center gap-2">
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400">

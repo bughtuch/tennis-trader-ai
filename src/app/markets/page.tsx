@@ -120,7 +120,7 @@ interface LastMarket {
 export default function MarketsPage() {
   const router = useRouter();
   const { isConnected: betfairConnected, token: betfairToken } = useBetfairToken();
-  const { subscriptionStatus, subscriptionLoaded } = useAppStore();
+  const { subscriptionStatus, subscriptionLoaded, fetchSubscriptionStatus } = useAppStore();
   const [upgradeBannerDismissed, setUpgradeBannerDismissed] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
@@ -135,6 +135,11 @@ export default function MarketsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const snapshotRef = useRef<Record<string, any> | null>(null);
   const scannerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Ensure subscription status is loaded
+  useEffect(() => {
+    if (!subscriptionLoaded) fetchSubscriptionStatus();
+  }, [subscriptionLoaded, fetchSubscriptionStatus]);
 
   const runScan = useCallback(async () => {
     try {
