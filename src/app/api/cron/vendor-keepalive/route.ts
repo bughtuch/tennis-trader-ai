@@ -6,14 +6,7 @@ export const runtime = "edge";
 const APP_KEY = "fCsY8wIPysRCihHi";
 const VENDOR_USERNAME = "totalis";
 
-export async function GET(req: NextRequest) {
-  // Verify cron secret in production (Vercel sends this header)
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export async function GET(_req: NextRequest) {
   try {
     const currentToken = await getVendorSession();
 
