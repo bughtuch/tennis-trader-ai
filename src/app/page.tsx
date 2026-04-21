@@ -1,7 +1,16 @@
+"use client";
+
+import { useEffect } from "react";
 import Link from "next/link";
 import Footer from "@/components/Footer";
 
 export default function Home() {
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash.includes("type=recovery")) {
+      window.location.href = "/auth/update-password" + window.location.hash;
+    }
+  }, []);
+
   return (
     <main className="min-h-screen">
       {/* ───────── HERO ───────── */}
