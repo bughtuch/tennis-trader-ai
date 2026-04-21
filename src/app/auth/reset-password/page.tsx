@@ -17,7 +17,7 @@ export default function ResetPasswordPage() {
 
     const supabase = createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/update-password`,
+      redirectTo: "https://tennistraderai.com/auth/update-password",
     });
 
     if (error) {
