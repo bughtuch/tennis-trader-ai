@@ -63,6 +63,283 @@ interface LiveScore {
   tiebreakScore?: string[];
 }
 
+/* ─── Inline Market List for no-market state ─── */
+
+interface PaperMarket {
+  id: string;
+  player1: { name: string; odds: number | null };
+  player2: { name: string; odds: number | null };
+  tournament: string;
+  tournamentColor: string;
+  isLive: boolean;
+  startTime: string | null;
+}
+
+function paperTournamentColor(name: string) {
+  const n = name.toLowerCase();
+  if (/wta.*1000|wta.*premier/i.test(n)) return "bg-pink-500/15 text-pink-400";
+  if (/wta/i.test(n)) return "bg-purple-500/15 text-purple-400";
+  if (/grand slam|open|roland|wimbledon/i.test(n)) return "bg-yellow-500/15 text-yellow-400";
+  if (/masters|1000/i.test(n)) return "bg-red-500/15 text-red-400";
+  if (/500/i.test(n)) return "bg-amber-500/15 text-amber-400";
+  if (/250/i.test(n)) return "bg-green-500/15 text-green-400";
+  if (/challenger/i.test(n)) return "bg-teal-500/15 text-teal-400";
+  return "bg-blue-500/15 text-blue-400";
+}
+
+function paperTimeUntil(date: string) {
+  const ms = new Date(date).getTime() - Date.now();
+  if (ms <= 0) return null;
+  const days = Math.floor(ms / 86_400_000);
+  const hrs = Math.floor((ms % 86_400_000) / 3_600_000);
+  const mins = Math.floor((ms % 3_600_000) / 60_000);
+  if (days > 1) return `In ${days} days`;
+  if (days === 1) return `Tomorrow`;
+  if (hrs > 0) return `Starts in ${hrs}h ${mins}m`;
+  return `Starts in ${mins}m`;
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function mapToPaperMarket(cat: any, book?: any): PaperMarket | null {
+  const runners = cat.runners;
+  if (!runners || runners.length < 2) return null;
+
+  const compName = cat.competition?.name ?? "";
+  const eventName = cat.event?.name ?? "";
+  const startTimeStr = cat.marketStartTime ?? cat.event?.openDate;
+  const isLive = startTimeStr ? new Date(startTimeStr) <= new Date() : false;
+
+  let odds1: number | null = null;
+  let odds2: number | null = null;
+  if (book?.runners) {
+    const r1 = book.runners.find((r: any) => r.selectionId === runners[0].selectionId);
+    const r2 = book.runners.find((r: any) => r.selectionId === runners[1].selectionId);
+    if (r1?.ex?.availableToBack?.[0]?.price) odds1 = r1.ex.availableToBack[0].price;
+    if (r2?.ex?.availableToBack?.[0]?.price) odds2 = r2.ex.availableToBack[0].price;
+  }
+
+  return {
+    id: cat.marketId,
+    tournament: compName || eventName || "Tennis",
+    tournamentColor: paperTournamentColor(compName || eventName),
+    player1: { name: runners[0].runnerName, odds: odds1 },
+    player2: { name: runners[1].runnerName, odds: odds2 },
+    isLive,
+    startTime: isLive ? null : startTimeStr ? paperTimeUntil(startTimeStr) : null,
+  };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+function PaperMarketList() {
+  const [markets, setMarkets] = useState<PaperMarket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadMarkets = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const catRes = await fetch("/api/betfair/markets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "listMarkets" }),
+      });
+      const catData = await catRes.json();
+
+      if (!catData.success || !catData.markets?.length) {
+        setMarkets([]);
+        setLoading(false);
+        return;
+      }
+
+      const allIds: string[] = catData.markets.map((m: { marketId: string }) => m.marketId);
+      const bookMap = new Map();
+      const BATCH = 5;
+      try {
+        const batches: string[][] = [];
+        for (let i = 0; i < allIds.length; i += BATCH) {
+          batches.push(allIds.slice(i, i + BATCH));
+        }
+        const results = await Promise.all(
+          batches.map(async (ids) => {
+            const res = await fetch("/api/betfair/markets", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "getMarketBook", marketIds: ids }),
+            });
+            return res.json();
+          })
+        );
+        for (const bookData of results) {
+          if (bookData.success && bookData.marketBooks) {
+            for (const book of bookData.marketBooks) {
+              bookMap.set(book.marketId, book);
+            }
+          }
+        }
+      } catch {
+        // Non-critical: markets still show, just without odds
+      }
+
+      const mapped = catData.markets
+        .map((cat: { marketId: string }) => mapToPaperMarket(cat, bookMap.get(cat.marketId)))
+        .filter((m: PaperMarket | null): m is PaperMarket => m !== null);
+
+      mapped.sort((a: PaperMarket, b: PaperMarket) => {
+        if (a.isLive && !b.isLive) return -1;
+        if (!a.isLive && b.isLive) return 1;
+        return 0;
+      });
+
+      setMarkets(mapped);
+    } catch {
+      setError("Failed to load markets");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMarkets();
+  }, [loadMarkets]);
+
+  function handleSelect(m: PaperMarket) {
+    const params = new URLSearchParams();
+    params.set("marketId", m.id);
+    params.set("p1", m.player1.name);
+    params.set("p2", m.player2.name);
+    if (m.player1.odds) params.set("p1Odds", String(m.player1.odds));
+    if (m.player2.odds) params.set("p2Odds", String(m.player2.odds));
+    params.set("tournament", m.tournament);
+    window.location.href = `/paper?${params.toString()}`;
+  }
+
+  return (
+    <main className="min-h-screen pt-14 bg-[#030712]">
+      {/* Header */}
+      <div className="border-b border-gray-800/50 bg-gray-900/30">
+        <div className="max-w-2xl mx-auto px-4 py-6">
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-xl font-bold text-white">Paper Trading</h1>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-700/40 text-gray-400">
+              PRACTICE
+            </span>
+          </div>
+          <p className="text-sm text-gray-500">
+            Pick a match to start practicing with real odds — no money moves
+          </p>
+        </div>
+      </div>
+
+      <div className="max-w-2xl mx-auto px-4 py-4">
+        {/* Loading */}
+        {loading && (
+          <div className="flex items-center justify-center py-20">
+            <div className="w-6 h-6 border-2 border-gray-700 border-t-blue-500 rounded-full animate-spin" />
+          </div>
+        )}
+
+        {/* Error */}
+        {error && !loading && (
+          <div className="text-center py-16 space-y-4">
+            <p className="text-sm text-gray-400">{error}</p>
+            <button
+              onClick={loadMarkets}
+              className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-gray-800 hover:bg-gray-700 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Empty */}
+        {!loading && !error && markets.length === 0 && (
+          <div className="text-center py-16">
+            <p className="text-sm text-gray-500">No markets available right now</p>
+            <button
+              onClick={loadMarkets}
+              className="mt-3 px-4 py-2 rounded-xl text-sm font-medium text-white bg-gray-800 hover:bg-gray-700 transition-colors"
+            >
+              Refresh
+            </button>
+          </div>
+        )}
+
+        {/* Market Cards */}
+        {!loading && !error && markets.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {markets.map((market) => (
+              <button
+                key={market.id}
+                onClick={() => handleSelect(market)}
+                className={`group block w-full text-left bg-gray-900/50 border rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-600/50 ${
+                  market.isLive
+                    ? "border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.06)]"
+                    : "border-gray-800/50"
+                }`}
+              >
+                {/* Tournament */}
+                <div className="px-4 pt-3 pb-2 flex items-center gap-2">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${market.tournamentColor}`}>
+                    {market.tournament}
+                  </span>
+                </div>
+
+                {/* Players */}
+                <div className="px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-white truncate block">
+                        {market.player1.name}
+                      </span>
+                      <div className="mt-1.5">
+                        {market.player1.odds != null ? (
+                          <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
+                            {market.player1.odds.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-mono text-gray-600 px-2 py-0.5">—</span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-gray-600 font-medium shrink-0 px-1">vs</span>
+                    <div className="flex-1 min-w-0 text-right">
+                      <span className="text-sm font-medium text-white truncate block">
+                        {market.player2.name}
+                      </span>
+                      <div className="mt-1.5">
+                        {market.player2.odds != null ? (
+                          <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
+                            {market.player2.odds.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-mono text-gray-600 px-2 py-0.5">—</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-4 py-2.5 border-t border-gray-800/30 flex items-center justify-between">
+                  {market.isLive ? (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                      <span className="text-[11px] font-semibold text-green-400">LIVE</span>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] text-gray-500">{market.startTime}</span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
+
 const STAKES = [5, 10, 25, 50, 100];
 
 /* ─── Helpers ─── */
@@ -2087,32 +2364,7 @@ function PaperTradingPage() {
 
   /* ─── No market selected ─── */
   if (noMarket) {
-    return (
-      <main className="min-h-screen pt-14 bg-[#030712] flex items-center justify-center">
-        <div className="text-center space-y-6 max-w-sm mx-auto px-4">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-gray-800/50 flex items-center justify-center mx-auto">
-            <svg className="w-8 h-8 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-white mb-1">Paper Trading</h2>
-            <p className="text-sm text-gray-500">
-              Practice trading with real odds. Select a match from the Markets page to start.
-            </p>
-          </div>
-          <Link
-            href="/markets"
-            className="inline-block px-6 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 transition-all hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]"
-          >
-            Choose a Match
-          </Link>
-          <p className="text-[10px] text-gray-600">
-            All features unlocked. No real money. No account required.
-          </p>
-        </div>
-      </main>
-    );
+    return <PaperMarketList />;
   }
 
   return (
