@@ -1975,11 +1975,7 @@ function PaperTradingPage() {
               return (
               <div
                 key={pos.id}
-                className={`rounded-xl p-3 ${
-                  isPaperMode
-                    ? "bg-purple-500/5 border border-purple-500/20"
-                    : "bg-blue-500/5 border border-blue-500/20"
-                }`}
+                className="rounded-xl p-3 bg-blue-500/5 border border-blue-500/20"
               >
                 {/* Header: side, player, P&L, badge */}
                 <div className="flex items-center justify-between mb-1.5">
@@ -2029,8 +2025,7 @@ function PaperTradingPage() {
                   <div className="flex gap-2 mb-2">
                     <button
                       onClick={async () => {
-                        closePaperTradeLocal(pos.id, currentOdds, livePnl ?? 0, true);
-                        fetchTrades();
+                        closeTradeAsGreenUp(pos.id, currentOdds, livePnl ?? 0);
                         setToast({ message: `Green-up: ${livePnl !== null && livePnl >= 0 ? "+" : ""}£${(livePnl ?? 0).toFixed(2)}`, type: "success" });
                         setTimeout(() => setToast(null), 4000);
                       }}
@@ -2043,6 +2038,11 @@ function PaperTradingPage() {
                       onClick={async () => {
                         closePaperTradeLocal(pos.id, currentOdds, livePnl ?? 0, false);
                         fetchTrades();
+                        fetchCoachInsight({
+                          id: pos.id, side: pos.side, entry_price: pos.entry_price,
+                          exit_price: currentOdds, stake: pos.stake,
+                          pnl: livePnl ?? 0, player: pos.player, greened_up: false,
+                        });
                         setToast({ message: `Closed: ${livePnl !== null && livePnl >= 0 ? "+" : ""}£${(livePnl ?? 0).toFixed(2)}`, type: "success" });
                         setTimeout(() => setToast(null), 4000);
                       }}
