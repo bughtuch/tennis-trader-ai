@@ -2091,14 +2091,27 @@ function PaperTradingPage() {
   if (noMarket) {
     return (
       <main className="min-h-screen pt-14 bg-[#030712] flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="text-gray-500 text-sm">No market selected</div>
+        <div className="text-center space-y-6 max-w-sm mx-auto px-4">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-gray-800/50 flex items-center justify-center mx-auto">
+            <svg className="w-8 h-8 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white mb-1">Paper Trading</h2>
+            <p className="text-sm text-gray-500">
+              Practice trading with real odds. Select a match from the Markets page to start.
+            </p>
+          </div>
           <Link
             href="/markets"
-            className="inline-block px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 transition-all"
+            className="inline-block px-6 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 transition-all hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]"
           >
-            Browse Markets
+            Choose a Match
           </Link>
+          <p className="text-[10px] text-gray-600">
+            All features unlocked. No real money. No account required.
+          </p>
         </div>
       </main>
     );
