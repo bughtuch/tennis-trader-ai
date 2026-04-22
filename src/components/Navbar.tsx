@@ -15,10 +15,10 @@ const goProStyle = `
 }
 `;
 
-const navLinks = [
+const baseNavLinks = [
   { href: "/dashboard", label: "Home" },
   { href: "/markets", label: "Markets" },
-  { href: "/trading", label: "Trading" },
+  // Trading link is dynamic — set below based on subscription
   { href: "/trading-dna", label: "DNA" },
   { href: "/settings", label: "Settings" },
 ];
@@ -127,6 +127,18 @@ export default function Navbar() {
     };
   }, []);
 
+  const isSubscriber = subscriptionLoaded && subscriptionStatus === "active";
+  const tradingLink = isSubscriber
+    ? { href: "/trading", label: "Trading" }
+    : { href: "/paper", label: "Paper Trade" };
+  const navLinks = [
+    baseNavLinks[0],
+    baseNavLinks[1],
+    tradingLink,
+    baseNavLinks[2],
+    baseNavLinks[3],
+  ];
+
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -169,7 +181,7 @@ export default function Navbar() {
                 key={link.href}
                 href={link.href}
                 className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  pathname === link.href
+                  pathname === link.href || (link.href === "/paper" && pathname === "/trading") || (link.href === "/trading" && pathname === "/paper")
                     ? "text-white bg-white/5"
                     : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
                 }`}

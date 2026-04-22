@@ -3,24 +3,21 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAppStore, type PriceSize, type PendingOrder } from "@/lib/store";
-import { calculateGreenUp, moveByTicks, roundToTick } from "@/lib/tradingMaths";
-import { createClient } from "@/lib/supabase";
-import { useBetfairToken } from "@/hooks/useBetfairToken";
-import { useBetfairStream } from "@/hooks/useBetfairStream";
+import { useAppStore, type PriceSize } from "@/lib/store";
+import { calculateGreenUp, moveByTicks, roundToTick, calculateOptimisedGreenUp } from "@/lib/tradingMaths";
 import RiskRewardPanel from "@/components/RiskRewardPanel";
 import ServeHoldStats from "@/components/ServeHoldStats";
 import SetWinningPrice from "@/components/SetWinningPrice";
-import ScaleOutButtons from "@/components/ScaleOutButtons";
 import StrategyDetector from "@/components/StrategyDetector";
 import ChangeoverAlert from "@/components/ChangeoverAlert";
 import DailyPnLDashboard from "@/components/DailyPnLDashboard";
-import RealTradeConfirmModal from "@/components/RealTradeConfirmModal";
+import PaperMilestonePrompt from "@/components/PaperMilestonePrompt";
 import PostTradeReview from "@/components/PostTradeReview";
 import GameMatrix from "@/components/GameMatrix";
 import AutomationRules from "@/components/AutomationRules";
 import LiveScoreBar from "@/components/LiveScoreBar";
-import { calculateOptimisedGreenUp } from "@/lib/tradingMaths";
+import ScaleOutButtons from "@/components/ScaleOutButtons";
+import { getOpenPaperTrades, getClosedPaperTrades, closePaperTrade as closePaperTradeLocal, getPaperStats } from "@/lib/paperTrades";
 
 
 interface SupabaseTrade {
@@ -93,48 +90,9 @@ function MarketCountdown({ startTime }: { startTime: string }) {
   return <span>{remaining}</span>;
 }
 
-function PendingOrderCountdown({ order, onExpire }: { order: PendingOrder; onExpire: (id: string) => void }) {
-  const [remaining, setRemaining] = useState(order.delaySeconds);
-  useEffect(() => {
-    const id = setInterval(() => {
-      setRemaining((r) => {
-        if (r <= 1) {
-          clearInterval(id);
-          onExpire(order.id);
-          return 0;
-        }
-        return r - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [order.id, order.delaySeconds, onExpire]);
-
-  return (
-    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-      <div className="flex items-center gap-2">
-        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-          order.side === "BACK" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"
-        }`}>{order.side}</span>
-        <span className="text-xs text-gray-300 font-mono">
-          £{order.size} @ {order.price.toFixed(2)}
-        </span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <div className="w-16 h-1.5 rounded-full bg-gray-800 overflow-hidden">
-          <div
-            className="h-full bg-amber-400 transition-all duration-1000"
-            style={{ width: `${(remaining / order.delaySeconds) * 100}%` }}
-          />
-        </div>
-        <span className="text-[10px] text-amber-400 font-mono font-semibold w-5 text-right">{remaining}s</span>
-      </div>
-    </div>
-  );
-}
-
 /* ─── Breakpoints: mobile <768  |  tablet 768-1919  |  desktop 1920+ ─── */
 
-export default function TradingPageWrapper() {
+export default function PaperPageWrapper() {
   return (
     <Suspense
       fallback={
@@ -143,12 +101,12 @@ export default function TradingPageWrapper() {
         </div>
       }
     >
-      <TradingPage />
+      <PaperTradingPage />
     </Suspense>
   );
 }
 
-function TradingPage() {
+function PaperTradingPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const marketId = searchParams.get("marketId");
@@ -175,7 +133,7 @@ function TradingPage() {
           if (m.p1Flag) params.set("p1Flag", m.p1Flag);
           if (m.p2Flag) params.set("p2Flag", m.p2Flag);
           if (m.tournament) params.set("tournament", m.tournament);
-          router.replace(`/trading?${params.toString()}`);
+          router.replace(`/paper?${params.toString()}`);
           return;
         }
       } catch { /* invalid JSON or SSR */ }
@@ -202,8 +160,10 @@ function TradingPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /* ─── Real Trade Modal ─── */
-  const [pendingRealTrade, setPendingRealTrade] = useState<{ price: number; side: "BACK" | "LAY" } | null>(null);
+  /* ─── Paper Trading ─── */
+  const isPaperMode = true;
+  const [paperMilestoneData, setPaperMilestoneData] = useState<{ count: number; pnl: number } | null>(null);
+  const [paperMilestoneDismissed, setPaperMilestoneDismissed] = useState(false);
 
   /* ─── Streak Protection Settings ─── */
   const [streakProtectionEnabled, setStreakProtectionEnabled] = useState(true);
@@ -213,21 +173,6 @@ function TradingPage() {
   const [streakBannerDismissed, setStreakBannerDismissed] = useState(false);
 
   useEffect(() => {
-    async function loadProfileSettings() {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("streak_protection_enabled, streak_threshold")
-        .eq("id", user.id)
-        .single();
-      if (data) {
-        setStreakProtectionEnabled(data.streak_protection_enabled ?? true);
-        setStreakThreshold(data.streak_threshold ?? 3);
-      }
-    }
-    loadProfileSettings();
     // Restore cooldown from sessionStorage
     try {
       const saved = sessionStorage.getItem("streakCooldownUntil");
@@ -285,31 +230,9 @@ function TradingPage() {
   const [openPositions, setOpenPositions] = useState<SupabaseTrade[]>([]);
   const [tradeHistory, setTradeHistory] = useState<SupabaseTrade[]>([]);
 
-  const fetchTrades = useCallback(async () => {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: open } = await supabase
-      .from("trades")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "open")
-      .eq("is_shadow", false)
-      .order("created_at", { ascending: false });
-    if (open) setOpenPositions(open);
-
-    const { data: closed } = await supabase
-      .from("trades")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "closed")
-      .eq("is_shadow", false)
-      .order("closed_at", { ascending: false })
-      .limit(20);
-    if (closed) setTradeHistory(closed);
+  const fetchTrades = useCallback(() => {
+    setOpenPositions(getOpenPaperTrades() as unknown as SupabaseTrade[]);
+    setTradeHistory(getClosedPaperTrades(20) as unknown as SupabaseTrade[]);
   }, []);
 
   useEffect(() => {
@@ -348,14 +271,6 @@ function TradingPage() {
       if (data.success && data.insight) {
         setCoachInsights((prev) => ({ ...prev, [trade.id]: data.insight }));
         setFadingInsightId(trade.id);
-        // Save to Supabase
-        const supabase = createClient();
-        await supabase
-          .from("trades")
-          .update({ coach_insight: data.insight })
-          .eq("id", trade.id);
-        // Re-fetch so tradeHistory has the insight
-        fetchTrades();
       }
     } catch { /* non-critical */ }
   }
@@ -390,12 +305,6 @@ function TradingPage() {
       const data = await res.json();
       if (data.success && data.review) {
         setPostTradeReviews((prev) => ({ ...prev, [trade.id]: data.review }));
-        // Save to coach_insight column
-        const supabase = createClient();
-        await supabase
-          .from("trades")
-          .update({ coach_insight: data.review })
-          .eq("id", trade.id);
       }
     } catch { /* non-critical */ }
     setPostTradeLoading((prev) => ({ ...prev, [trade.id]: false }));
@@ -414,22 +323,10 @@ function TradingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tradeHistory.length]);
 
-  async function closeTradeAsGreenUp(tradeId: string, exitPrice: number, pnl: number) {
-    const supabase = createClient();
-    // Find the trade data before closing (for coach context)
-    const trade = openPositions.find((p) => p.id === tradeId);
-    await supabase
-      .from("trades")
-      .update({
-        exit_price: exitPrice,
-        pnl,
-        status: "closed",
-        greened_up: true,
-        closed_at: new Date().toISOString(),
-      })
-      .eq("id", tradeId);
+  function closeTradeAsGreenUp(tradeId: string, exitPrice: number, pnl: number) {
+    closePaperTradeLocal(tradeId, exitPrice, pnl, true);
     fetchTrades();
-    // Fire coach insight in background
+    const trade = openPositions.find((p) => p.id === tradeId);
     if (trade) {
       fetchCoachInsight({
         id: tradeId,
@@ -506,95 +403,29 @@ function TradingPage() {
   const {
     marketBook,
     fetchMarketBook,
-    placeTrade,
+    placePaperTrade,
     tradeLoading,
     tradeError,
     lastTradeSuccess,
     clearTradeMessages,
-    unmatchedOrders,
-    fetchUnmatchedOrders,
-    cancelOrder,
-    pendingOrders,
-    addPendingOrder,
-    removePendingOrder,
-    subscriptionStatus,
-    subscriptionLoaded,
-    fetchSubscriptionStatus,
   } = useAppStore();
 
-  // Ensure subscription status is loaded
-  useEffect(() => {
-    if (!subscriptionLoaded) fetchSubscriptionStatus();
-  }, [subscriptionLoaded, fetchSubscriptionStatus]);
+  /* ─── Paper mode: never live-connected ─── */
+  const isConnected = false;
+  const isLive = false;
 
-  // Subscription redirect: non-subscribers go to /paper
-  useEffect(() => {
-    if (subscriptionLoaded && subscriptionStatus !== "active") {
-      const params = new URLSearchParams();
-      if (marketId) params.set("marketId", marketId);
-      if (p1Name) params.set("p1", p1Name);
-      if (p2Name) params.set("p2", p2Name);
-      if (p1Flag) params.set("p1Flag", p1Flag);
-      if (p2Flag) params.set("p2Flag", p2Flag);
-      if (tournament !== "Tennis") params.set("tournament", tournament);
-      const qs = params.toString();
-      router.replace(`/paper${qs ? `?${qs}` : ""}`);
-    }
-  }, [subscriptionLoaded, subscriptionStatus, marketId, p1Name, p2Name, p1Flag, p2Flag, tournament, router]);
-
-  /* ─── Betfair connection: read from shared hook ─── */
-  const { isConnected: betfairHookConnected } = useBetfairToken();
-  const [isConnected, setIsConnected] = useState(false);
-
-  useEffect(() => {
-    if (betfairHookConnected) {
-      setIsConnected(true);
-      useAppStore.setState({ isConnected: true });
-    }
-  }, [betfairHookConnected]);
-
-  const isLive = isConnected && !!marketId && !!marketBook;
-
-  /* ─── Betfair Streaming (real-time prices via SSE) ─── */
-  const { streamStatus, isStreaming, suspensionDetected, clearSuspension } = useBetfairStream(
-    isConnected ? marketId : null,
-  );
-
-  /* ─── Fetch live prices on 2-second interval (fallback when not streaming) ─── */
+  /* ─── Fetch prices via vendor session (read-only, 2-second poll) ─── */
   const fetchPrices = useCallback(() => {
-    if (isConnected && marketId) {
-      fetchMarketBook([marketId]);
-    }
-  }, [isConnected, marketId, fetchMarketBook]);
+    if (marketId) fetchMarketBook([marketId]);
+  }, [marketId, fetchMarketBook]);
 
   useEffect(() => {
-    if (isStreaming) {
-      // Streaming is active — skip polling
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      return;
-    }
     fetchPrices();
     intervalRef.current = setInterval(fetchPrices, 2000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [fetchPrices, isStreaming]);
-
-  /* ─── Poll unmatched orders every 3 seconds (offset from price poll) ─── */
-  const unmatchedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    if (!isConnected || !marketId) return;
-    const timer = setTimeout(() => {
-      fetchUnmatchedOrders(marketId);
-      unmatchedIntervalRef.current = setInterval(() => {
-        fetchUnmatchedOrders(marketId);
-      }, 3000);
-    }, 1500);
-    return () => {
-      clearTimeout(timer);
-      if (unmatchedIntervalRef.current) clearInterval(unmatchedIntervalRef.current);
-    };
-  }, [isConnected, marketId, fetchUnmatchedOrders]);
+  }, [fetchPrices]);
 
   /* ─── Show toast on trade success/error ─── */
   useEffect(() => {
@@ -613,13 +444,13 @@ function TradingPage() {
     }
   }, [lastTradeSuccess, tradeError, clearTradeMessages, fetchTrades]);
 
-  /* ─── Build ladder from live data only ─── */
-  const selectedRunner = isLive ? marketBook.runners?.[selectedPlayer === "player1" ? 0 : 1] : null;
+  /* ─── Build ladder from market book data ─── */
+  const selectedRunner = marketBook?.runners?.[selectedPlayer === "player1" ? 0 : 1] ?? null;
 
   let liveLadder: LadderRow[] | null = null;
   let livePlayerOdds = { player1: 0, player2: 0 };
 
-  if (isLive && marketBook.runners) {
+  if (marketBook?.runners) {
     const r0 = marketBook.runners[0];
     const r1 = marketBook.runners[1];
     const bestBack0 = r0?.ex?.availableToBack?.[0]?.price ?? 0;
@@ -855,19 +686,10 @@ function TradingPage() {
   }
   const outcomePnl = getOutcomePnl();
 
-  /* ─── Unmatched orders by price for ladder overlay (Feature 3) ─── */
-  const unmatchedByPrice = new Map<number, { backSize: number; laySize: number }>();
-  for (const order of unmatchedOrders) {
-    if (!selectedRunner || order.selectionId !== selectedRunner.selectionId) continue;
-    const entry = unmatchedByPrice.get(order.price) ?? { backSize: 0, laySize: 0 };
-    if (order.side === "BACK") entry.backSize += order.sizeRemaining as number;
-    else entry.laySize += order.sizeRemaining as number;
-    unmatchedByPrice.set(order.price, entry);
-  }
-
   /* ─── Handle trade click ─── */
   async function handleTradeClick(price: number, side: "BACK" | "LAY") {
-    if (!marketId || !selectedRunner) return;
+    const runner = selectedRunner ?? fallbackRunner;
+    if (!marketId || !runner) return;
 
     // Streak protection cooldown block
     if (cooldownUntil && Date.now() < cooldownUntil) {
@@ -875,50 +697,28 @@ function TradingPage() {
       return;
     }
 
-    if (!isConnected) {
-      setToast({ message: "Connect Betfair to place live trades", type: "error" });
-      return;
-    }
-
-    // First-time real trade confirmation
-    try {
-      if (!localStorage.getItem("realTradeConfirmed")) {
-        setPendingRealTrade({ price, side });
-        return;
-      }
-    } catch { /* SSR guard */ }
-
-    // Add pending order indicator for in-play bet delay
-    if (marketBook?.inplay) {
-      const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
-    }
-    await placeTrade({
+    const playerName = displayPlayers[selectedPlayer].name;
+    await placePaperTrade({
       marketId,
-      selectionId: selectedRunner.selectionId,
+      selectionId: runner.selectionId,
       side,
       price,
       size: activeStake,
+      player: playerName,
     });
+    fetchTrades();
+    checkPaperMilestone();
   }
 
-  /* ─── Real trade execution (from confirmation modal) ─── */
-  async function executeConfirmedRealTrade(price: number, side: "BACK" | "LAY", dontAskAgain: boolean) {
-    if (!marketId || !selectedRunner) return;
-    if (dontAskAgain) {
-      try { localStorage.setItem("realTradeConfirmed", "true"); } catch { /* SSR guard */ }
-    }
-    if (marketBook?.inplay) {
-      const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
-    }
-    await placeTrade({
-      marketId,
-      selectionId: selectedRunner.selectionId,
-      side,
-      price,
-      size: activeStake,
-    });
+  /* ─── Paper trade milestone check ─── */
+  function checkPaperMilestone() {
+    try {
+      if (localStorage.getItem("paperMilestoneDismissed")) return;
+      const stats = getPaperStats();
+      if (stats.totalTrades >= 10) {
+        setPaperMilestoneData({ count: stats.totalTrades, pnl: stats.totalPnl });
+      }
+    } catch { /* non-critical */ }
   }
 
   /* ─── Live Scores ─── */
@@ -945,25 +745,6 @@ function TradingPage() {
     const id = setInterval(fetchScore, 15_000);
     return () => clearInterval(id);
   }, [p1Name, p2Name]);
-
-  /* ─── Suspension-triggered instant score refresh ─── */
-  useEffect(() => {
-    if (!suspensionDetected || !p1Name || !p2Name) return;
-    clearSuspension();
-    (async () => {
-      try {
-        const res = await fetch("/api/tennis-scores", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ player1: p1Name, player2: p2Name }),
-        });
-        const data: LiveScore = await res.json();
-        setLiveScore(data.available ? data : null);
-      } catch {
-        /* non-critical */
-      }
-    })();
-  }, [suspensionDetected, clearSuspension, p1Name, p2Name]);
 
   /* ─── Pre-Match Briefing: auto-fetch on market open ─── */
   useEffect(() => {
@@ -1194,13 +975,10 @@ function TradingPage() {
   stateRef.current = {
     activeStake,
     selectedPlayer,
-    isLive,
     marketId,
     selectedRunner: selectedRunner ?? fallbackRunner,
     ladderData: activeLadderData,
-    placeTrade,
-    isConnected,
-    setPendingRealTrade,
+    placePaperTrade,
     displayPlayers,
     setToast,
     setSelectedStake,
@@ -1208,11 +986,6 @@ function TradingPage() {
     greenUpResult,
     currentLayPrice,
     openPositions,
-    closeTradeAsGreenUp,
-    cancelOrder,
-    unmatchedOrders,
-    marketBook,
-    addPendingOrder,
     fetchTrades,
     cooldownUntil,
     fetchCoachInsight,
@@ -1234,23 +1007,15 @@ function TradingPage() {
             s.setToast({ message: "Trading paused — cooldown active", type: "error" });
             return;
           }
-          if (bestBack && s.marketId && s.selectedRunner && s.isConnected) {
-            try {
-              if (!localStorage.getItem("realTradeConfirmed")) {
-                s.setPendingRealTrade({ price: bestBack.price, side: "BACK" as const });
-                break;
-              }
-            } catch { /* SSR guard */ }
-            if (s.marketBook?.inplay) {
-              s.addPendingOrder({ id: `${Date.now()}-kb`, side: "BACK", price: bestBack.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
-            }
-            s.placeTrade({
+          if (bestBack && s.marketId && s.selectedRunner) {
+            s.placePaperTrade({
               marketId: s.marketId,
               selectionId: s.selectedRunner.selectionId,
               side: "BACK",
               price: bestBack.price,
               size: s.activeStake,
-            });
+              player: s.displayPlayers[s.selectedPlayer].name,
+            }).then(() => s.fetchTrades());
           }
           break;
         case "l":
@@ -1258,50 +1023,41 @@ function TradingPage() {
             s.setToast({ message: "Trading paused — cooldown active", type: "error" });
             return;
           }
-          if (bestLay && s.marketId && s.selectedRunner && s.isConnected) {
-            try {
-              if (!localStorage.getItem("realTradeConfirmed")) {
-                s.setPendingRealTrade({ price: bestLay.price, side: "LAY" as const });
-                break;
-              }
-            } catch { /* SSR guard */ }
-            if (s.marketBook?.inplay) {
-              s.addPendingOrder({ id: `${Date.now()}-kb`, side: "LAY", price: bestLay.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
-            }
-            s.placeTrade({
+          if (bestLay && s.marketId && s.selectedRunner) {
+            s.placePaperTrade({
               marketId: s.marketId,
               selectionId: s.selectedRunner.selectionId,
               side: "LAY",
               price: bestLay.price,
               size: s.activeStake,
-            });
-          }
-          break;
-        case "c":
-          if (s.isLive && s.marketId && s.unmatchedOrders.length > 0) {
-            s.cancelOrder({ marketId: s.marketId });
-            s.setToast({ message: "Cancelling all unmatched orders...", type: "success" });
+              player: s.displayPlayers[s.selectedPlayer].name,
+            }).then(() => s.fetchTrades());
           }
           break;
         case "g":
-          if (s.greenUpResult && s.marketId && s.selectedRunner && s.isLive) {
-            s.placeTrade({
-              marketId: s.marketId,
-              selectionId: s.selectedRunner.selectionId,
-              side: s.greenUpResult.greenUpSide,
-              price: s.currentLayPrice,
-              size: s.greenUpResult.greenUpStake,
-            }).then((ok: boolean) => {
-              if (ok) {
-                const runnerPositions = s.openPositions.filter(
-                  (p: SupabaseTrade) =>
-                    p.selection_id === String(s.selectedRunner.selectionId)
-                );
-                for (const pos of runnerPositions) {
-                  s.closeTradeAsGreenUp(pos.id, s.currentLayPrice, s.greenUpResult!.equalProfit);
-                }
-              }
+          if (s.greenUpResult && s.marketId && s.selectedRunner) {
+            const runnerPositions = s.openPositions.filter(
+              (p: SupabaseTrade) =>
+                p.selection_id === String(s.selectedRunner.selectionId)
+            );
+            for (const pos of runnerPositions) {
+              closePaperTradeLocal(pos.id, s.currentLayPrice, s.greenUpResult!.equalProfit, true);
+              s.fetchCoachInsight({
+                id: pos.id,
+                side: pos.side,
+                entry_price: pos.entry_price,
+                exit_price: s.currentLayPrice,
+                stake: pos.stake,
+                pnl: s.greenUpResult!.equalProfit,
+                player: pos.player,
+                greened_up: true,
+              });
+            }
+            s.setToast({
+              message: `Paper green-up: lock £${s.greenUpResult!.equalProfit.toFixed(2)}`,
+              type: "success",
             });
+            s.fetchTrades();
           }
           break;
         case "1":
@@ -1395,16 +1151,6 @@ function TradingPage() {
         </div>
       </div>
 
-      {/* Pending Orders (bet delay) */}
-      {pendingOrders.length > 0 && (
-        <div className="px-3 py-2 border-b border-gray-800/50 space-y-1.5">
-          <div className="text-[10px] tracking-[0.15em] uppercase text-amber-400 font-medium">PENDING ({pendingOrders.length})</div>
-          {pendingOrders.map((po) => (
-            <PendingOrderCountdown key={po.id} order={po} onExpire={removePendingOrder} />
-          ))}
-        </div>
-      )}
-
       {/* Grid Header */}
       <div className="grid grid-cols-3 py-2 border-b border-gray-800/50">
         <div className="text-[11px] tracking-[0.15em] uppercase text-blue-400 font-medium pl-3">
@@ -1422,7 +1168,6 @@ function TradingPage() {
       <div className="max-h-[640px] overflow-y-auto">
         {activeLadderData && activeLadderData.length > 0 ? (
           activeLadderData.map((row) => {
-            const unmatched = unmatchedByPrice.get(row.price);
             return (
             <div
               key={row.price}
@@ -1451,12 +1196,7 @@ function TradingPage() {
                     style={{ width: `${Math.min((row.backSize / maxSize) * 100, 100)}%` }}
                   />
                 )}
-                <span className="relative z-10 flex items-center justify-end gap-1">
-                  {unmatched && unmatched.backSize > 0 && (
-                    <span className="px-1 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-400 font-semibold">
-                      £{Math.round(unmatched.backSize)}
-                    </span>
-                  )}
+                <span className="relative z-10">
                   {row.backSize > 0 ? `£${row.backSize.toLocaleString()}` : ""}
                 </span>
               </button>
@@ -1496,11 +1236,6 @@ function TradingPage() {
                 )}
                 <span className="relative z-10 flex items-center gap-1">
                   {row.laySize > 0 ? `£${row.laySize.toLocaleString()}` : ""}
-                  {unmatched && unmatched.laySize > 0 && (
-                    <span className="px-1 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-400 font-semibold">
-                      £{Math.round(unmatched.laySize)}
-                    </span>
-                  )}
                 </span>
               </button>
             </div>
@@ -1572,70 +1307,24 @@ function TradingPage() {
         )}
       </div>
 
-      {/* Unmatched Orders List */}
-      {unmatchedOrders.filter(o => !selectedRunner || o.selectionId === selectedRunner.selectionId).length > 0 && (
-        <div className="px-3 md:px-4 py-2 border-t border-gray-800/50 bg-gray-900/20">
-          <div className="text-[10px] tracking-[0.15em] uppercase text-amber-400 font-medium mb-1.5">
-            UNMATCHED ORDERS
-          </div>
-          <div className="space-y-1">
-            {unmatchedOrders
-              .filter(o => !selectedRunner || o.selectionId === selectedRunner.selectionId)
-              .map((order) => (
-              <div key={order.betId} className="flex items-center justify-between py-1 px-2 rounded bg-amber-500/5 border border-amber-500/10">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className={`px-1 py-0.5 rounded text-[9px] font-semibold ${
-                    order.side === "BACK" ? "bg-blue-500/20 text-blue-400" : "bg-pink-500/20 text-pink-400"
-                  }`}>{order.side}</span>
-                  <span className="text-gray-300 font-mono">£{(order.sizeRemaining as number).toFixed(2)} @ {order.price.toFixed(2)}</span>
-                </div>
-                <button
-                  onClick={() => marketId && cancelOrder({ marketId, betId: order.betId })}
-                  className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Cancel All Button */}
-      {unmatchedOrders.length > 0 && marketId && (
-        <div className="px-3 md:px-4 py-2 border-t border-gray-800/50">
-          <button
-            onClick={() => cancelOrder({ marketId })}
-            className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 transition-all"
-          >
-            CANCEL ALL ({unmatchedOrders.length} unmatched)
-          </button>
-        </div>
-      )}
-
       {/* Green Up Button — only shown when a position exists */}
       {greenUpResult && currentLayPrice > 0 && (
         <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
           <button
             onClick={async () => {
-              if (!marketId || !selectedRunner || !isLive) return;
+              if (!marketId || !(selectedRunner ?? fallbackRunner)) return;
 
-              const success = await placeTrade({
-                marketId,
-                selectionId: selectedRunner.selectionId,
-                side: greenUpResult.greenUpSide,
-                price: currentLayPrice,
-                size: greenUpResult.greenUpStake,
-              });
-              if (success) {
-                for (const pos of selectedRunnerPositions) {
-                  await closeTradeAsGreenUp(
-                    pos.id,
-                    currentLayPrice,
-                    greenUpResult.equalProfit
-                  );
-                }
+              for (const pos of selectedRunnerPositions) {
+                closePaperTradeLocal(pos.id, currentLayPrice, greenUpResult.equalProfit, true);
+                fetchCoachInsight({
+                  id: pos.id, side: pos.side, entry_price: pos.entry_price,
+                  exit_price: currentLayPrice, stake: pos.stake,
+                  pnl: greenUpResult.equalProfit, player: pos.player, greened_up: true,
+                });
               }
+              setToast({ message: `Green-up: lock £${greenUpResult.equalProfit.toFixed(2)}`, type: "success" });
+              setTimeout(() => setToast(null), 4000);
+              fetchTrades();
             }}
             disabled={tradeLoading}
             className={`w-full py-3.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
@@ -1661,24 +1350,20 @@ function TradingPage() {
                   if (!marketId || !(selectedRunner ?? fallbackRunner)) return;
                   const expectedPnl = greenUpResult?.equalProfit ?? 0;
 
-                  if (isLive && selectedRunner) {
-                    const success = await placeTrade({
-                      marketId,
-                      selectionId: selectedRunner.selectionId,
-                      side: optimisedGreenResult.greenUpSide,
-                      price: currentLayPrice,
-                      size: optimisedGreenResult.greenUpStake,
+                  for (const pos of selectedRunnerPositions) {
+                    closePaperTradeLocal(pos.id, currentLayPrice, expectedPnl, true);
+                    fetchCoachInsight({
+                      id: pos.id, side: pos.side, entry_price: pos.entry_price,
+                      exit_price: currentLayPrice, stake: pos.stake,
+                      pnl: expectedPnl, player: pos.player, greened_up: true,
                     });
-                    if (success) {
-                      for (const pos of selectedRunnerPositions) {
-                        await closeTradeAsGreenUp(
-                          pos.id,
-                          currentLayPrice,
-                          expectedPnl
-                        );
-                      }
-                    }
                   }
+                  setToast({
+                    message: `Optimised green: ${optimisedGreenResult.profitIfWin >= 0 ? "+" : "-"}£${Math.abs(optimisedGreenResult.profitIfWin).toFixed(2)} on ${displayPlayers[selectedPlayer].short}, ${optimisedGreenResult.profitIfLose >= 0 ? "+" : "-"}£${Math.abs(optimisedGreenResult.profitIfLose).toFixed(2)} on ${displayPlayers[selectedPlayer === "player1" ? "player2" : "player1"].short}`,
+                    type: "success",
+                  });
+                  setTimeout(() => setToast(null), 4000);
+                  fetchTrades();
                 }}
                 disabled={tradeLoading}
                 className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 shadow-[0_0_20px_rgba(245,158,11,0.25)]"
@@ -1704,16 +1389,12 @@ function TradingPage() {
               scaleOutPrice={currentLayPrice}
               tradeLoading={tradeLoading}
               onScaleOut={async (side, price, size) => {
-                if (!marketId || !selectedRunner || !isLive) return false;
-                const success = await placeTrade({
-                  marketId,
-                  selectionId: selectedRunner.selectionId,
-                  side,
-                  price,
-                  size,
-                });
-                if (success) fetchTrades();
-                return success;
+                const runner = selectedRunner ?? fallbackRunner;
+                if (!marketId || !runner) return false;
+                const playerName = displayPlayers[selectedPlayer].name;
+                await placePaperTrade({ marketId, selectionId: runner.selectionId, side, price, size, player: playerName });
+                fetchTrades();
+                return true;
               }}
               onToast={(message, type) => {
                 setToast({ message, type });
@@ -2019,7 +1700,11 @@ function TradingPage() {
               return (
               <div
                 key={pos.id}
-                className="rounded-xl p-3 bg-blue-500/5 border border-blue-500/20"
+                className={`rounded-xl p-3 ${
+                  isPaperMode
+                    ? "bg-purple-500/5 border border-purple-500/20"
+                    : "bg-blue-500/5 border border-blue-500/20"
+                }`}
               >
                 {/* Header: side, player, P&L, badge */}
                 <div className="flex items-center justify-between mb-1.5">
@@ -2036,6 +1721,9 @@ function TradingPage() {
                     <span className="text-xs text-white font-medium">
                       {pos.player ?? pos.selection_id}
                     </span>
+                    {isPaperMode && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-700/50 text-gray-400 font-semibold">PAPER</span>
+                    )}
                   </div>
                   {livePnl !== null && (
                     <span className={`text-xs font-mono font-bold ${livePnl >= 0 ? "text-green-400" : "text-red-400"}`}>
@@ -2066,11 +1754,10 @@ function TradingPage() {
                   <div className="flex gap-2 mb-2">
                     <button
                       onClick={async () => {
-                        if (!isLive || !selectedRunner) return;
-                        const gSide = pos.side === "BACK" ? "LAY" : "BACK";
-                        const gStake = Math.round(((pos.stake ?? 0) * (pos.entry_price ?? 0)) / currentOdds * 100) / 100;
-                        const success = await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: gSide as "BACK" | "LAY", price: currentOdds, size: gStake });
-                        if (success) { await closeTradeAsGreenUp(pos.id, currentOdds, livePnl ?? 0); }
+                        closePaperTradeLocal(pos.id, currentOdds, livePnl ?? 0, true);
+                        fetchTrades();
+                        setToast({ message: `Green-up: ${livePnl !== null && livePnl >= 0 ? "+" : ""}£${(livePnl ?? 0).toFixed(2)}`, type: "success" });
+                        setTimeout(() => setToast(null), 4000);
                       }}
                       disabled={tradeLoading}
                       className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold text-white bg-green-600/80 hover:bg-green-500 transition-colors disabled:opacity-40"
@@ -2079,10 +1766,10 @@ function TradingPage() {
                     </button>
                     <button
                       onClick={async () => {
-                        if (!isLive || !selectedRunner) return;
-                        const cSide = pos.side === "BACK" ? "LAY" : "BACK";
-                        const success = await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: cSide as "BACK" | "LAY", price: currentOdds, size: pos.stake ?? 0 });
-                        if (success) { await closeTradeAsGreenUp(pos.id, currentOdds, livePnl ?? 0); }
+                        closePaperTradeLocal(pos.id, currentOdds, livePnl ?? 0, false);
+                        fetchTrades();
+                        setToast({ message: `Closed: ${livePnl !== null && livePnl >= 0 ? "+" : ""}£${(livePnl ?? 0).toFixed(2)}`, type: "success" });
+                        setTimeout(() => setToast(null), 4000);
                       }}
                       disabled={tradeLoading}
                       className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-white bg-gray-600/80 hover:bg-gray-500 transition-colors disabled:opacity-40"
@@ -2102,10 +1789,13 @@ function TradingPage() {
                         <button
                           key={pct}
                           onClick={async () => {
-                            if (!isLive || !selectedRunner) return;
                             const scaleSide = pos.side === "BACK" ? "LAY" : "BACK";
-                            await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: scaleSide as "BACK" | "LAY", price: currentOdds, size: scaleStake });
+                            const runner = selectedRunner ?? fallbackRunner;
+                            if (!marketId || !runner) return;
+                            await placePaperTrade({ marketId, selectionId: runner.selectionId, side: scaleSide as "BACK" | "LAY", price: currentOdds, size: scaleStake, player: pos.player ?? "" });
                             fetchTrades();
+                            setToast({ message: `Scaled out ${Math.round(pct * 100)}%: ${scaleSide} £${scaleStake.toFixed(2)}`, type: "success" });
+                            setTimeout(() => setToast(null), 4000);
                           }}
                           disabled={tradeLoading}
                           className="px-2 py-1 rounded text-[10px] font-mono font-medium text-gray-400 bg-gray-800/60 hover:bg-gray-700 hover:text-white transition-colors disabled:opacity-40"
@@ -2121,6 +1811,21 @@ function TradingPage() {
             })
           )}
         </div>
+        {isPaperMode && (openPositions.length > 0 || tradeHistory.length > 0) && (
+          <div className="px-4 pb-3">
+            <button
+              onClick={() => {
+                localStorage.removeItem("paper_trades");
+                fetchTrades();
+                setToast({ message: "All paper trades cleared", type: "success" });
+                setTimeout(() => setToast(null), 4000);
+              }}
+              className="w-full py-2 rounded-lg text-[10px] font-medium text-red-400/70 hover:text-red-400 border border-red-500/10 hover:border-red-500/30 bg-red-500/5 hover:bg-red-500/10 transition-colors"
+            >
+              Clear All Paper Trades
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Trade History */}
@@ -2412,28 +2117,25 @@ function TradingPage() {
         </div>
       )}
 
-      {/* Not Connected Banner */}
-      {!isLive && (
-        <div className="border-b border-amber-500/20 bg-amber-500/5">
-          <div className="px-2 md:px-4 py-1.5 flex items-center gap-2">
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">
-              NOT CONNECTED
-            </span>
-            <span className="text-xs text-amber-400/80">
-              Connect Betfair in Settings for live trading
-            </span>
-          </div>
+      {/* Paper Mode Banner */}
+      <div className="border-b border-gray-700/50 bg-gray-800/30">
+        <div className="px-2 md:px-4 py-1.5 flex items-center gap-2">
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-700/40 text-gray-400">
+            PAPER MODE
+          </span>
+          <span className="text-xs text-gray-500">
+            Practicing with real odds — no money moves
+          </span>
         </div>
-      )}
+      </div>
 
-      {/* Streak Alert Banner (amber, 3+ losses) */}
+      {/* Streak Alert Banner */}
       {streakProtectionEnabled && consecutiveLosses >= streakThreshold && !streakBannerDismissed && !cooldownActive && (
         <div className="border-b border-amber-500/20 bg-amber-500/10">
           <div className="px-2 md:px-4 py-2 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-sm shrink-0">⚠️</span>
               <span className="text-xs text-amber-400 font-medium">
-                STREAK ALERT — {consecutiveLosses} losses in a row. Traders who pause here recover faster. Consider a break.
+                STREAK ALERT — {consecutiveLosses} losses in a row. Consider a break.
               </span>
             </div>
             <button
@@ -2468,17 +2170,16 @@ function TradingPage() {
         </div>
       )}
 
-      {/* ─── Real Trade Confirm Modal ─── */}
-      {pendingRealTrade && (
-        <RealTradeConfirmModal
-          side={pendingRealTrade.side}
-          price={pendingRealTrade.price}
-          stake={activeStake}
-          onConfirm={(dontAskAgain) => {
-            executeConfirmedRealTrade(pendingRealTrade.price, pendingRealTrade.side, dontAskAgain);
-            setPendingRealTrade(null);
+
+      {/* ─── Paper Trading Milestone ─── */}
+      {paperMilestoneData && !paperMilestoneDismissed && (
+        <PaperMilestonePrompt
+          tradeCount={paperMilestoneData.count}
+          totalPnl={paperMilestoneData.pnl}
+          onDismiss={() => {
+            setPaperMilestoneDismissed(true);
+            try { localStorage.setItem("paperMilestoneDismissed", "true"); } catch { /* SSR guard */ }
           }}
-          onCancel={() => setPendingRealTrade(null)}
         />
       )}
 
@@ -2524,33 +2225,10 @@ function TradingPage() {
           ) : (
             <span className="text-gray-500">Awaiting connection</span>
           )}
-          {isConnected && marketId && (
+          {marketId && (
             <>
               <span className="text-gray-700">|</span>
-              <span className="flex items-center gap-1">
-                <span className="text-[10px] font-medium text-gray-500">Stream:</span>
-                {streamStatus === "connected" ? (
-                  <span className="flex items-center gap-1">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                    </span>
-                    <span className="text-[10px] font-semibold text-green-400">Connected</span>
-                  </span>
-                ) : streamStatus === "connecting" ? (
-                  <span className="text-[10px] font-semibold text-yellow-400 animate-pulse">Connecting...</span>
-                ) : streamStatus === "fallback" ? (
-                  <span className="flex items-center gap-1">
-                    <span className="inline-flex rounded-full h-2 w-2 bg-red-500" />
-                    <span className="text-[10px] font-semibold text-red-400">Disconnected</span>
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1">
-                    <span className="inline-flex rounded-full h-2 w-2 bg-red-500" />
-                    <span className="text-[10px] font-semibold text-red-400">Disconnected</span>
-                  </span>
-                )}
-              </span>
+              <span className="text-[10px] text-gray-500">Paper Mode</span>
             </>
           )}
           <span className="text-gray-700">|</span>
@@ -2841,8 +2519,9 @@ function TradingPage() {
                 selectedPlayer={selectedPlayer}
                 tradeLoading={tradeLoading}
                 onExecute={async (side, price, size) => {
-                  if (!marketId || !selectedRunner || !isLive) return;
-                  await placeTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size });
+                  if (!marketId || !selectedRunner) return;
+                  await placePaperTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size, player: displayPlayers[selectedPlayer].name });
+                  fetchTrades();
                 }}
               />
                         <GameMatrix
@@ -2880,7 +2559,7 @@ function TradingPage() {
                   isInPlay={!!marketBook?.inplay}
                   server={liveScore?.server}
                 />
-                <StrategyDetector
+                  <StrategyDetector
                   playerName={displayPlayers[selectedPlayer].name}
                   playerOdds={displayPlayers[selectedPlayer].odds}
                   opponentOdds={displayPlayers[selectedPlayer === "player1" ? "player2" : "player1"].odds}
@@ -2890,8 +2569,9 @@ function TradingPage() {
                   selectedPlayer={selectedPlayer}
                   tradeLoading={tradeLoading}
                   onExecute={async (side, price, size) => {
-                    if (!marketId || !selectedRunner || !isLive) return;
-                    await placeTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size });
+                    if (!marketId || !selectedRunner) return;
+                    await placePaperTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size, player: displayPlayers[selectedPlayer].name });
+                    fetchTrades();
                   }}
                 />
                             <GameMatrix
@@ -2943,6 +2623,16 @@ function TradingPage() {
             Shortcuts
           </div>
         )}
+      </div>
+
+      {/* Subtle upgrade link */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40">
+        <Link
+          href="/dashboard"
+          className="text-[10px] text-gray-600 hover:text-amber-400/80 transition-colors"
+        >
+          Ready for live trading? Go Pro &rarr;
+        </Link>
       </div>
     </main>
   );

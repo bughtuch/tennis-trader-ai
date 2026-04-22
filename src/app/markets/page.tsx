@@ -121,6 +121,7 @@ export default function MarketsPage() {
   const router = useRouter();
   const { isConnected: betfairConnected, token: betfairToken } = useBetfairToken();
   const { subscriptionStatus, subscriptionLoaded, fetchSubscriptionStatus } = useAppStore();
+  const tradePath = subscriptionLoaded && subscriptionStatus === "active" ? "/trading" : "/paper";
   const [upgradeBannerDismissed, setUpgradeBannerDismissed] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
@@ -360,7 +361,7 @@ export default function MarketsPage() {
                 if (lastMarket.p1Flag) params.set("p1Flag", lastMarket.p1Flag);
                 if (lastMarket.p2Flag) params.set("p2Flag", lastMarket.p2Flag);
                 if (lastMarket.tournament) params.set("tournament", lastMarket.tournament);
-                router.push(`/trading?${params.toString()}`);
+                router.push(`${tradePath}?${params.toString()}`);
               }}
               className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/15 transition-all group"
             >
@@ -403,8 +404,8 @@ export default function MarketsPage() {
                 // Find market data for linking
                 const market = markets.find((m) => m.id === alert.marketId);
                 const linkHref = market
-                  ? `/trading?marketId=${alert.marketId}&p1=${encodeURIComponent(market.player1.name)}&p2=${encodeURIComponent(market.player2.name)}&tournament=${encodeURIComponent(market.tournament)}${market.player1.odds ? `&p1Odds=${market.player1.odds}` : ""}${market.player2.odds ? `&p2Odds=${market.player2.odds}` : ""}`
-                  : `/trading?marketId=${alert.marketId}`;
+                  ? `${tradePath}?marketId=${alert.marketId}&p1=${encodeURIComponent(market.player1.name)}&p2=${encodeURIComponent(market.player2.name)}&tournament=${encodeURIComponent(market.tournament)}${market.player1.odds ? `&p1Odds=${market.player1.odds}` : ""}${market.player2.odds ? `&p2Odds=${market.player2.odds}` : ""}`
+                  : `${tradePath}?marketId=${alert.marketId}`;
 
                 return (
                   <Link
@@ -558,7 +559,7 @@ export default function MarketsPage() {
             {filtered.map((market) => (
               <Link
                 key={market.id}
-                href={`/trading?marketId=${market.id}&p1=${encodeURIComponent(market.player1.name)}&p2=${encodeURIComponent(market.player2.name)}&tournament=${encodeURIComponent(market.tournament)}${market.player1.odds ? `&p1Odds=${market.player1.odds}` : ""}${market.player2.odds ? `&p2Odds=${market.player2.odds}` : ""}`}
+                href={`${tradePath}?marketId=${market.id}&p1=${encodeURIComponent(market.player1.name)}&p2=${encodeURIComponent(market.player2.name)}&tournament=${encodeURIComponent(market.tournament)}${market.player1.odds ? `&p1Odds=${market.player1.odds}` : ""}${market.player2.odds ? `&p2Odds=${market.player2.odds}` : ""}`}
                 className={`group block w-full bg-gray-900/50 border rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-600/50 ${
                   market.isLive
                     ? "border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.06)]"
