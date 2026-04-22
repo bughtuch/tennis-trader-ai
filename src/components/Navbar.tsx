@@ -59,7 +59,6 @@ export default function Navbar() {
   // Ensure subscription status is loaded (belt-and-suspenders)
   useEffect(() => {
     if (user && !subscriptionLoaded) {
-      console.log("[Navbar] subscriptionLoaded is false, calling fetchSubscriptionStatus");
       fetchSubscriptionStatus();
     }
   }, [user, subscriptionLoaded, fetchSubscriptionStatus]);
@@ -137,7 +136,6 @@ export default function Navbar() {
   }, []);
 
   const isSubscriber = subscriptionLoaded && subscriptionStatus === "active";
-  console.log("[Navbar] subscriptionLoaded:", subscriptionLoaded, "subscriptionStatus:", subscriptionStatus, "isSubscriber:", isSubscriber);
   const navLinks = isSubscriber
     ? [commonLinks.home, commonLinks.markets, commonLinks.trading, commonLinks.paper, commonLinks.dna, commonLinks.settings]
     : [commonLinks.home, commonLinks.markets, commonLinks.paper, commonLinks.dna, commonLinks.settings];

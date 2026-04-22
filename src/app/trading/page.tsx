@@ -528,7 +528,6 @@ function TradingPage() {
   }, [subscriptionLoaded, fetchSubscriptionStatus]);
 
   // Subscription redirect: non-subscribers go to /paper
-  console.log("[Trading] subscriptionLoaded:", subscriptionLoaded, "subscriptionStatus:", subscriptionStatus);
   useEffect(() => {
     if (subscriptionLoaded && subscriptionStatus !== "active") {
       const params = new URLSearchParams();
