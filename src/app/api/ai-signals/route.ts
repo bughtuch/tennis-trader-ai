@@ -117,7 +117,6 @@ function parseEdgeSize(text: string): EdgeSize {
 /* ─── Route Handler ─── */
 
 export async function POST(req: NextRequest) {
-  console.log("[AI Signals API] Request received");
   try {
     // Auth check — prevent unauthenticated Anthropic API usage
     const { createServerClient } = await import("@/lib/supabase-server");
