@@ -309,10 +309,12 @@ async function executeOption(
     hedgeStake: number;
   }
 ) {
-  const sessionToken = req.cookies.get("betfair_session")?.value;
+  const sessionToken =
+    req.headers.get("x-betfair-token") ??
+    req.cookies.get("betfair_session")?.value;
   if (!sessionToken) {
     return NextResponse.json(
-      { success: false, error: "Not authenticated. Please log in first." },
+      { success: false, error: "Connect Betfair in Settings to execute trades" },
       { status: 401 }
     );
   }
@@ -392,17 +394,6 @@ async function executeOption(
 
 export async function POST(req: NextRequest) {
   try {
-    // Auth check — prevent unauthenticated access
-    const { createServerClient } = await import("@/lib/supabase-server");
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: "Not authenticated" },
-        { status: 401 }
-      );
-    }
-
     const body = await req.json();
     const { action } = body;
 
