@@ -782,7 +782,6 @@ function PaperTradingPage() {
   /* ─── AI Signals fetch ─── */
   async function fetchAiSignal() {
     setAiSignalLoading(true);
-    console.log("[AI Signal] Fetching signal, type:", signalType);
     try {
       const res = await fetch("/api/ai-signals", {
         method: "POST",
@@ -800,7 +799,6 @@ function PaperTradingPage() {
         }),
       });
       const data = await res.json();
-      console.log("[AI Signal] Response:", data);
       if (data.success && data.signal) {
         setAiSignal(data.signal);
         setAiSignalHistory((prev) => [data.signal, ...prev].slice(0, 5));

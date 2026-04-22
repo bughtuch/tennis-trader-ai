@@ -11,9 +11,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Log for now — swap for Resend/SendGrid later
-    console.log("[Contact Form]", { name, email, message: message.substring(0, 500) });
-
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json(

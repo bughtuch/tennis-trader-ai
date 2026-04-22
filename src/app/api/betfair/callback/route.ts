@@ -23,9 +23,7 @@ export async function GET(req: NextRequest) {
       client_secret: VENDOR_SECRET,
     };
 
-    console.log("[Betfair OAuth] Reading vendor session from Supabase...");
     const vendorSession = await getVendorSession();
-    console.log("[Betfair OAuth] Vendor session obtained, exchanging code...");
 
     const tokenRes = await fetch(
       "https://api.betfair.com/exchange/account/rest/v1.0/token/",
@@ -42,8 +40,6 @@ export async function GET(req: NextRequest) {
     );
 
     const tokenText = await tokenRes.text();
-    console.log("[Betfair OAuth] Response status:", tokenRes.status);
-    console.log("[Betfair OAuth] Response:", tokenText);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let tokenData: any;
@@ -66,7 +62,6 @@ export async function GET(req: NextRequest) {
     }
 
     const sessionToken = tokenData.access_token;
-    console.log("[Betfair OAuth] Access token obtained");
 
     // Pass token to settings page via URL — client-side React saves to localStorage
     settingsUrl.searchParams.set("betfair", "connected");
