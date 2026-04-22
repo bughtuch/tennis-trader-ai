@@ -177,10 +177,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       // Set subscription status from profile
       const subStatus = profile?.subscription_status;
+      console.log("[restoreSession] profile.subscription_status:", subStatus);
       if (subStatus === "active" || subStatus === "cancelled") {
         set({ subscriptionStatus: subStatus, subscriptionLoaded: true });
+        console.log("[restoreSession] SET status:", subStatus);
       } else {
         set({ subscriptionStatus: "inactive", subscriptionLoaded: true });
+        console.log("[restoreSession] SET status: inactive (raw was:", subStatus, ")");
       }
 
       if (!profile?.betfair_connected || !profile?.betfair_session_token) {
@@ -402,6 +405,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+      console.log("[fetchSubscriptionStatus] user:", user?.id ?? "NO USER");
       if (!user) {
         set({ subscriptionStatus: "inactive", subscriptionLoaded: true });
         return;
@@ -411,13 +415,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         .select("subscription_status")
         .eq("id", user.id)
         .single();
+      console.log("[fetchSubscriptionStatus] profile data:", profile);
+      console.log("[fetchSubscriptionStatus] subscription_status:", profile?.subscription_status);
       const status = profile?.subscription_status;
       if (status === "active" || status === "cancelled") {
         set({ subscriptionStatus: status, subscriptionLoaded: true });
+        console.log("[fetchSubscriptionStatus] SET status:", status);
       } else {
         set({ subscriptionStatus: "inactive", subscriptionLoaded: true });
+        console.log("[fetchSubscriptionStatus] SET status: inactive (raw was:", status, ")");
       }
-    } catch {
+    } catch (err) {
+      console.error("[fetchSubscriptionStatus] ERROR:", err);
       set({ subscriptionStatus: "inactive", subscriptionLoaded: true });
     }
   },

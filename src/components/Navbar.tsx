@@ -27,7 +27,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const { isConnected, restoreSession, subscriptionStatus, subscriptionLoaded } = useAppStore();
+  const { isConnected, restoreSession, subscriptionStatus, subscriptionLoaded, fetchSubscriptionStatus } = useAppStore();
   const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRestored = useRef(false);
 
@@ -54,6 +54,14 @@ export default function Navbar() {
       restoreSession();
     }
   }, [user, restoreSession]);
+
+  // Ensure subscription status is loaded (belt-and-suspenders)
+  useEffect(() => {
+    if (user && !subscriptionLoaded) {
+      console.log("[Navbar] subscriptionLoaded is false, calling fetchSubscriptionStatus");
+      fetchSubscriptionStatus();
+    }
+  }, [user, subscriptionLoaded, fetchSubscriptionStatus]);
 
   // Keep-alive interval (every 20 minutes) when connected
   const runKeepAlive = useCallback(async () => {
@@ -128,6 +136,7 @@ export default function Navbar() {
   }, []);
 
   const isSubscriber = subscriptionLoaded && subscriptionStatus === "active";
+  console.log("[Navbar] subscriptionLoaded:", subscriptionLoaded, "subscriptionStatus:", subscriptionStatus, "isSubscriber:", isSubscriber);
   const tradingLink = isSubscriber
     ? { href: "/trading", label: "Trading" }
     : { href: "/paper", label: "Paper Trade" };
