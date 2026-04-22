@@ -10,8 +10,8 @@ export async function GET(_req: NextRequest) {
   try {
     const currentToken = await getVendorSession();
 
-    // 1. Try keepAlive with current token
-    if (currentToken) {
+    // 1. Try keepAlive with current token (skip if empty)
+    if (currentToken && currentToken.length > 0) {
       const keepAliveRes = await fetch(
         "https://identitysso.betfair.com/api/keepAlive",
         {

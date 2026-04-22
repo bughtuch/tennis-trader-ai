@@ -6,10 +6,7 @@
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// Hardcoded fallback until app_config table is created in Supabase
-const FALLBACK_VENDOR_SESSION = "6gI2QVT80KvjC84XfTu4DlrbZyCaIBXKAOc3Cs8yIYs=";
-
-/** Read vendor_session from Supabase app_config, with hardcoded fallback */
+/** Read vendor_session from Supabase app_config. Returns empty string if missing. */
 export async function getVendorSession(): Promise<string> {
   try {
     const res = await fetch(
@@ -23,28 +20,29 @@ export async function getVendorSession(): Promise<string> {
         cache: "no-store",
       }
     );
-    if (!res.ok) return FALLBACK_VENDOR_SESSION;
+    if (!res.ok) return "";
     const rows = await res.json();
-    return rows?.[0]?.value ?? FALLBACK_VENDOR_SESSION;
+    return rows?.[0]?.value ?? "";
   } catch {
-    return FALLBACK_VENDOR_SESSION;
+    return "";
   }
 }
 
-/** Write vendor_session to Supabase app_config */
+/** Write vendor_session to Supabase app_config via UPSERT (creates row if missing) */
 export async function setVendorSession(token: string): Promise<boolean> {
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/app_config?key=eq.vendor_session`,
+      `${SUPABASE_URL}/rest/v1/app_config`,
       {
-        method: "PATCH",
+        method: "POST",
         headers: {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_KEY}`,
           "Content-Type": "application/json",
-          Prefer: "return=minimal",
+          Prefer: "resolution=merge-duplicates,return=minimal",
         },
         body: JSON.stringify({
+          key: "vendor_session",
           value: token,
           updated_at: new Date().toISOString(),
         }),
