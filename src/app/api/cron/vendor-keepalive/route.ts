@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getVendorSession, setVendorSession } from "@/lib/betfair-vendor";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 const APP_KEY = "fCsY8wIPysRCihHi";
 const VENDOR_USERNAME = "totalis";
