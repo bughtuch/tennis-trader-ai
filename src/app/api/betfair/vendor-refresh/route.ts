@@ -1,31 +1,38 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { setVendorSession } from "@/lib/betfair-vendor";
 
 export const runtime = "edge";
 
-const APP_KEY = "fCsY8wIPysRCihHi";
-const VENDOR_USERNAME = "totalis";
-
-export async function GET() {
+export async function GET(req: NextRequest) {
   console.log("[vendor-refresh] Manual refresh HIT:", new Date().toISOString());
 
+  // Auth check
+  const secret = req.nextUrl.searchParams.get("secret");
+  const expected = process.env.VENDOR_REFRESH_SECRET;
+  if (!expected || secret !== expected) {
+    console.log("[vendor-refresh] Unauthorized — bad or missing secret");
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
+    const appKey = process.env.BETFAIR_APP_KEY;
+    const vendorUsername = process.env.BETFAIR_VENDOR_USERNAME;
     const vendorPassword = process.env.BETFAIR_VENDOR_PASSWORD;
-    if (!vendorPassword) {
-      console.log("[vendor-refresh] ERROR: BETFAIR_VENDOR_PASSWORD not configured");
-      return NextResponse.json({ success: false, error: "No vendor password" }, { status: 500 });
+    if (!appKey || !vendorUsername || !vendorPassword) {
+      console.log("[vendor-refresh] ERROR: Missing env vars");
+      return NextResponse.json({ success: false, error: "Missing Betfair env vars" }, { status: 500 });
     }
 
     console.log("[vendor-refresh] Attempting fresh login...");
     const loginRes = await fetch("https://identitysso.betfair.com/api/login", {
       method: "POST",
       headers: {
-        "X-Application": APP_KEY,
+        "X-Application": appKey,
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
       },
       body: new URLSearchParams({
-        username: VENDOR_USERNAME,
+        username: vendorUsername,
         password: vendorPassword,
       }).toString(),
     });
@@ -45,16 +52,12 @@ export async function GET() {
     console.log("[vendor-refresh] Saving new token to Supabase...");
     const saved = await setVendorSession(loginData.token);
     if (!saved) {
-      console.log("[vendor-refresh] ERROR: Failed to save token");
+      console.log("[vendor-refresh] ERROR: Supabase save failed");
       return NextResponse.json({ success: false, error: "Supabase save failed" }, { status: 500 });
     }
 
     console.log("[vendor-refresh] Done — fresh login completed");
-    return NextResponse.json({
-      success: true,
-      refreshed: true,
-      message: "Fresh login completed",
-    });
+    return NextResponse.json({ success: true, refreshed: true, message: "Fresh login completed" });
   } catch (err) {
     console.log("[vendor-refresh] ERROR:", err instanceof Error ? err.message : err);
     return NextResponse.json(
