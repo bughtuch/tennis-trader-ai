@@ -93,6 +93,18 @@ export default function Navbar() {
     };
   }, [isConnected, runKeepAlive]);
 
+  // Silent vendor session check on mount (browser-originated refresh)
+  useEffect(() => {
+    try {
+      const last = sessionStorage.getItem("lastVendorCheck");
+      if (last && Date.now() - Number(last) < 5 * 60 * 1000) return;
+      sessionStorage.setItem("lastVendorCheck", String(Date.now()));
+      fetch("/api/betfair/vendor-check").catch(() => {});
+    } catch {
+      // fail silently
+    }
+  }, []);
+
   // Betfair connection status from localStorage
   const [betfairLive, setBetfairLive] = useState(false);
 
