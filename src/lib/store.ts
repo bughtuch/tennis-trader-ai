@@ -76,13 +76,15 @@ export interface PendingOrder {
 
 /* ─── Helpers ─── */
 
-function betfairHeaders(): Record<string, string> {
-  const h: Record<string, string> = { "Content-Type": "application/json" };
-  try {
-    const token = localStorage.getItem("betfair_token");
-    if (token) h["x-betfair-token"] = token;
-  } catch { /* SSR guard */ }
-  return h;
+function getBetfairHeaders(): Record<string, string> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("betfair_token") : null;
+  if (!token) {
+    console.warn("[betfair] No user token found in localStorage");
+  }
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { "x-betfair-token": token } : {}),
+  };
 }
 
 /* ─── Store ─── */
@@ -269,7 +271,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/markets", {
         method: "POST",
-        headers: betfairHeaders(),
+        headers: getBetfairHeaders(),
         body: JSON.stringify({ action: "listMarkets" }),
       });
       const data = await res.json();
@@ -292,7 +294,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/markets", {
         method: "POST",
-        headers: betfairHeaders(),
+        headers: getBetfairHeaders(),
         body: JSON.stringify({ action: "getMarketBook", marketIds }),
       });
       const data = await res.json();
@@ -316,7 +318,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
-        headers: betfairHeaders(),
+        headers: getBetfairHeaders(),
         body: JSON.stringify({
           action: "placeTrade",
           marketId,
@@ -353,7 +355,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
-        headers: betfairHeaders(),
+        headers: getBetfairHeaders(),
         body: JSON.stringify({ action: "listCurrentOrders", marketId }),
       });
       const data = await res.json();
@@ -371,7 +373,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
-        headers: betfairHeaders(),
+        headers: getBetfairHeaders(),
         body: JSON.stringify({ action: "cancelOrder", marketId, betId }),
       });
       const data = await res.json();
