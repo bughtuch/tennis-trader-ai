@@ -77,15 +77,48 @@ export async function GET(req: NextRequest) {
       }, { status: 502 });
     }
 
-    if (!tokenData.access_token) {
+    // Diagnostic logging — inspect all possible token fields
+    console.log("[callback] token exchange response keys:", Object.keys(tokenData));
+    console.log("[callback] has access_token:", !!tokenData?.access_token);
+    console.log("[callback] has result.access_token:", !!tokenData?.result?.access_token);
+    console.log("[callback] has token:", !!tokenData?.token);
+    console.log("[callback] has sessionToken:", !!tokenData?.sessionToken);
+
+    const customerToken = tokenData?.access_token || tokenData?.result?.access_token || tokenData?.token;
+    console.log("[callback] customer token preview:", customerToken?.substring(0, 8));
+
+    if (!customerToken) {
       return NextResponse.json({
-        error: "Token exchange failed — no access_token",
+        error: "Token exchange failed — no token found in response",
         status: tokenRes.status,
         response: tokenText.substring(0, 500),
       }, { status: 502 });
     }
 
-    const sessionToken = tokenData.access_token;
+    // Immediately test the token before redirecting
+    try {
+      const testResponse = await fetch("https://api.betfair.com/exchange/betting/json-rpc/v1", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-Application": APP_KEY,
+          "X-Authentication": customerToken,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "SportsAPING/v1.0/listCurrentOrders",
+          params: { orderProjection: "EXECUTABLE" },
+          id: 1,
+        }),
+      });
+      const testResult = await testResponse.json();
+      console.log("[callback] immediate trade test:", JSON.stringify(testResult));
+    } catch (testErr) {
+      console.log("[callback] trade test error:", testErr instanceof Error ? testErr.message : testErr);
+    }
+
+    const sessionToken = customerToken;
     console.log("[Betfair OAuth] Access token obtained");
 
     // Pass token to settings page via URL — client-side React saves to localStorage
