@@ -204,9 +204,8 @@ export default function MarketsPage() {
   const loadMarkets = useCallback(async () => {
     setLoading(true);
     try {
-      // Always fetch real Betfair markets (API falls back to vendor session if user not connected)
+      // Market data always uses vendor session server-side — no user token needed
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (betfairToken) headers["x-betfair-token"] = betfairToken;
 
       const catRes = await fetch("/api/betfair/markets", {
         method: "POST",
@@ -270,7 +269,7 @@ export default function MarketsPage() {
     } finally {
       setLoading(false);
     }
-  }, [betfairToken]);
+  }, []);
 
   useEffect(() => {
     loadMarkets();
