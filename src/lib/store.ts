@@ -74,6 +74,15 @@ export interface PendingOrder {
   delaySeconds: number;
 }
 
+/* ─── Helpers ─── */
+
+function getBetfairUserHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = typeof window !== "undefined" ? localStorage.getItem("betfair_token") : null;
+  if (token) headers["x-betfair-token"] = token;
+  return headers;
+}
+
 /* ─── Store ─── */
 
 interface AppState {
@@ -305,7 +314,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getBetfairUserHeaders(),
         body: JSON.stringify({
           action: "placeTrade",
           marketId,
@@ -342,7 +351,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getBetfairUserHeaders(),
         body: JSON.stringify({ action: "listCurrentOrders", marketId }),
       });
       const data = await res.json();
@@ -360,7 +369,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getBetfairUserHeaders(),
         body: JSON.stringify({ action: "cancelOrder", marketId, betId }),
       });
       const data = await res.json();
