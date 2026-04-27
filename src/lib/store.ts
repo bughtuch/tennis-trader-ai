@@ -74,6 +74,17 @@ export interface PendingOrder {
   delaySeconds: number;
 }
 
+/* ─── Helpers ─── */
+
+function betfairHeaders(): Record<string, string> {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  try {
+    const token = localStorage.getItem("betfair_token");
+    if (token) h["x-betfair-token"] = token;
+  } catch { /* SSR guard */ }
+  return h;
+}
+
 /* ─── Store ─── */
 
 interface AppState {
@@ -258,7 +269,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/markets", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: betfairHeaders(),
         body: JSON.stringify({ action: "listMarkets" }),
       });
       const data = await res.json();
@@ -281,7 +292,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/markets", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: betfairHeaders(),
         body: JSON.stringify({ action: "getMarketBook", marketIds }),
       });
       const data = await res.json();
@@ -305,7 +316,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: betfairHeaders(),
         body: JSON.stringify({
           action: "placeTrade",
           marketId,
@@ -342,7 +353,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: betfairHeaders(),
         body: JSON.stringify({ action: "listCurrentOrders", marketId }),
       });
       const data = await res.json();
@@ -360,7 +371,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetch("/api/betfair/trade", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: betfairHeaders(),
         body: JSON.stringify({ action: "cancelOrder", marketId, betId }),
       });
       const data = await res.json();
