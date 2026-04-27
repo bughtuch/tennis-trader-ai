@@ -62,8 +62,6 @@ export async function GET(req: NextRequest) {
     }
 
     const sessionToken = tokenData.access_token;
-    console.log("[callback] access_token to store:", sessionToken?.substring(0, 20), "length:", sessionToken?.length);
-    console.log("[callback] full tokenData keys:", Object.keys(tokenData));
 
     // Save token to Supabase profile so it persists across sessions
     try {
