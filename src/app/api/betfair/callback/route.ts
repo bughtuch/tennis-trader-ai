@@ -16,17 +16,23 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const requestBody = {
-      client_id: VENDOR_ID,
-      grant_type: "AUTHORIZATION_CODE",
-      code,
-      client_secret: VENDOR_SECRET,
-    };
-
     const vendorSession = await getVendorSession();
 
+    // Use JSON-RPC endpoint (REST endpoint blocked from Vercel IPs)
+    const rpcBody = {
+      jsonrpc: "2.0",
+      method: "AccountAPING/v1.0/token",
+      params: {
+        client_id: VENDOR_ID,
+        grant_type: "AUTHORIZATION_CODE",
+        code,
+        client_secret: VENDOR_SECRET,
+      },
+      id: 1,
+    };
+
     const tokenRes = await fetch(
-      "https://api.betfair.com/exchange/account/rest/v1.0/token/",
+      "https://api.betfair.com/exchange/account/json-rpc/v1",
       {
         method: "POST",
         headers: {
@@ -35,7 +41,7 @@ export async function GET(req: NextRequest) {
           "X-Application": APP_KEY,
           "X-Authentication": vendorSession,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(rpcBody),
       }
     );
 
@@ -53,15 +59,25 @@ export async function GET(req: NextRequest) {
       }, { status: 502 });
     }
 
-    if (!tokenData.access_token) {
+    console.log("[callback] token exchange response:", JSON.stringify(tokenData));
+
+    if (tokenData.error) {
       return NextResponse.json({
-        error: "Token exchange failed — no access_token",
+        error: "Token exchange failed",
+        status: tokenRes.status,
+        response: JSON.stringify(tokenData.error).substring(0, 500),
+      }, { status: 502 });
+    }
+
+    if (!tokenData.result?.access_token) {
+      return NextResponse.json({
+        error: "Token exchange failed — no access_token in result",
         status: tokenRes.status,
         response: tokenText.substring(0, 500),
       }, { status: 502 });
     }
 
-    const sessionToken = tokenData.access_token;
+    const sessionToken = tokenData.result.access_token;
 
     // Save token to Supabase profile so it persists across sessions
     try {
