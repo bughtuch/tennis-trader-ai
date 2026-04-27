@@ -22,7 +22,13 @@ export async function POST(req: NextRequest) {
     const sessionToken =
       req.headers.get("x-betfair-token") ??
       req.cookies.get("betfair_session")?.value;
+
+    console.log("[trade] Token present:", !!sessionToken);
+    console.log("[trade] Token preview:", sessionToken ? sessionToken.substring(0, 10) + "..." : "NONE");
+    console.log("[trade] Action:", action);
+
     if (!sessionToken) {
+      console.log("[trade] REJECTED — no token found in header or cookie");
       return NextResponse.json(
         { success: false, error: "Not authenticated. Please log in first." },
         { status: 401 }
@@ -31,6 +37,7 @@ export async function POST(req: NextRequest) {
 
     const appKey = process.env.BETFAIR_APP_KEY;
     if (!appKey) {
+      console.log("[trade] REJECTED — BETFAIR_APP_KEY not configured");
       return NextResponse.json(
         { success: false, error: "BETFAIR_APP_KEY is not configured" },
         { status: 500 }
@@ -104,6 +111,8 @@ export async function POST(req: NextRequest) {
         id: 1,
       };
 
+      console.log("[trade] Request body:", JSON.stringify(rpcBody, null, 2));
+
       const res = await fetch(JSONRPC_URL, {
         method: "POST",
         headers: getHeaders(sessionToken, appKey),
@@ -112,6 +121,7 @@ export async function POST(req: NextRequest) {
 
       const responseText = await res.text();
       if (!res.ok) {
+        console.log("[trade] HTTP error:", res.status, responseText.slice(0, 500));
         return NextResponse.json(
           { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}` },
           { status: res.status }
@@ -122,13 +132,18 @@ export async function POST(req: NextRequest) {
       try {
         parsed = JSON.parse(responseText);
       } catch {
+        console.log("[trade] Non-JSON response:", responseText.slice(0, 500));
         return NextResponse.json(
           { success: false, error: `Betfair returned non-JSON: ${responseText.slice(0, 300)}` },
           { status: 502 }
         );
       }
 
+      console.log("[trade] Full Betfair response:", JSON.stringify(parsed, null, 2));
+
       if (parsed.error) {
+        console.log("[trade] Error code:", parsed.error?.data?.APINGException?.errorCode);
+        console.log("[trade] Error details:", parsed.error?.data?.APINGException?.errorDetails);
         return NextResponse.json(
           { success: false, error: parsed.error?.data?.exceptionname ?? parsed.error?.message ?? "Betfair error" },
           { status: 400 }
@@ -138,6 +153,7 @@ export async function POST(req: NextRequest) {
       const data = parsed.result;
 
       if (data?.status === "FAILURE") {
+        console.log("[trade] Order FAILURE:", data.errorCode);
         return NextResponse.json(
           { success: false, error: data.errorCode ?? "Order placement failed" },
           { status: 400 }
@@ -189,6 +205,8 @@ export async function POST(req: NextRequest) {
         id: 1,
       };
 
+      console.log("[trade] cancelOrder request:", JSON.stringify(rpcBody, null, 2));
+
       const res = await fetch(JSONRPC_URL, {
         method: "POST",
         headers: getHeaders(sessionToken, appKey),
@@ -197,6 +215,7 @@ export async function POST(req: NextRequest) {
 
       const responseText = await res.text();
       if (!res.ok) {
+        console.log("[trade] cancelOrder HTTP error:", res.status, responseText.slice(0, 500));
         return NextResponse.json(
           { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}` },
           { status: res.status }
@@ -207,13 +226,18 @@ export async function POST(req: NextRequest) {
       try {
         parsed = JSON.parse(responseText);
       } catch {
+        console.log("[trade] cancelOrder non-JSON:", responseText.slice(0, 500));
         return NextResponse.json(
           { success: false, error: `Betfair returned non-JSON: ${responseText.slice(0, 300)}` },
           { status: 502 }
         );
       }
 
+      console.log("[trade] cancelOrder response:", JSON.stringify(parsed, null, 2));
+
       if (parsed.error) {
+        console.log("[trade] cancelOrder error code:", parsed.error?.data?.APINGException?.errorCode);
+        console.log("[trade] cancelOrder error details:", parsed.error?.data?.APINGException?.errorDetails);
         return NextResponse.json(
           { success: false, error: parsed.error?.data?.exceptionname ?? parsed.error?.message ?? "Betfair error" },
           { status: 400 }
@@ -222,6 +246,7 @@ export async function POST(req: NextRequest) {
 
       const data = parsed.result;
       if (data?.status === "FAILURE") {
+        console.log("[trade] cancelOrder FAILURE:", data.errorCode);
         return NextResponse.json(
           {
             success: false,
@@ -248,6 +273,8 @@ export async function POST(req: NextRequest) {
         id: 1,
       };
 
+      console.log("[trade] listCurrentOrders request:", JSON.stringify(rpcBody, null, 2));
+
       const res = await fetch(JSONRPC_URL, {
         method: "POST",
         headers: getHeaders(sessionToken, appKey),
@@ -256,6 +283,7 @@ export async function POST(req: NextRequest) {
 
       const responseText = await res.text();
       if (!res.ok) {
+        console.log("[trade] listCurrentOrders HTTP error:", res.status, responseText.slice(0, 500));
         return NextResponse.json(
           { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}` },
           { status: res.status }
@@ -266,13 +294,18 @@ export async function POST(req: NextRequest) {
       try {
         parsed = JSON.parse(responseText);
       } catch {
+        console.log("[trade] listCurrentOrders non-JSON:", responseText.slice(0, 500));
         return NextResponse.json(
           { success: false, error: `Betfair returned non-JSON: ${responseText.slice(0, 300)}` },
           { status: 502 }
         );
       }
 
+      console.log("[trade] listCurrentOrders response:", JSON.stringify(parsed, null, 2));
+
       if (parsed.error) {
+        console.log("[trade] listCurrentOrders error code:", parsed.error?.data?.APINGException?.errorCode);
+        console.log("[trade] listCurrentOrders error details:", parsed.error?.data?.APINGException?.errorDetails);
         return NextResponse.json(
           { success: false, error: parsed.error?.data?.exceptionname ?? parsed.error?.message ?? "Betfair error" },
           { status: 400 }
