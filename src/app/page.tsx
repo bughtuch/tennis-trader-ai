@@ -27,13 +27,13 @@ export default function Home() {
             <span className="text-sm text-gray-300">Live on Betfair Exchange</span>
           </div>
 
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 fade-in-up" style={{ animationDelay: "0.1s" }}>
+          <h1 className="text-3xl sm:text-5xl lg:text-7xl font-bold tracking-tight mb-6 fade-in-up" style={{ animationDelay: "0.1s" }}>
             The first AI trading system
             <br />
             <span className="gradient-text">for tennis.</span>
           </h1>
 
-          <p className="text-xl sm:text-2xl text-gray-300 mb-3 fade-in-up" style={{ animationDelay: "0.2s" }}>
+          <p className="text-lg sm:text-xl md:text-2xl text-gray-300 mb-3 fade-in-up" style={{ animationDelay: "0.2s" }}>
             Not just a ladder. A system that trades with you.
           </p>
           <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-4 fade-in-up" style={{ animationDelay: "0.25s" }}>
@@ -85,7 +85,7 @@ export default function Home() {
       </section>
 
       {/* ───────── THE SHIFT ───────── */}
-      <section id="the-shift" className="py-28 px-4 sm:px-6 lg:px-8">
+      <section id="the-shift" className="py-16 sm:py-28 px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-8 leading-tight">
             Most trading tools help you place bets.
@@ -102,7 +102,7 @@ export default function Home() {
       </section>
 
       {/* ───────── FOUR ENGINES ───────── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8">
+      <section className="py-14 sm:py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <p className="text-[10px] tracking-[0.3em] uppercase text-gray-500 font-medium mb-3">THE SYSTEM</p>
@@ -207,14 +207,14 @@ export default function Home() {
       </section>
 
       {/* ───────── PLATFORM ───────── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 border-y border-gray-800/50">
+      <section className="py-14 sm:py-24 px-4 sm:px-6 lg:px-8 border-y border-gray-800/50">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
             Every other tool was built for Windows.
             <br />
             <span className="text-gray-500">We weren&apos;t.</span>
           </h2>
-          <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-12 my-12">
+          <div className="flex flex-wrap items-center justify-center gap-5 sm:gap-8 md:gap-12 my-8 sm:my-12">
             {[
               { name: "Mac", path: "M4 4h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2zm4 16h8m-4-2v2" },
               { name: "iPhone", path: "M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zm4 18h.01" },
@@ -238,7 +238,7 @@ export default function Home() {
       </section>
 
       {/* ───────── PAPER TRADING ───────── */}
-      <section className="py-28 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      <section className="py-16 sm:py-28 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-green-500/[0.04] rounded-full blur-3xl" />
         <div className="max-w-3xl mx-auto text-center relative">
           <p className="text-[10px] tracking-[0.3em] uppercase text-green-400 font-medium mb-4">PAPER TRADING</p>
@@ -264,7 +264,7 @@ export default function Home() {
       </section>
 
       {/* ───────── BANKROLL PROTECTION ───────── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8">
+      <section className="py-14 sm:py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto text-center">
           <p className="text-[10px] tracking-[0.3em] uppercase text-red-400 font-medium mb-4">BANKROLL PROTECTION</p>
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-10">
@@ -289,7 +289,7 @@ export default function Home() {
       </section>
 
       {/* ───────── COMPARISON TABLE ───────── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8">
+      <section className="py-14 sm:py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
@@ -305,10 +305,10 @@ export default function Home() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800/50">
-                    <th className="text-left px-6 py-4 text-gray-500 font-medium text-xs tracking-wider uppercase">Feature</th>
-                    <th className="text-center px-4 py-4 text-white font-semibold"><span className="gradient-text">Tennis Trader AI</span></th>
-                    <th className="text-center px-4 py-4 text-gray-500 font-medium">Bet Angel</th>
-                    <th className="text-center px-4 py-4 text-gray-500 font-medium">Geeks Toy</th>
+                    <th className="text-left px-3 sm:px-6 py-3 sm:py-4 text-gray-500 font-medium text-[10px] sm:text-xs tracking-wider uppercase">Feature</th>
+                    <th className="text-center px-2 sm:px-4 py-3 sm:py-4 text-white font-semibold text-xs sm:text-sm"><span className="gradient-text">Tennis Trader AI</span></th>
+                    <th className="text-center px-2 sm:px-4 py-3 sm:py-4 text-gray-500 font-medium text-xs sm:text-sm">Bet Angel</th>
+                    <th className="text-center px-2 sm:px-4 py-3 sm:py-4 text-gray-500 font-medium text-xs sm:text-sm">Geeks Toy</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800/30">
@@ -325,10 +325,10 @@ export default function Home() {
                     { f: "Price", us: "£37/mo", a: "£150/yr", g: "£20/mo" },
                   ].map((row) => (
                     <tr key={row.f} className="hover:bg-gray-800/20 transition-colors">
-                      <td className="px-6 py-3 text-gray-300 font-medium">{row.f}</td>
-                      <td className="text-center px-4 py-3 font-semibold">{row.us === true ? <span className="text-green-400">&#10003;</span> : typeof row.us === "string" ? <span className="text-gray-300 text-xs font-mono">{row.us}</span> : <span className="text-gray-700">&mdash;</span>}</td>
-                      <td className="text-center px-4 py-3">{row.a === true ? <span className="text-green-400">&#10003;</span> : typeof row.a === "string" ? <span className="text-gray-300 text-xs font-mono">{row.a}</span> : <span className="text-gray-700">&mdash;</span>}</td>
-                      <td className="text-center px-4 py-3">{row.g === true ? <span className="text-green-400">&#10003;</span> : typeof row.g === "string" ? <span className="text-gray-300 text-xs font-mono">{row.g}</span> : <span className="text-gray-700">&mdash;</span>}</td>
+                      <td className="px-3 sm:px-6 py-2.5 sm:py-3 text-gray-300 font-medium text-xs sm:text-sm">{row.f}</td>
+                      <td className="text-center px-2 sm:px-4 py-2.5 sm:py-3 font-semibold">{row.us === true ? <span className="text-green-400">&#10003;</span> : typeof row.us === "string" ? <span className="text-gray-300 text-xs font-mono">{row.us}</span> : <span className="text-gray-700">&mdash;</span>}</td>
+                      <td className="text-center px-2 sm:px-4 py-2.5 sm:py-3">{row.a === true ? <span className="text-green-400">&#10003;</span> : typeof row.a === "string" ? <span className="text-gray-300 text-xs font-mono">{row.a}</span> : <span className="text-gray-700">&mdash;</span>}</td>
+                      <td className="text-center px-2 sm:px-4 py-2.5 sm:py-3">{row.g === true ? <span className="text-green-400">&#10003;</span> : typeof row.g === "string" ? <span className="text-gray-300 text-xs font-mono">{row.g}</span> : <span className="text-gray-700">&mdash;</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -339,7 +339,7 @@ export default function Home() {
       </section>
 
       {/* ───────── PRICING ───────── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8">
+      <section className="py-14 sm:py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md mx-auto">
           <div className="relative bg-gray-900/60 backdrop-blur-sm border border-gray-800/50 rounded-2xl p-8 hover:border-green-500/20 transition-all duration-500">
             <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -391,7 +391,7 @@ export default function Home() {
       </section>
 
       {/* ───────── AFFILIATE ───────── */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 border-t border-gray-800/50">
+      <section className="py-14 sm:py-24 px-4 sm:px-6 lg:px-8 border-t border-gray-800/50">
         <div className="max-w-4xl mx-auto">
           <div className="bg-gradient-to-br from-gray-900/80 to-gray-900/40 border border-gray-800/50 rounded-2xl p-8 sm:p-12">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
@@ -436,7 +436,7 @@ export default function Home() {
       </section>
 
       {/* ───────── FINAL CTA ───────── */}
-      <section className="py-28 px-4 sm:px-6 lg:px-8">
+      <section className="py-16 sm:py-28 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-4">
             Ready to trade properly?

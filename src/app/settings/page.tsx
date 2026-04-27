@@ -682,11 +682,11 @@ function SettingsPage() {
                   {subscriptionStatus === "cancelled" ? "Cancelled" : "Inactive"}
                 </span>
               </div>
-              <div className="bg-gray-800/30 rounded-xl p-4 text-center space-y-2">
-                <div className="flex items-center justify-center gap-3 mb-1">
-                  <span className="text-lg text-gray-500 line-through">£47</span>
-                  <span className="text-3xl font-bold text-white">£37</span>
-                  <span className="text-gray-400 text-sm">/month</span>
+              <div className="bg-gray-800/30 rounded-xl p-3 sm:p-4 text-center space-y-2">
+                <div className="flex items-center justify-center gap-2 sm:gap-3 mb-1">
+                  <span className="text-base sm:text-lg text-gray-500 line-through">£47</span>
+                  <span className="text-2xl sm:text-3xl font-bold text-white">£37</span>
+                  <span className="text-gray-400 text-xs sm:text-sm">/month</span>
                 </div>
                 <p className="text-xs text-gray-500">Founding member pricing — locked in forever</p>
               </div>
@@ -716,10 +716,10 @@ function SettingsPage() {
                     Save £195/year
                   </span>
                 </div>
-                <div className="flex items-center justify-center gap-3 mb-1">
-                  <span className="text-lg text-gray-500 line-through">£444</span>
-                  <span className="text-3xl font-bold text-white">£249</span>
-                  <span className="text-gray-400 text-sm">/year</span>
+                <div className="flex items-center justify-center gap-2 sm:gap-3 mb-1">
+                  <span className="text-base sm:text-lg text-gray-500 line-through">£444</span>
+                  <span className="text-2xl sm:text-3xl font-bold text-white">£249</span>
+                  <span className="text-gray-400 text-xs sm:text-sm">/year</span>
                 </div>
                 <p className="text-xs text-gray-500">That&apos;s just £20.75/month — save over 44%</p>
                 <button

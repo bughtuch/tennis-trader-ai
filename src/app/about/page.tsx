@@ -5,7 +5,7 @@ export default function AboutPage() {
   return (
     <main className="min-h-screen pt-14 bg-[#030712]">
       {/* ───────── Hero ───────── */}
-      <section className="relative py-24 px-4 sm:px-6 lg:px-8 overflow-hidden">
+      <section className="relative py-14 sm:py-24 px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-blue-500/5 rounded-full blur-3xl" />
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
 
@@ -13,7 +13,7 @@ export default function AboutPage() {
           <p className="text-[10px] tracking-[0.2em] uppercase text-blue-400 font-medium mb-4 font-[family-name:var(--font-jetbrains)]">
             ABOUT US
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-6 font-[family-name:var(--font-jakarta)]">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-6 font-[family-name:var(--font-jakarta)]">
             Built by a trader,<br />
             <span className="gradient-text">for traders</span>
           </h1>
@@ -26,12 +26,12 @@ export default function AboutPage() {
       </section>
 
       {/* ───────── The Problem ───────── */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-gray-800/50">
+      <section className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8 border-t border-gray-800/50">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-2xl font-bold mb-4 font-[family-name:var(--font-jakarta)]">The Problem</h2>
           </div>
-          <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl p-8 md:p-12">
+          <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl p-5 sm:p-8 md:p-12">
             <p className="text-gray-400 leading-relaxed mb-4 font-[family-name:var(--font-dm)]">
               Every tennis trading tool on the market felt like it was designed in 2010.
               Windows-only desktop apps that crash on a Mac. No mobile support. Clunky interfaces
@@ -51,7 +51,7 @@ export default function AboutPage() {
       </section>
 
       {/* ───────── The Solution ───────── */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-gray-800/50">
+      <section className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8 border-t border-gray-800/50">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-2xl font-bold mb-4 font-[family-name:var(--font-jakarta)]">The Solution</h2>
@@ -87,13 +87,13 @@ export default function AboutPage() {
       </section>
 
       {/* ───────── The Company ───────── */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-gray-800/50">
+      <section className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8 border-t border-gray-800/50">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-2xl font-bold mb-4 font-[family-name:var(--font-jakarta)]">The Company</h2>
           </div>
-          <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl p-8 md:p-12">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl p-5 sm:p-8 md:p-12">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
               <div>
                 <div className="text-[10px] tracking-[0.2em] uppercase text-gray-500 mb-2 font-[family-name:var(--font-jetbrains)]">Company</div>
                 <p className="text-white font-semibold">Bug Hutch Ltd</p>
@@ -120,7 +120,7 @@ export default function AboutPage() {
       </section>
 
       {/* ───────── CTA ───────── */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-gray-800/50">
+      <section className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8 border-t border-gray-800/50">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl font-bold tracking-tight mb-4 font-[family-name:var(--font-jakarta)]">
             Ready to trade smarter?

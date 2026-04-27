@@ -28,6 +28,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { isConnected, restoreSession, subscriptionStatus, subscriptionLoaded, fetchSubscriptionStatus } = useAppStore();
   const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRestored = useRef(false);
@@ -209,9 +210,26 @@ export default function Navbar() {
             ))}
           </div>
 
+          {/* Mobile Hamburger */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="sm:hidden p-2 -mr-1 text-gray-400 hover:text-white transition-colors"
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+
           {/* Right Side */}
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 text-xs">
+          <div className="hidden sm:flex items-center gap-3">
+            <div className="flex items-center gap-2 text-xs">
               {betfairLive ? (
                 <>
                   <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -268,6 +286,58 @@ export default function Navbar() {
           </div>
         </div>
       </div>
+
+      {/* Mobile Menu */}
+      {mobileMenuOpen && (
+        <div className="sm:hidden border-t border-gray-800/50 bg-gray-900/95 backdrop-blur-xl">
+          <div className="px-4 py-3 space-y-1">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  pathname === link.href
+                    ? "text-white bg-white/5"
+                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+          <div className="px-4 py-3 border-t border-gray-800/50">
+            {user ? (
+              <div className="space-y-2">
+                <div className="text-xs text-gray-500 truncate px-3">{user.email}</div>
+                <button
+                  onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
+                  className="w-full px-3 py-2.5 text-sm text-gray-400 hover:text-white text-left rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  Log out
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Link
+                  href="/auth/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-2.5 text-sm text-gray-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-2.5 text-sm text-center text-white bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg font-medium"
+                >
+                  Get Started
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   );
 }

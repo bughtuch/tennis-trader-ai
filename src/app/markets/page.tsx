@@ -296,7 +296,7 @@ export default function MarketsPage() {
     <main className="min-h-screen pt-14 bg-[#030712] max-w-[100vw] overflow-x-hidden">
       {/* Header */}
       <div className="border-b border-gray-800/50 bg-gray-900/30">
-        <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-6">
+        <div className="max-w-2xl md:max-w-4xl min-[1920px]:max-w-6xl mx-auto px-4 py-6">
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-xl font-bold text-white">Live Markets</h1>
             {liveCount > 0 && (
@@ -317,7 +317,7 @@ export default function MarketsPage() {
       {/* Not Connected Banner */}
       {!betfairConnected && (
         <div className="border-b border-blue-500/20 bg-blue-500/5">
-          <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
+          <div className="max-w-2xl md:max-w-4xl min-[1920px]:max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
             <span className="text-xs text-blue-400/80">
               Connect your Betfair account in Settings to trade
             </span>
@@ -328,7 +328,7 @@ export default function MarketsPage() {
       {/* Upgrade Banner for non-subscribers */}
       {subscriptionLoaded && subscriptionStatus !== "active" && !upgradeBannerDismissed && (
         <div className="border-b border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-500/10">
-          <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-2 flex items-center justify-between gap-2">
+          <div className="max-w-2xl md:max-w-4xl min-[1920px]:max-w-6xl mx-auto px-4 py-2 flex items-center justify-between gap-2">
             <span className="text-xs text-amber-300">
               You&apos;re paper trading. Ready to go live?{" "}
               <Link href="/settings#subscribe" className="font-bold text-amber-200 underline underline-offset-2 hover:text-white transition-colors">
@@ -351,7 +351,7 @@ export default function MarketsPage() {
       {/* Resume Last Market */}
       {lastMarket && (
         <div className="border-b border-gray-800/50 bg-gray-900/20">
-          <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-2">
+          <div className="max-w-2xl md:max-w-4xl min-[1920px]:max-w-6xl mx-auto px-4 py-2">
             <button
               onClick={() => {
                 const params = new URLSearchParams();
@@ -383,7 +383,7 @@ export default function MarketsPage() {
 
       {/* Market Scanner */}
       <div className="border-b border-gray-800/50 bg-gray-900/20">
-        <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-3">
+        <div className="max-w-2xl md:max-w-4xl min-[1920px]:max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
@@ -456,7 +456,7 @@ export default function MarketsPage() {
 
       {/* Filters + Search */}
       <div className="border-b border-gray-800/50 bg-gray-900/20">
-        <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-3 space-y-3">
+        <div className="max-w-2xl md:max-w-4xl min-[1920px]:max-w-6xl mx-auto px-4 py-3 space-y-3">
           {/* Filter Tabs */}
           <div className="flex gap-1">
             {(
@@ -539,7 +539,7 @@ export default function MarketsPage() {
 
       {/* Loading */}
       {loading && (
-        <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-12 text-center">
+        <div className="max-w-2xl md:max-w-4xl min-[1920px]:max-w-6xl mx-auto px-4 py-12 text-center">
           <div className="inline-block w-6 h-6 border-2 border-gray-700 border-t-blue-400 rounded-full animate-spin" />
           <p className="text-sm text-gray-500 mt-3">Loading markets...</p>
         </div>
@@ -547,14 +547,14 @@ export default function MarketsPage() {
 
       {/* Match Selection Guide */}
       {!loading && markets.length > 0 && (
-        <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 pt-4">
+        <div className="max-w-2xl md:max-w-4xl min-[1920px]:max-w-6xl mx-auto px-4 pt-4">
           <MatchSelectionGuide markets={markets} />
         </div>
       )}
 
       {/* Market Cards Grid */}
       {!loading && (
-        <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-4">
+        <div className="max-w-2xl md:max-w-4xl min-[1920px]:max-w-6xl mx-auto px-4 py-4">
           <div className="grid grid-cols-1 md:grid-cols-2 min-[1920px]:grid-cols-3 gap-3">
             {filtered.map((market) => (
               <Link

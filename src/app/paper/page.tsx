@@ -1364,7 +1364,7 @@ function PaperTradingPage() {
   /* ─────────────────────────────────────────────────────────── */
 
   const ladderPanel = (
-    <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden max-w-md mx-auto">
+    <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden w-full max-w-md mx-auto">
       {/* Ladder Header */}
       <div className="px-3 md:px-4 py-3 border-b border-gray-800/50">
         <div className="flex items-center justify-between">
@@ -1688,7 +1688,7 @@ function PaperTradingPage() {
 
   const aiPanel = (
     <>
-    <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden max-w-md mx-auto">
+    <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden w-full max-w-md mx-auto">
       <div className="px-4 py-3 border-b border-gray-800/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1887,7 +1887,7 @@ function PaperTradingPage() {
   /* ─────────────────────────────────────────────────────────── */
 
   const positionsPanel = (
-    <div className="space-y-3 max-w-md mx-auto">
+    <div className="space-y-3 w-full max-w-md mx-auto">
       {/* Session P&L */}
       <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800/50">
