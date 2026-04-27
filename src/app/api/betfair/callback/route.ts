@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getVendorSession } from "@/lib/betfair-vendor";
 
-const APP_KEY = "fCsY8wIPysRCihHi";
-const VENDOR_ID = "157798";
-const VENDOR_SECRET = "a3114dca-8775-4a6b-80d3-db338edd8cf5";
-
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const settingsUrl = new URL("/settings", req.url);
@@ -17,97 +13,18 @@ export async function GET(req: NextRequest) {
 
   try {
     const vendorSession = await getVendorSession();
-
-    // Use JSON-RPC endpoint (REST endpoint blocked from Vercel IPs)
-    const rpcBody = {
-      jsonrpc: "2.0",
-      method: "AccountAPING/v1.0/token",
-      params: {
-        client_id: VENDOR_ID,
-        grant_type: "AUTHORIZATION_CODE",
-        code,
-        client_secret: VENDOR_SECRET,
-      },
-      id: 1,
-    };
-
-    const tokenRes = await fetch(
-      "https://api.betfair.com/exchange/account/json-rpc/v1",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "X-Application": APP_KEY,
-          "X-Authentication": vendorSession,
-        },
-        body: JSON.stringify(rpcBody),
-      }
-    );
-
-    const tokenText = await tokenRes.text();
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let tokenData: any;
-    try {
-      tokenData = JSON.parse(tokenText);
-    } catch {
-      return NextResponse.json({
-        error: "Token exchange failed — non-JSON response",
-        status: tokenRes.status,
-        response: tokenText.substring(0, 500),
-      }, { status: 502 });
+    if (!vendorSession) {
+      settingsUrl.searchParams.set("betfair", "error");
+      settingsUrl.searchParams.set("message", "Vendor session unavailable");
+      return NextResponse.redirect(settingsUrl);
     }
 
-    console.log("[callback] token exchange response:", JSON.stringify(tokenData));
-
-    if (tokenData.error) {
-      return NextResponse.json({
-        error: "Token exchange failed",
-        status: tokenRes.status,
-        response: JSON.stringify(tokenData.error).substring(0, 500),
-      }, { status: 502 });
-    }
-
-    if (!tokenData.result?.access_token) {
-      return NextResponse.json({
-        error: "Token exchange failed — no access_token in result",
-        status: tokenRes.status,
-        response: tokenText.substring(0, 500),
-      }, { status: 502 });
-    }
-
-    const sessionToken = tokenData.result.access_token;
-
-    // Save token to Supabase profile so it persists across sessions
-    try {
-      const { createServerClient } = await import("@/lib/supabase-server");
-      const supabase = await createServerClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from("profiles").update({
-          betfair_session_token: sessionToken,
-          betfair_connected: true,
-          betfair_connected_at: new Date().toISOString(),
-        }).eq("id", user.id);
-      }
-    } catch {
-      // Non-critical — client-side will also save to localStorage
-    }
-
-    // Pass token to settings page via URL — client-side React saves to localStorage
-    settingsUrl.searchParams.set("betfair", "connected");
-    settingsUrl.searchParams.set("bt", sessionToken);
-    const response = NextResponse.redirect(settingsUrl);
-    // Set httpOnly cookie so keep-alive route can refresh the token
-    response.cookies.set("betfair_session", sessionToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      maxAge: 8 * 60 * 60,
-      path: "/",
-    });
-    return response;
+    // Redirect to client-side page that does the token exchange in the browser
+    // (Betfair API blocks Vercel server IPs)
+    const connectUrl = new URL("/auth/betfair-connect", req.url);
+    connectUrl.searchParams.set("code", code);
+    connectUrl.searchParams.set("vs", vendorSession);
+    return NextResponse.redirect(connectUrl);
   } catch (err) {
     console.error("[Betfair OAuth Callback] Error:", err);
     settingsUrl.searchParams.set("betfair", "error");
