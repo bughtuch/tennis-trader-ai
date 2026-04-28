@@ -85,7 +85,11 @@ export async function GET(req: NextRequest) {
     console.log("[callback] has sessionToken:", !!tokenData?.sessionToken);
 
     const customerToken = tokenData?.access_token || tokenData?.result?.access_token || tokenData?.token;
+    const tokenType = tokenData?.token_type || tokenData?.result?.token_type || "BEARER";
+    const refreshToken = tokenData?.refresh_token || tokenData?.result?.refresh_token || null;
     console.log("[callback] customer token preview:", customerToken?.substring(0, 8));
+    console.log("[callback] token_type:", tokenType);
+    console.log("[callback] refresh_token present:", !!refreshToken);
 
     if (!customerToken) {
       return NextResponse.json({
@@ -103,7 +107,7 @@ export async function GET(req: NextRequest) {
           "Content-Type": "application/json",
           "Accept": "application/json",
           "X-Application": APP_KEY,
-          "X-Authentication": customerToken,
+          "Authorization": `${tokenType} ${customerToken}`,
         },
         body: JSON.stringify({
           jsonrpc: "2.0",
@@ -123,7 +127,9 @@ export async function GET(req: NextRequest) {
 
     // Pass token to settings page via URL — client-side React saves to localStorage
     settingsUrl.searchParams.set("betfair", "connected");
-    settingsUrl.searchParams.set("bt", sessionToken);
+    settingsUrl.searchParams.set("bt", customerToken);
+    settingsUrl.searchParams.set("btt", tokenType);
+    if (refreshToken) settingsUrl.searchParams.set("brt", refreshToken);
     return NextResponse.redirect(settingsUrl);
   } catch (err) {
     console.error("[Betfair OAuth Callback] Error:", err);

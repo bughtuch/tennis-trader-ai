@@ -321,9 +321,13 @@ function SettingsPage() {
     if (betfairStatus === "connected") {
       // Save OAuth token from URL to localStorage
       const bt = searchParams.get("bt");
+      const btt = searchParams.get("btt") || "BEARER";
+      const brt = searchParams.get("brt");
       if (bt) {
         try {
           localStorage.setItem("betfair_token", bt);
+          localStorage.setItem("betfair_token_type", btt);
+          if (brt) localStorage.setItem("betfair_refresh_token", brt);
           localStorage.setItem("betfair_connected_at", new Date().toISOString());
           localStorage.setItem("betfair_username", "Connected via OAuth");
           window.history.replaceState({}, "", "/settings");

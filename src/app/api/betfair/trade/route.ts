@@ -4,9 +4,9 @@ export const runtime = "edge";
 
 const JSONRPC_URL = "https://api.betfair.com/exchange/betting/json-rpc/v1";
 
-function getHeaders(sessionToken: string, appKey: string) {
+function getHeaders(sessionToken: string, appKey: string, tokenType?: string) {
   return {
-    "X-Authentication": sessionToken,
+    "Authorization": `${tokenType || "BEARER"} ${sessionToken}`,
     "X-Application": appKey,
     "Content-Type": "application/json",
     "Accept": "application/json",
@@ -22,9 +22,12 @@ export async function POST(req: NextRequest) {
     const sessionToken =
       req.headers.get("x-betfair-token") ??
       req.cookies.get("betfair_session")?.value;
+    const tokenType =
+      req.headers.get("x-betfair-token-type") || "BEARER";
 
     console.log("[trade] Token present:", !!sessionToken);
     console.log("[trade] Token preview:", sessionToken ? sessionToken.substring(0, 10) + "..." : "NONE");
+    console.log("[trade] Token type:", tokenType);
     console.log("[trade] Action:", action);
 
     if (!sessionToken) {
@@ -115,7 +118,7 @@ export async function POST(req: NextRequest) {
 
       const res = await fetch(JSONRPC_URL, {
         method: "POST",
-        headers: getHeaders(sessionToken, appKey),
+        headers: getHeaders(sessionToken, appKey, tokenType),
         body: JSON.stringify(rpcBody),
       });
 
@@ -209,7 +212,7 @@ export async function POST(req: NextRequest) {
 
       const res = await fetch(JSONRPC_URL, {
         method: "POST",
-        headers: getHeaders(sessionToken, appKey),
+        headers: getHeaders(sessionToken, appKey, tokenType),
         body: JSON.stringify(rpcBody),
       });
 
@@ -277,7 +280,7 @@ export async function POST(req: NextRequest) {
 
       const res = await fetch(JSONRPC_URL, {
         method: "POST",
-        headers: getHeaders(sessionToken, appKey),
+        headers: getHeaders(sessionToken, appKey, tokenType),
         body: JSON.stringify(rpcBody),
       });
 
