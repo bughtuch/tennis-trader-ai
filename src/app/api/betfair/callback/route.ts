@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     console.log("[callback] Sending code to VPS proxy...");
 
     const tokenRes = await fetch(
-      "http://167.71.131.246:3000/betfair-token",
+      "http://proxy.tennistraderai.com:3000/betfair-token",
       {
         method: "POST",
         headers: {
