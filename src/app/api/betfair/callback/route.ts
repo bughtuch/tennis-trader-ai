@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     console.log("[Betfair OAuth] Fresh vendor session obtained, exchanging code...");
 
     const tokenRes = await fetch(
-      "https://api.betfair.com/exchange/account/rest/v1.0/token/",
+      "https://betfair-token-proxy-production.up.railway.app/betfair-token",
       {
         method: "POST",
         headers: {
