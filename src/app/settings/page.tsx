@@ -247,9 +247,8 @@ function SettingsPage() {
               new Date(new Date(data.betfair_connected_at).getTime() + 8 * 3600000).toISOString()
             );
           }
-          // Sync token to localStorage so other pages (markets, trading) can use it
+          // Sync connection metadata to localStorage (but NOT the token — OAuth redirect sets it fresh)
           try {
-            localStorage.setItem("betfair_token", data.betfair_session_token);
             localStorage.setItem("betfair_connected_at", data.betfair_connected_at ?? new Date().toISOString());
             if (data.betfair_username) localStorage.setItem("betfair_username", data.betfair_username);
           } catch { /* SSR guard */ }
@@ -548,11 +547,30 @@ function SettingsPage() {
 
   async function handleDisconnect() {
     await logout();
+    // 1–3. Clear all betfair localStorage keys
     try {
       localStorage.removeItem("betfair_token");
+      localStorage.removeItem("betfair_token_type");
+      localStorage.removeItem("betfair_refresh_token");
       localStorage.removeItem("betfair_username");
       localStorage.removeItem("betfair_connected_at");
     } catch { /* SSR guard */ }
+    // 4. Clear betfair_session cookie
+    try {
+      document.cookie = "betfair_session=; Max-Age=0; path=/;";
+    } catch { /* SSR guard */ }
+    // 5–6. Clear Supabase profile
+    try {
+      const supabase = createClient();
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (u) {
+        await supabase.from("profiles").update({
+          betfair_session_token: null,
+          betfair_connected: false,
+          betfair_connected_at: null,
+        }).eq("id", u.id);
+      }
+    } catch { /* non-critical */ }
     setBetfairConnected(false);
     setBetfairUsername(null);
     setBetfairExpiry(null);
