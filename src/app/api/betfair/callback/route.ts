@@ -13,10 +13,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    console.log("[callback] Sending code to Railway proxy...");
+    console.log("[callback] Sending code to VPS proxy...");
 
     const tokenRes = await fetch(
-      "https://betfair-token-proxy-production.up.railway.app/betfair-token",
+      "http://167.71.131.246:3000/betfair-token",
       {
         method: "POST",
         headers: {
