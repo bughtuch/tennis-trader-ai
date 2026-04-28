@@ -546,20 +546,19 @@ function SettingsPage() {
   }
 
   async function handleDisconnect() {
-    await logout();
-    // 1–3. Clear all betfair localStorage keys
-    try {
-      localStorage.removeItem("betfair_token");
-      localStorage.removeItem("betfair_token_type");
-      localStorage.removeItem("betfair_refresh_token");
-      localStorage.removeItem("betfair_username");
-      localStorage.removeItem("betfair_connected_at");
-    } catch { /* SSR guard */ }
+    // 1–3. Clear localStorage FIRST (synchronous, before any async/re-render)
+    localStorage.removeItem("betfair_token");
+    localStorage.removeItem("betfair_token_type");
+    localStorage.removeItem("betfair_refresh_token");
+    localStorage.removeItem("betfair_username");
+    localStorage.removeItem("betfair_connected_at");
     // 4. Clear betfair_session cookie
-    try {
-      document.cookie = "betfair_session=; Max-Age=0; path=/;";
-    } catch { /* SSR guard */ }
-    // 5–6. Clear Supabase profile
+    document.cookie = "betfair_session=; Max-Age=0; path=/;";
+    // Update UI immediately
+    setBetfairConnected(false);
+    setBetfairUsername(null);
+    setBetfairExpiry(null);
+    // 5–6. Clear Supabase profile + store (async, non-blocking)
     try {
       const supabase = createClient();
       const { data: { user: u } } = await supabase.auth.getUser();
@@ -571,9 +570,7 @@ function SettingsPage() {
         }).eq("id", u.id);
       }
     } catch { /* non-critical */ }
-    setBetfairConnected(false);
-    setBetfairUsername(null);
-    setBetfairExpiry(null);
+    await logout();
   }
 
   return (
