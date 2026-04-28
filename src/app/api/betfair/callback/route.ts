@@ -18,7 +18,16 @@ async function freshVendorSession(): Promise<string> {
       password: "Poppiegirl13@",
     }),
   });
-  const data = await res.json();
+  const rawText = await res.text();
+  console.log("[callback] vendor login status:", res.status);
+  console.log("[callback] vendor login content-type:", res.headers.get("content-type"));
+  console.log("[callback] vendor login raw (300):", rawText.substring(0, 300));
+  let data;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    throw new Error(`Vendor login returned non-JSON (HTTP ${res.status}): ${rawText.substring(0, 200)}`);
+  }
   if (data.status !== "SUCCESS" || !data.token) {
     throw new Error(`Vendor login failed: ${data.error ?? data.status}`);
   }
@@ -62,8 +71,9 @@ export async function GET(req: NextRequest) {
     );
 
     const tokenText = await tokenRes.text();
-    console.log("[Betfair OAuth] Response status:", tokenRes.status);
-    console.log("[Betfair OAuth] Response:", tokenText);
+    console.log("[callback] proxy status:", tokenRes.status);
+    console.log("[callback] proxy content-type:", tokenRes.headers.get("content-type"));
+    console.log("[callback] proxy raw (300):", tokenText.substring(0, 300));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let tokenData: any;
