@@ -1987,9 +1987,30 @@ function TradingPage() {
             <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">
               OPEN POSITIONS
             </h2>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-medium">
-              {openPositions.length} OPEN
-            </span>
+            <div className="flex items-center gap-2">
+              {openPositions.length > 0 && (
+                <button
+                  onClick={async () => {
+                    const supabase = createClient();
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) {
+                      await supabase.from("trades").update({
+                        status: "closed", pnl: 0,
+                        notes: "Manually cleared — stale session",
+                        closed_at: new Date().toISOString(),
+                      }).eq("user_id", user.id).eq("status", "open");
+                      fetchTrades();
+                    }
+                  }}
+                  className="text-[9px] px-2 py-0.5 rounded text-red-400/70 hover:text-red-400 border border-red-500/10 hover:border-red-500/30 transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-medium">
+                {openPositions.length} OPEN
+              </span>
+            </div>
           </div>
         </div>
         <div className="p-4 space-y-2">

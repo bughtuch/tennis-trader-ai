@@ -558,7 +558,7 @@ function SettingsPage() {
     setBetfairConnected(false);
     setBetfairUsername(null);
     setBetfairExpiry(null);
-    // 5–6. Clear Supabase profile + store (async, non-blocking)
+    // 5–6. Clear Supabase profile + close stale open trades (async, non-blocking)
     try {
       const supabase = createClient();
       const { data: { user: u } } = await supabase.auth.getUser();
@@ -568,8 +568,17 @@ function SettingsPage() {
           betfair_connected: false,
           betfair_connected_at: null,
         }).eq("id", u.id);
+        // Mark all open trades as closed (stale session)
+        await supabase.from("trades").update({
+          status: "closed",
+          pnl: 0,
+          notes: "Closed on disconnect — stale session",
+          closed_at: new Date().toISOString(),
+        }).eq("user_id", u.id).eq("status", "open");
       }
     } catch { /* non-critical */ }
+    // Clear Zustand unmatched orders
+    useAppStore.setState({ unmatchedOrders: [] });
     await logout();
   }
 
