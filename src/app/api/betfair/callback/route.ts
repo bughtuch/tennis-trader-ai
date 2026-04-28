@@ -70,6 +70,12 @@ export async function GET(req: NextRequest) {
     settingsUrl.searchParams.set("bt", customerToken);
     settingsUrl.searchParams.set("btt", tokenType);
     if (refreshToken) settingsUrl.searchParams.set("brt", refreshToken);
+
+    const maskedUrl = settingsUrl.toString().replace(/bt=[^&]+/, "bt=(MASKED)");
+    console.log("[callback] redirect URL:", maskedUrl);
+    console.log("[callback] redirect URL has bt:", settingsUrl.searchParams.has("bt"));
+    console.log("[callback] redirect URL bt length:", settingsUrl.searchParams.get("bt")?.length);
+
     return NextResponse.redirect(settingsUrl);
   } catch (err) {
     console.error("[callback] Error:", err);
