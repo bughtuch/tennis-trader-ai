@@ -2,38 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "edge";
 
-const APP_KEY = "fCsY8wIPysRCihHi";
-const VENDOR_ID = "157798";
-const VENDOR_SECRET = "a3114dca-8775-4a6b-80d3-db338edd8cf5";
-
-async function freshVendorSession(): Promise<string> {
-  const res = await fetch("https://identitysso.betfair.com/api/login", {
-    method: "POST",
-    headers: {
-      "X-Application": APP_KEY,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      username: "totalis",
-      password: "Poppiegirl13@",
-    }),
-  });
-  const rawText = await res.text();
-  console.log("[callback] vendor login status:", res.status);
-  console.log("[callback] vendor login content-type:", res.headers.get("content-type"));
-  console.log("[callback] vendor login raw (300):", rawText.substring(0, 300));
-  let data;
-  try {
-    data = JSON.parse(rawText);
-  } catch {
-    throw new Error(`Vendor login returned non-JSON (HTTP ${res.status}): ${rawText.substring(0, 200)}`);
-  }
-  if (data.status !== "SUCCESS" || !data.token) {
-    throw new Error(`Vendor login failed: ${data.error ?? data.status}`);
-  }
-  return data.token;
-}
-
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const settingsUrl = new URL("/settings", req.url);
@@ -45,16 +13,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const requestBody = {
-      client_id: VENDOR_ID,
-      grant_type: "AUTHORIZATION_CODE",
-      code,
-      client_secret: VENDOR_SECRET,
-    };
-
-    console.log("[Betfair OAuth] Logging in as vendor for fresh session...");
-    const vendorSession = await freshVendorSession();
-    console.log("[Betfair OAuth] Fresh vendor session obtained, exchanging code...");
+    console.log("[callback] Sending code to Railway proxy...");
 
     const tokenRes = await fetch(
       "https://betfair-token-proxy-production.up.railway.app/betfair-token",
@@ -63,10 +22,8 @@ export async function GET(req: NextRequest) {
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
-          "X-Application": APP_KEY,
-          "X-Authentication": vendorSession,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ code }),
       }
     );
 
@@ -80,60 +37,33 @@ export async function GET(req: NextRequest) {
     try {
       tokenData = JSON.parse(tokenText);
     } catch {
-      return NextResponse.json({
-        error: "Token exchange failed — non-JSON response",
-        status: tokenRes.status,
-        response: tokenText.substring(0, 500),
-      }, { status: 502 });
+      settingsUrl.searchParams.set("betfair", "error");
+      settingsUrl.searchParams.set(
+        "message",
+        `Token exchange failed — non-JSON response (HTTP ${tokenRes.status})`
+      );
+      return NextResponse.redirect(settingsUrl);
     }
 
-    // Diagnostic logging — inspect all possible token fields
-    console.log("[callback] token exchange response keys:", Object.keys(tokenData));
-    console.log("[callback] has access_token:", !!tokenData?.access_token);
-    console.log("[callback] has result.access_token:", !!tokenData?.result?.access_token);
-    console.log("[callback] has token:", !!tokenData?.token);
-    console.log("[callback] has sessionToken:", !!tokenData?.sessionToken);
+    const customerToken = tokenData?.access_token || tokenData?.token;
+    const tokenType = tokenData?.token_type || "BEARER";
+    const refreshToken = tokenData?.refresh_token || null;
 
-    const customerToken = tokenData?.access_token || tokenData?.result?.access_token || tokenData?.token;
-    const tokenType = tokenData?.token_type || tokenData?.result?.token_type || "BEARER";
-    const refreshToken = tokenData?.refresh_token || tokenData?.result?.refresh_token || null;
-    console.log("[callback] customer token preview:", customerToken?.substring(0, 8));
+    console.log("[callback] access_token present:", !!customerToken);
     console.log("[callback] token_type:", tokenType);
     console.log("[callback] refresh_token present:", !!refreshToken);
+    if (customerToken) {
+      console.log("[callback] token preview:", customerToken.substring(0, 10));
+    }
 
     if (!customerToken) {
-      return NextResponse.json({
-        error: "Token exchange failed — no token found in response",
-        status: tokenRes.status,
-        response: tokenText.substring(0, 500),
-      }, { status: 502 });
+      settingsUrl.searchParams.set("betfair", "error");
+      settingsUrl.searchParams.set(
+        "message",
+        tokenData?.error || "Token exchange failed — no access_token in response"
+      );
+      return NextResponse.redirect(settingsUrl);
     }
-
-    // Immediately test the token before redirecting
-    try {
-      const testResponse = await fetch("https://api.betfair.com/exchange/betting/json-rpc/v1", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "X-Application": APP_KEY,
-          "Authorization": `${tokenType} ${customerToken}`,
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "SportsAPING/v1.0/listCurrentOrders",
-          params: { orderProjection: "EXECUTABLE" },
-          id: 1,
-        }),
-      });
-      const testResult = await testResponse.json();
-      console.log("[callback] immediate trade test:", JSON.stringify(testResult));
-    } catch (testErr) {
-      console.log("[callback] trade test error:", testErr instanceof Error ? testErr.message : testErr);
-    }
-
-    const sessionToken = customerToken;
-    console.log("[Betfair OAuth] Access token obtained");
 
     // Pass token to settings page via URL — client-side React saves to localStorage
     settingsUrl.searchParams.set("betfair", "connected");
@@ -142,7 +72,7 @@ export async function GET(req: NextRequest) {
     if (refreshToken) settingsUrl.searchParams.set("brt", refreshToken);
     return NextResponse.redirect(settingsUrl);
   } catch (err) {
-    console.error("[Betfair OAuth Callback] Error:", err);
+    console.error("[callback] Error:", err);
     settingsUrl.searchParams.set("betfair", "error");
     settingsUrl.searchParams.set(
       "message",
