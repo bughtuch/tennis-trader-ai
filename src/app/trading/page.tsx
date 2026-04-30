@@ -281,6 +281,9 @@ function TradingPage() {
   const [guardianLoading, setGuardianLoading] = useState(false);
   const [guardianExecuting, setGuardianExecuting] = useState(false);
 
+  /* Live positions: confirmed trades (matched or unmatched) */
+  const [livePositions, setLivePositions] = useState<SupabaseTrade[]>([]);
+
   /* Trade history from Supabase (for SESSION P&L) */
   const [tradeHistory, setTradeHistory] = useState<SupabaseTrade[]>([]);
 
@@ -408,16 +411,21 @@ function TradingPage() {
     const supabase = createClient();
     // Find the trade data before closing (for coach context)
     const trade = openPositions.find((p) => p.id === tradeId);
-    await supabase
-      .from("trades")
-      .update({
-        exit_price: exitPrice,
-        pnl,
-        status: "closed",
-        greened_up: true,
-        closed_at: new Date().toISOString(),
-      })
-      .eq("id", tradeId);
+    // Remove from local live positions
+    removeLivePosition(tradeId);
+    // Try to close in Supabase (may not exist if local-only)
+    if (!tradeId.startsWith("local-")) {
+      await supabase
+        .from("trades")
+        .update({
+          exit_price: exitPrice,
+          pnl,
+          status: "closed",
+          greened_up: true,
+          closed_at: new Date().toISOString(),
+        })
+        .eq("id", tradeId);
+    }
     fetchTrades();
     // Fire coach insight in background
     if (trade) {
@@ -545,9 +553,8 @@ function TradingPage() {
 
   const isLive = isConnected && !!marketId && !!marketBook;
 
-  /* ─── Open positions: derived from live Betfair unmatchedOrders ─── */
+  /* ─── Open positions: livePositions (local confirmed) merged with unmatched ─── */
   const openPositions: SupabaseTrade[] = useMemo(() => {
-    if (!unmatchedOrders || unmatchedOrders.length === 0) return [];
     const nameMap = new Map<number, string>();
     if (marketBook?.runners) {
       const r0 = marketBook.runners[0];
@@ -555,27 +562,40 @@ function TradingPage() {
       if (r0) nameMap.set(r0.selectionId, r0.runnerName || p1Name || "Player 1");
       if (r1) nameMap.set(r1.selectionId, r1.runnerName || p2Name || "Player 2");
     }
-    return unmatchedOrders.map((o) => ({
-      id: o.betId,
-      user_id: "",
-      market_id: o.marketId,
-      selection_id: String(o.selectionId),
-      player: nameMap.get(o.selectionId) || `Selection ${o.selectionId}`,
-      side: o.side,
-      entry_price: o.price,
-      exit_price: null,
-      stake: o.sizeRemaining as number,
-      pnl: null,
-      status: "open",
-      greened_up: false,
-      is_shadow: false,
-      ai_signal_used: false,
-      notes: null,
-      coach_insight: null,
-      created_at: o.placedDate,
-      closed_at: null,
-    }));
-  }, [unmatchedOrders, marketBook, p1Name, p2Name]);
+    // Start with local confirmed positions (includes matched bets)
+    const seen = new Set<string>();
+    const result: SupabaseTrade[] = [];
+    for (const pos of livePositions) {
+      if (pos.market_id !== marketId) continue;
+      seen.add(pos.id);
+      result.push(pos);
+    }
+    // Add any unmatched orders not already in livePositions
+    for (const o of unmatchedOrders) {
+      if (seen.has(o.betId)) continue;
+      result.push({
+        id: o.betId,
+        user_id: "",
+        market_id: o.marketId,
+        selection_id: String(o.selectionId),
+        player: nameMap.get(o.selectionId) || `Selection ${o.selectionId}`,
+        side: o.side,
+        entry_price: o.price,
+        exit_price: null,
+        stake: o.sizeRemaining as number,
+        pnl: null,
+        status: "open",
+        greened_up: false,
+        is_shadow: false,
+        ai_signal_used: false,
+        notes: null,
+        coach_insight: null,
+        created_at: o.placedDate,
+        closed_at: null,
+      });
+    }
+    return result;
+  }, [livePositions, unmatchedOrders, marketBook, p1Name, p2Name, marketId]);
 
   /* ─── Betfair Streaming (real-time prices via SSE) ─── */
   const { streamStatus, isStreaming, suspensionDetected, clearSuspension } = useBetfairStream(
@@ -887,6 +907,43 @@ function TradingPage() {
     unmatchedByPrice.set(order.price, entry);
   }
 
+  /* ─── Add confirmed position to local state ─── */
+  function addLivePosition(params: { marketId: string; selectionId: number; side: "BACK" | "LAY"; price: number; size: number }) {
+    const nameMap = new Map<number, string>();
+    if (marketBook?.runners) {
+      const r0 = marketBook.runners[0];
+      const r1 = marketBook.runners[1];
+      if (r0) nameMap.set(r0.selectionId, r0.runnerName || p1Name || "Player 1");
+      if (r1) nameMap.set(r1.selectionId, r1.runnerName || p2Name || "Player 2");
+    }
+    const pos: SupabaseTrade = {
+      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      user_id: "",
+      market_id: params.marketId,
+      selection_id: String(params.selectionId),
+      player: nameMap.get(params.selectionId) || `Selection ${params.selectionId}`,
+      side: params.side,
+      entry_price: params.price,
+      exit_price: null,
+      stake: params.size,
+      pnl: null,
+      status: "open",
+      greened_up: false,
+      is_shadow: false,
+      ai_signal_used: false,
+      notes: null,
+      coach_insight: null,
+      created_at: new Date().toISOString(),
+      closed_at: null,
+    };
+    setLivePositions((prev) => [...prev, pos]);
+  }
+
+  /* ─── Remove position from local state (on green-up/close) ─── */
+  function removeLivePosition(posId: string) {
+    setLivePositions((prev) => prev.filter((p) => p.id !== posId));
+  }
+
   /* ─── Handle trade click ─── */
   async function handleTradeClick(price: number, side: "BACK" | "LAY") {
     if (!marketId || !selectedRunner) return;
@@ -915,13 +972,16 @@ function TradingPage() {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
     }
-    await placeTrade({
+    const success = await placeTrade({
       marketId,
       selectionId: selectedRunner.selectionId,
       side,
       price,
       size: activeStake,
     });
+    if (success) {
+      addLivePosition({ marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake });
+    }
   }
 
   /* ─── Real trade execution (from confirmation modal) ─── */
@@ -934,13 +994,16 @@ function TradingPage() {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
     }
-    await placeTrade({
+    const success = await placeTrade({
       marketId,
       selectionId: selectedRunner.selectionId,
       side,
       price,
       size: activeStake,
     });
+    if (success) {
+      addLivePosition({ marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake });
+    }
   }
 
   /* ─── Live Scores ─── */
