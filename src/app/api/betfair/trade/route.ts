@@ -167,14 +167,15 @@ export async function POST(req: NextRequest) {
         (r: { betId: string }) => r.betId
       );
 
-      // Save trades to Supabase
+      // Save trades to Supabase (with bet_id to prevent duplicates)
       try {
         const { createServerClient } = await import("@/lib/supabase-server");
         const supabase = await createServerClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
+          const reports = data?.instructionReports ?? [];
           const tradeRows = instructions.map(
-            (inst: { selectionId: number; side: string; price: number; size: number }) => ({
+            (inst: { selectionId: number; side: string; price: number; size: number }, i: number) => ({
               user_id: user.id,
               market_id: marketId,
               selection_id: String(inst.selectionId),
@@ -182,9 +183,15 @@ export async function POST(req: NextRequest) {
               entry_price: inst.price,
               stake: inst.size,
               status: "open",
+              bet_id: reports[i]?.betId ?? null,
             })
           );
-          await supabase.from("trades").insert(tradeRows);
+          // Use upsert with bet_id to prevent duplicate entries
+          if (tradeRows[0]?.bet_id) {
+            await supabase.from("trades").upsert(tradeRows, { onConflict: "bet_id", ignoreDuplicates: true });
+          } else {
+            await supabase.from("trades").insert(tradeRows);
+          }
         }
       } catch {
         // Trade recording is non-critical — don't block the response

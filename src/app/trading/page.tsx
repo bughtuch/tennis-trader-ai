@@ -1204,6 +1204,7 @@ function TradingPage() {
     setSelectedStake,
     setCustomStakeInput,
     greenUpResult,
+    currentBackPrice,
     currentLayPrice,
     openPositions,
     closeTradeAsGreenUp,
@@ -1283,11 +1284,13 @@ function TradingPage() {
           break;
         case "g":
           if (s.greenUpResult && s.marketId && s.selectedRunner && s.isLive) {
+            const gPrice = s.greenUpResult.greenUpSide === "LAY" ? s.currentLayPrice : s.currentBackPrice;
+            if (!gPrice || gPrice <= 1 || s.greenUpResult.greenUpStake < 2) break;
             s.placeTrade({
               marketId: s.marketId,
               selectionId: s.selectedRunner.selectionId,
               side: s.greenUpResult.greenUpSide,
-              price: s.currentLayPrice,
+              price: gPrice,
               size: s.greenUpResult.greenUpStake,
             }).then((ok: boolean) => {
               if (ok) {
@@ -1296,7 +1299,7 @@ function TradingPage() {
                     p.selection_id === String(s.selectedRunner.selectionId)
                 );
                 for (const pos of runnerPositions) {
-                  s.closeTradeAsGreenUp(pos.id, s.currentLayPrice, s.greenUpResult!.equalProfit);
+                  s.closeTradeAsGreenUp(pos.id, gPrice, s.greenUpResult!.equalProfit);
                 }
               }
             });
@@ -1612,30 +1615,40 @@ function TradingPage() {
       )}
 
       {/* Green Up Button — only shown when a position exists */}
-      {greenUpResult && currentLayPrice > 0 && (
+      {greenUpResult && currentLayPrice > 0 && (() => {
+        // Use correct price for hedge side: LAY hedge uses lay price, BACK hedge uses back price
+        const greenPrice = greenUpResult.greenUpSide === "LAY" ? currentLayPrice : currentBackPrice;
+        if (!greenPrice || greenPrice <= 1) return null;
+        const stakeOk = greenUpResult.greenUpStake >= 2 && greenUpResult.greenUpStake <= 10000;
+        return (
         <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
           <button
             onClick={async () => {
               if (!marketId || !selectedRunner || !isLive) return;
+              if (!stakeOk) {
+                setToast({ message: `Green-up stake £${greenUpResult.greenUpStake.toFixed(2)} invalid (min £2)`, type: "error" });
+                setTimeout(() => setToast(null), 4000);
+                return;
+              }
 
               const success = await placeTrade({
                 marketId,
                 selectionId: selectedRunner.selectionId,
                 side: greenUpResult.greenUpSide,
-                price: currentLayPrice,
+                price: greenPrice,
                 size: greenUpResult.greenUpStake,
               });
               if (success) {
                 for (const pos of selectedRunnerPositions) {
                   await closeTradeAsGreenUp(
                     pos.id,
-                    currentLayPrice,
+                    greenPrice,
                     greenUpResult.equalProfit
                   );
                 }
               }
             }}
-            disabled={tradeLoading}
+            disabled={tradeLoading || !stakeOk}
             className={`w-full py-3.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
               greenUpResult.equalProfit >= 0
                 ? "bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 shadow-[0_0_20px_rgba(34,197,94,0.3)] animate-pulse-subtle"
@@ -1643,7 +1656,7 @@ function TradingPage() {
             }`}
           >
             {greenUpResult.greenUpSide} £{greenUpResult.greenUpStake.toFixed(2)} @{" "}
-            {currentLayPrice.toFixed(2)} → Lock{" "}
+            {greenPrice.toFixed(2)} → Lock{" "}
             {greenUpResult.equalProfit >= 0 ? "+" : ""}£
             {greenUpResult.equalProfit.toFixed(2)}
           </button>
@@ -1660,18 +1673,20 @@ function TradingPage() {
                   const expectedPnl = greenUpResult?.equalProfit ?? 0;
 
                   if (isLive && selectedRunner) {
+                    const optPrice = optimisedGreenResult.greenUpSide === "LAY" ? currentLayPrice : currentBackPrice;
+                    if (!optPrice || optPrice <= 1) return;
                     const success = await placeTrade({
                       marketId,
                       selectionId: selectedRunner.selectionId,
                       side: optimisedGreenResult.greenUpSide,
-                      price: currentLayPrice,
+                      price: optPrice,
                       size: optimisedGreenResult.greenUpStake,
                     });
                     if (success) {
                       for (const pos of selectedRunnerPositions) {
                         await closeTradeAsGreenUp(
                           pos.id,
-                          currentLayPrice,
+                          optPrice,
                           expectedPnl
                         );
                       }
@@ -1720,7 +1735,8 @@ function TradingPage() {
             />
           )}
         </div>
-      )}
+      );
+      })()}
     </div>
   );
 
@@ -2081,17 +2097,30 @@ function TradingPage() {
                 </div>
 
                 {/* Action buttons: GREEN UP + CLOSE */}
-                {currentOdds && currentOdds > 1 && pos.entry_price && pos.stake && (
+                {currentOdds && currentOdds > 1 && pos.entry_price && pos.stake && (() => {
+                  // Use correct tradeable price for hedge side
+                  const hedgePrice = pos.side === "BACK" ? currentLayPrice : currentBackPrice;
+                  if (!hedgePrice || hedgePrice <= 1) return null;
+                  const gSide = pos.side === "BACK" ? "LAY" : "BACK";
+                  const gStake = Math.round(((pos.stake ?? 0) * (pos.entry_price ?? 0)) / hedgePrice * 100) / 100;
+                  // Validate stake: Betfair min £2, max sanity check
+                  const stakeValid = gStake >= 2 && gStake <= 10000;
+                  const closeStake = Math.round((pos.stake ?? 0) * 100) / 100;
+                  const closeValid = closeStake >= 2 && closeStake <= 10000;
+                  return (
                   <div className="flex gap-2 mb-2">
                     <button
                       onClick={async () => {
                         if (!isLive || !selectedRunner) return;
-                        const gSide = pos.side === "BACK" ? "LAY" : "BACK";
-                        const gStake = Math.round(((pos.stake ?? 0) * (pos.entry_price ?? 0)) / currentOdds * 100) / 100;
-                        const success = await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: gSide as "BACK" | "LAY", price: currentOdds, size: gStake });
-                        if (success) { await closeTradeAsGreenUp(pos.id, currentOdds, livePnl ?? 0); }
+                        if (!stakeValid) {
+                          setToast({ message: `Green-up stake £${gStake.toFixed(2)} invalid (min £2)`, type: "error" });
+                          setTimeout(() => setToast(null), 4000);
+                          return;
+                        }
+                        const success = await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: gSide as "BACK" | "LAY", price: hedgePrice, size: gStake });
+                        if (success) { await closeTradeAsGreenUp(pos.id, hedgePrice, livePnl ?? 0); }
                       }}
-                      disabled={tradeLoading}
+                      disabled={tradeLoading || !stakeValid}
                       className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold text-white bg-green-600/80 hover:bg-green-500 transition-colors disabled:opacity-40"
                     >
                       GREEN UP {livePnl !== null ? `${livePnl >= 0 ? "+" : "-"}£${Math.abs(livePnl).toFixed(2)}` : ""}
@@ -2099,17 +2128,22 @@ function TradingPage() {
                     <button
                       onClick={async () => {
                         if (!isLive || !selectedRunner) return;
-                        const cSide = pos.side === "BACK" ? "LAY" : "BACK";
-                        const success = await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: cSide as "BACK" | "LAY", price: currentOdds, size: pos.stake ?? 0 });
-                        if (success) { await closeTradeAsGreenUp(pos.id, currentOdds, livePnl ?? 0); }
+                        if (!closeValid) {
+                          setToast({ message: `Close stake £${closeStake.toFixed(2)} invalid (min £2)`, type: "error" });
+                          setTimeout(() => setToast(null), 4000);
+                          return;
+                        }
+                        const success = await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: gSide as "BACK" | "LAY", price: hedgePrice, size: closeStake });
+                        if (success) { await closeTradeAsGreenUp(pos.id, hedgePrice, livePnl ?? 0); }
                       }}
-                      disabled={tradeLoading}
+                      disabled={tradeLoading || !closeValid}
                       className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-white bg-gray-600/80 hover:bg-gray-500 transition-colors disabled:opacity-40"
                     >
                       CLOSE
                     </button>
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* Scale-out buttons */}
                 {currentOdds && currentOdds > 1 && pos.entry_price && pos.stake && (
