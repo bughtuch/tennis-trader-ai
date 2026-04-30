@@ -281,8 +281,7 @@ function TradingPage() {
   const [guardianLoading, setGuardianLoading] = useState(false);
   const [guardianExecuting, setGuardianExecuting] = useState(false);
 
-  /* Supabase trades state */
-  const [openPositions, setOpenPositions] = useState<SupabaseTrade[]>([]);
+  /* Trade history from Supabase (for SESSION P&L) */
   const [tradeHistory, setTradeHistory] = useState<SupabaseTrade[]>([]);
 
   const fetchTrades = useCallback(async () => {
@@ -291,15 +290,6 @@ function TradingPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
-
-    const { data: open } = await supabase
-      .from("trades")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "open")
-      .eq("is_shadow", false)
-      .order("created_at", { ascending: false });
-    if (open) setOpenPositions(open);
 
     const { data: closed } = await supabase
       .from("trades")
@@ -554,6 +544,38 @@ function TradingPage() {
   }, [betfairHookConnected]);
 
   const isLive = isConnected && !!marketId && !!marketBook;
+
+  /* ─── Open positions: derived from live Betfair unmatchedOrders ─── */
+  const openPositions: SupabaseTrade[] = useMemo(() => {
+    if (!unmatchedOrders || unmatchedOrders.length === 0) return [];
+    const nameMap = new Map<number, string>();
+    if (marketBook?.runners) {
+      const r0 = marketBook.runners[0];
+      const r1 = marketBook.runners[1];
+      if (r0) nameMap.set(r0.selectionId, r0.runnerName || p1Name || "Player 1");
+      if (r1) nameMap.set(r1.selectionId, r1.runnerName || p2Name || "Player 2");
+    }
+    return unmatchedOrders.map((o) => ({
+      id: o.betId,
+      user_id: "",
+      market_id: o.marketId,
+      selection_id: String(o.selectionId),
+      player: nameMap.get(o.selectionId) || `Selection ${o.selectionId}`,
+      side: o.side,
+      entry_price: o.price,
+      exit_price: null,
+      stake: o.sizeRemaining as number,
+      pnl: null,
+      status: "open",
+      greened_up: false,
+      is_shadow: false,
+      ai_signal_used: false,
+      notes: null,
+      coach_insight: null,
+      created_at: o.placedDate,
+      closed_at: null,
+    }));
+  }, [unmatchedOrders, marketBook, p1Name, p2Name]);
 
   /* ─── Betfair Streaming (real-time prices via SSE) ─── */
   const { streamStatus, isStreaming, suspensionDetected, clearSuspension } = useBetfairStream(
