@@ -21,16 +21,24 @@ export function useBetfairToken(): BetfairToken {
       const username = localStorage.getItem("betfair_username");
       const connectedAt = localStorage.getItem("betfair_connected_at");
 
-      if (token && connectedAt) {
-        const expired = Date.now() > new Date(connectedAt).getTime() + 8 * 3600000;
-        if (!expired) {
-          setState({ token, isConnected: true, username });
-          return;
+      console.log("[useBetfairToken] Betfair connected:", !!token);
+
+      if (token) {
+        // Check expiry only if connectedAt exists
+        if (connectedAt) {
+          const expired = Date.now() > new Date(connectedAt).getTime() + 8 * 3600000;
+          if (expired) {
+            localStorage.removeItem("betfair_token");
+            localStorage.removeItem("betfair_token_type");
+            localStorage.removeItem("betfair_refresh_token");
+            localStorage.removeItem("betfair_username");
+            localStorage.removeItem("betfair_connected_at");
+            setState({ token: null, isConnected: false, username: null });
+            return;
+          }
         }
-        // Expired — clean up
-        localStorage.removeItem("betfair_token");
-        localStorage.removeItem("betfair_username");
-        localStorage.removeItem("betfair_connected_at");
+        setState({ token, isConnected: true, username });
+        return;
       }
     } catch { /* SSR guard */ }
 
