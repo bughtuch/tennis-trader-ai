@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "rea
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore, type PriceSize, type PendingOrder } from "@/lib/store";
-import { calculateGreenUp, moveByTicks, roundToTick } from "@/lib/tradingMaths";
+import { calculateGreenUp, calculateLiability, moveByTicks, roundToTick } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
@@ -21,6 +21,7 @@ import GameMatrix from "@/components/GameMatrix";
 import AutomationRules from "@/components/AutomationRules";
 import LiveScoreBar from "@/components/LiveScoreBar";
 import { calculateOptimisedGreenUp } from "@/lib/tradingMaths";
+import { validateAndExecute, type ActionName, type TradeActionParams } from "@/lib/tradeActions";
 
 
 interface SupabaseTrade {
@@ -411,8 +412,6 @@ function TradingPage() {
     const supabase = createClient();
     // Find the trade data before closing (for coach context)
     const trade = openPositions.find((p) => p.id === tradeId);
-    // Remove from local live positions
-    removeLivePosition(tradeId);
     // Try to close in Supabase (may not exist if local-only)
     if (!tradeId.startsWith("local-")) {
       await supabase
@@ -426,6 +425,8 @@ function TradingPage() {
         })
         .eq("id", tradeId);
     }
+    // Remove from local live positions AFTER Supabase update succeeds
+    removeLivePosition(tradeId);
     fetchTrades();
     // Fire coach insight in background
     if (trade) {
@@ -519,6 +520,20 @@ function TradingPage() {
     subscriptionLoaded,
     fetchSubscriptionStatus,
   } = useAppStore();
+
+  /* ─── Unified trade-action executor ─── */
+  const execAction = useCallback(
+    (params: TradeActionParams) =>
+      validateAndExecute(params, {
+        placeTrade,
+        cancelOrder,
+        onError: (msg) => {
+          setToast({ message: msg, type: "error" });
+          setTimeout(() => setToast(null), 8000);
+        },
+      }),
+    [placeTrade, cancelOrder]
+  );
 
   // Ensure subscription status is loaded
   useEffect(() => {
@@ -650,7 +665,7 @@ function TradingPage() {
     if (tradeError) {
       setToast({ message: tradeError, type: "error" });
       clearTradeMessages();
-      const t = setTimeout(() => setToast(null), 4000);
+      const t = setTimeout(() => setToast(null), 8000);
       return () => clearTimeout(t);
     }
   }, [lastTradeSuccess, tradeError, clearTradeMessages, fetchTrades]);
@@ -908,7 +923,7 @@ function TradingPage() {
   }
 
   /* ─── Add confirmed position to local state ─── */
-  function addLivePosition(params: { marketId: string; selectionId: number; side: "BACK" | "LAY"; price: number; size: number }) {
+  function addLivePosition(params: { marketId: string; selectionId: number; side: "BACK" | "LAY"; price: number; size: number; betId?: string }) {
     const nameMap = new Map<number, string>();
     if (marketBook?.runners) {
       const r0 = marketBook.runners[0];
@@ -916,8 +931,10 @@ function TradingPage() {
       if (r0) nameMap.set(r0.selectionId, r0.runnerName || p1Name || "Player 1");
       if (r1) nameMap.set(r1.selectionId, r1.runnerName || p2Name || "Player 2");
     }
+    // Use real betId for dedup with unmatchedOrders; fall back to local ID
+    const posId = params.betId || `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const pos: SupabaseTrade = {
-      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: posId,
       user_id: "",
       market_id: params.marketId,
       selection_id: String(params.selectionId),
@@ -972,15 +989,11 @@ function TradingPage() {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
     }
-    const success = await placeTrade({
-      marketId,
-      selectionId: selectedRunner.selectionId,
-      side,
-      price,
-      size: activeStake,
+    const result = await execAction({
+      actionName: "PLACE_TRADE", marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake,
     });
-    if (success) {
-      addLivePosition({ marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake });
+    if (result.success) {
+      addLivePosition({ marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake, betId: result.betId });
     }
   }
 
@@ -994,15 +1007,11 @@ function TradingPage() {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
     }
-    const success = await placeTrade({
-      marketId,
-      selectionId: selectedRunner.selectionId,
-      side,
-      price,
-      size: activeStake,
+    const result = await execAction({
+      actionName: "PLACE_TRADE", marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake,
     });
-    if (success) {
-      addLivePosition({ marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake });
+    if (result.success) {
+      addLivePosition({ marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake, betId: result.betId });
     }
   }
 
@@ -1171,35 +1180,28 @@ function TradingPage() {
 
   async function executeGuardianOption(option: { hedgeSide: string; hedgePrice: number; hedgeStake: number }) {
     if (!marketId || !selectedRunner) return;
-    setGuardianExecuting(true);
-    try {
-      const res = await fetch("/api/ai-guardian", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "executeOption",
-          marketId,
-          selectionId: selectedRunner.selectionId,
-          hedgeSide: option.hedgeSide,
-          hedgePrice: option.hedgePrice,
-          hedgeStake: option.hedgeStake,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setToast({
-          message: `Hedge placed: ${option.hedgeSide} £${option.hedgeStake} @ ${option.hedgePrice}`,
-          type: "success",
-        });
-        setGuardianData(null);
-      } else {
-        setToast({ message: data.error ?? "Failed to execute", type: "error" });
+    const selId = selectedRunner.selectionId;
+
+    // Use unified validation (logs + blocks invalid)
+    const result = await execAction({
+      actionName: "GUARDIAN_EXECUTE",
+      marketId,
+      selectionId: selId,
+      side: option.hedgeSide as "BACK" | "LAY",
+      price: option.hedgePrice,
+      size: option.hedgeStake,
+      isMatchedPosition: true,
+    });
+    if (result.blocked) return; // already toasted by execAction
+
+    // execAction sent it through placeTrade — check success
+    if (result.success) {
+      setGuardianData(null);
+      for (const pos of selectedRunnerPositions) {
+        await closeTradeAsGreenUp(pos.id, option.hedgePrice, 0);
       }
-    } catch {
-      setToast({ message: "Network error executing hedge", type: "error" });
-    } finally {
-      setGuardianExecuting(false);
     }
+    setGuardianExecuting(false);
   }
 
   /* ─── WOM calculation from real ladder data ─── */
@@ -1297,6 +1299,8 @@ function TradingPage() {
     unmatchedOrders,
     marketBook,
     addPendingOrder,
+    addLivePosition,
+    execAction,
     fetchTrades,
     cooldownUntil,
     fetchCoachInsight,
@@ -1328,12 +1332,13 @@ function TradingPage() {
             if (s.marketBook?.inplay) {
               s.addPendingOrder({ id: `${Date.now()}-kb`, side: "BACK", price: bestBack.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
             }
-            s.placeTrade({
-              marketId: s.marketId,
-              selectionId: s.selectedRunner.selectionId,
-              side: "BACK",
-              price: bestBack.price,
-              size: s.activeStake,
+            s.execAction({
+              actionName: "KEYBOARD_TRADE", marketId: s.marketId, selectionId: s.selectedRunner.selectionId,
+              side: "BACK", price: bestBack.price, size: s.activeStake,
+            }).then((result: { success: boolean; betId?: string }) => {
+              if (result.success) {
+                s.addLivePosition({ marketId: s.marketId, selectionId: s.selectedRunner.selectionId, side: "BACK", price: bestBack.price, size: s.activeStake, betId: result.betId });
+              }
             });
           }
           break;
@@ -1352,12 +1357,13 @@ function TradingPage() {
             if (s.marketBook?.inplay) {
               s.addPendingOrder({ id: `${Date.now()}-kb`, side: "LAY", price: bestLay.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
             }
-            s.placeTrade({
-              marketId: s.marketId,
-              selectionId: s.selectedRunner.selectionId,
-              side: "LAY",
-              price: bestLay.price,
-              size: s.activeStake,
+            s.execAction({
+              actionName: "KEYBOARD_TRADE", marketId: s.marketId, selectionId: s.selectedRunner.selectionId,
+              side: "LAY", price: bestLay.price, size: s.activeStake,
+            }).then((result: { success: boolean; betId?: string }) => {
+              if (result.success) {
+                s.addLivePosition({ marketId: s.marketId, selectionId: s.selectedRunner.selectionId, side: "LAY", price: bestLay.price, size: s.activeStake, betId: result.betId });
+              }
             });
           }
           break;
@@ -1370,15 +1376,11 @@ function TradingPage() {
         case "g":
           if (s.greenUpResult && s.marketId && s.selectedRunner && s.isLive) {
             const gPrice = s.greenUpResult.greenUpSide === "LAY" ? s.currentLayPrice : s.currentBackPrice;
-            if (!gPrice || gPrice <= 1 || s.greenUpResult.greenUpStake < 2) break;
-            s.placeTrade({
-              marketId: s.marketId,
-              selectionId: s.selectedRunner.selectionId,
-              side: s.greenUpResult.greenUpSide,
-              price: gPrice,
-              size: s.greenUpResult.greenUpStake,
-            }).then((ok: boolean) => {
-              if (ok) {
+            s.execAction({
+              actionName: "KEYBOARD_GREEN_UP", marketId: s.marketId, selectionId: s.selectedRunner.selectionId,
+              side: s.greenUpResult.greenUpSide, price: gPrice, size: s.greenUpResult.greenUpStake,
+            }).then((result: { success: boolean; betId?: string }) => {
+              if (result.success) {
                 const runnerPositions = s.openPositions.filter(
                   (p: SupabaseTrade) =>
                     p.selection_id === String(s.selectedRunner.selectionId)
@@ -1676,7 +1678,7 @@ function TradingPage() {
                   <span className="text-gray-300 font-mono">£{(order.sizeRemaining as number).toFixed(2)} @ {order.price.toFixed(2)}</span>
                 </div>
                 <button
-                  onClick={() => marketId && cancelOrder({ marketId, betId: order.betId })}
+                  onClick={() => marketId && execAction({ actionName: "CANCEL", marketId, selectionId: order.selectionId, side: order.side as "BACK" | "LAY", price: order.price, size: order.sizeRemaining as number, betId: order.betId, isUnmatched: true })}
                   className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
                 >
                   Cancel
@@ -1705,31 +1707,21 @@ function TradingPage() {
         const greenPrice = greenUpResult.greenUpSide === "LAY" ? currentLayPrice : currentBackPrice;
         if (!greenPrice || greenPrice <= 1) return null;
         const stakeOk = greenUpResult.greenUpStake >= 2 && greenUpResult.greenUpStake <= 10000;
+        const mainLiability = calculateLiability(greenPrice, greenUpResult.greenUpStake, greenUpResult.greenUpSide);
+        const mainHighLiability = mainLiability > 50;
         return (
         <div className="px-3 md:px-4 py-3 border-t border-gray-800/50">
           <button
             onClick={async () => {
               if (!marketId || !selectedRunner || !isLive) return;
-              if (!stakeOk) {
-                setToast({ message: `Green-up stake £${greenUpResult.greenUpStake.toFixed(2)} invalid (min £2)`, type: "error" });
-                setTimeout(() => setToast(null), 4000);
-                return;
-              }
-
-              const success = await placeTrade({
-                marketId,
-                selectionId: selectedRunner.selectionId,
-                side: greenUpResult.greenUpSide,
-                price: greenPrice,
-                size: greenUpResult.greenUpStake,
+              const result = await execAction({
+                actionName: "GREEN_UP", marketId, selectionId: selectedRunner.selectionId,
+                side: greenUpResult.greenUpSide, price: greenPrice, size: greenUpResult.greenUpStake,
+                isMatchedPosition: true,
               });
-              if (success) {
+              if (result.success) {
                 for (const pos of selectedRunnerPositions) {
-                  await closeTradeAsGreenUp(
-                    pos.id,
-                    greenPrice,
-                    greenUpResult.equalProfit
-                  );
+                  await closeTradeAsGreenUp(pos.id, greenPrice, greenUpResult.equalProfit);
                 }
               }
             }}
@@ -1749,6 +1741,9 @@ function TradingPage() {
             Win: £{greenUpResult.profitIfWin.toFixed(2)} / Lose: £
             {greenUpResult.profitIfLose.toFixed(2)}
           </div>
+          <div className={`mt-1 text-center text-[10px] font-mono ${mainHighLiability ? "text-amber-400" : "text-gray-600"}`}>
+            Liability: £{mainLiability.toFixed(2)}{mainHighLiability ? " — ensure sufficient balance" : ""}
+          </div>
           {/* Optimised Green-Up Button */}
           {optimisedGreenResult && (
             <div className="mt-2">
@@ -1759,21 +1754,14 @@ function TradingPage() {
 
                   if (isLive && selectedRunner) {
                     const optPrice = optimisedGreenResult.greenUpSide === "LAY" ? currentLayPrice : currentBackPrice;
-                    if (!optPrice || optPrice <= 1) return;
-                    const success = await placeTrade({
-                      marketId,
-                      selectionId: selectedRunner.selectionId,
-                      side: optimisedGreenResult.greenUpSide,
-                      price: optPrice,
-                      size: optimisedGreenResult.greenUpStake,
+                    const result = await execAction({
+                      actionName: "OPTIMISED_GREEN_UP", marketId, selectionId: selectedRunner.selectionId,
+                      side: optimisedGreenResult.greenUpSide, price: optPrice, size: optimisedGreenResult.greenUpStake,
+                      isMatchedPosition: true,
                     });
-                    if (success) {
+                    if (result.success) {
                       for (const pos of selectedRunnerPositions) {
-                        await closeTradeAsGreenUp(
-                          pos.id,
-                          optPrice,
-                          expectedPnl
-                        );
+                        await closeTradeAsGreenUp(pos.id, optPrice, expectedPnl);
                       }
                     }
                   }
@@ -1788,10 +1776,16 @@ function TradingPage() {
                 {Math.abs(optimisedGreenResult.profitIfLose).toFixed(2)} on{" "}
                 {displayPlayers[selectedPlayer === "player1" ? "player2" : "player1"].short}
               </button>
-              <div className="mt-1 text-center text-[10px] text-gray-500 font-mono">
-                {optimisedGreenResult.greenUpSide} £{optimisedGreenResult.greenUpStake.toFixed(2)} @{" "}
-                {currentLayPrice.toFixed(2)} | probability-weighted
-              </div>
+              {(() => {
+                const optPrice = optimisedGreenResult.greenUpSide === "LAY" ? currentLayPrice : currentBackPrice;
+                const optLiability = calculateLiability(optPrice, optimisedGreenResult.greenUpStake, optimisedGreenResult.greenUpSide);
+                return (
+                  <div className={`mt-1 text-center text-[10px] font-mono ${optLiability > 50 ? "text-amber-400" : "text-gray-500"}`}>
+                    {optimisedGreenResult.greenUpSide} £{optimisedGreenResult.greenUpStake.toFixed(2)} @{" "}
+                    {optPrice.toFixed(2)} | liability £{optLiability.toFixed(2)}
+                  </div>
+                );
+              })()}
             </div>
           )}
           {aggregatedPos && aggregatedPos.netSide !== "FLAT" && (
@@ -1799,19 +1793,16 @@ function TradingPage() {
               netStake={aggregatedPos.netStake}
               netSide={aggregatedPos.netSide as "BACK" | "LAY"}
               avgEntry={aggregatedPos.avgEntry}
-              scaleOutPrice={currentLayPrice}
+              scaleOutPrice={aggregatedPos.netSide === "BACK" ? currentLayPrice : currentBackPrice}
               tradeLoading={tradeLoading}
               onScaleOut={async (side, price, size) => {
                 if (!marketId || !selectedRunner || !isLive) return false;
-                const success = await placeTrade({
-                  marketId,
-                  selectionId: selectedRunner.selectionId,
-                  side,
-                  price,
-                  size,
+                const result = await execAction({
+                  actionName: "SCALE_OUT", marketId, selectionId: selectedRunner.selectionId,
+                  side, price, size, isMatchedPosition: true,
                 });
-                if (success) fetchTrades();
-                return success;
+                if (result.success) fetchTrades();
+                return result.success;
               }}
               onToast={(message, type) => {
                 setToast({ message, type });
@@ -2119,10 +2110,16 @@ function TradingPage() {
             <p className="text-xs text-gray-500 text-center py-2">No open positions</p>
           ) : (
             openPositions.map((pos) => {
+              // Find this position's runner from marketBook for accurate prices
+              const posSelectionId = Number(pos.selection_id);
+              const posRunner = marketBook?.runners?.find((r) => r.selectionId === posSelectionId);
+              const posBackPrice = posRunner?.ex?.availableToBack?.[0]?.price ?? 0;
+              const posLayPrice = posRunner?.ex?.availableToLay?.[0]?.price ?? 0;
+
               // Live unrealized P&L for this position
               const posPlayerKey = pos.player === displayPlayers.player1.name ? "player1" : "player2";
-              // Use live odds, fall back to URL odds, then ladder price for selected player
-              let currentOdds = displayPlayers[posPlayerKey]?.odds || activeDisplayPlayers[posPlayerKey]?.odds;
+              // Use position's runner lay price as current odds, fall back to display odds
+              let currentOdds = posLayPrice > 0 ? posLayPrice : (displayPlayers[posPlayerKey]?.odds || activeDisplayPlayers[posPlayerKey]?.odds || 0);
               if ((!currentOdds || currentOdds <= 0) && posPlayerKey === selectedPlayer) {
                 currentOdds = currentLayPrice;
               }
@@ -2136,10 +2133,12 @@ function TradingPage() {
                   livePnl = Math.round((pos.stake - greenStake) * 100) / 100;
                 }
               }
+              // Check if this position is an unmatched order (cancellable) vs matched (green-up)
+              const isUnmatched = unmatchedOrders.some((o) => o.betId === pos.id);
               return (
               <div
                 key={pos.id}
-                className="rounded-xl p-3 bg-blue-500/5 border border-blue-500/20"
+                className={`rounded-xl p-3 ${isUnmatched ? "bg-yellow-500/5 border border-yellow-500/20" : "bg-blue-500/5 border border-blue-500/20"}`}
               >
                 {/* Header: side, player, P&L, badge */}
                 <div className="flex items-center justify-between mb-1.5">
@@ -2156,6 +2155,11 @@ function TradingPage() {
                     <span className="text-xs text-white font-medium">
                       {pos.player ?? pos.selection_id}
                     </span>
+                    {isUnmatched && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-yellow-500/20 text-yellow-400">
+                        UNMATCHED
+                      </span>
+                    )}
                   </div>
                   {livePnl !== null && (
                     <span className={`text-xs font-mono font-bold ${livePnl >= 0 ? "text-green-400" : "text-red-400"}`}>
@@ -2181,79 +2185,127 @@ function TradingPage() {
                   )}
                 </div>
 
-                {/* Action buttons: GREEN UP + CLOSE */}
-                {currentOdds && currentOdds > 1 && pos.entry_price && pos.stake && (() => {
-                  // Use correct tradeable price for hedge side
-                  const hedgePrice = pos.side === "BACK" ? currentLayPrice : currentBackPrice;
-                  if (!hedgePrice || hedgePrice <= 1) return null;
-                  const gSide = pos.side === "BACK" ? "LAY" : "BACK";
-                  const gStake = Math.round(((pos.stake ?? 0) * (pos.entry_price ?? 0)) / hedgePrice * 100) / 100;
-                  // Validate stake: Betfair min £2, max sanity check
-                  const stakeValid = gStake >= 2 && gStake <= 10000;
-                  const closeStake = Math.round((pos.stake ?? 0) * 100) / 100;
-                  const closeValid = closeStake >= 2 && closeStake <= 10000;
-                  return (
+                {/* Action buttons: CANCEL for unmatched, GREEN UP + CLOSE for matched */}
+                {isUnmatched ? (
                   <div className="flex gap-2 mb-2">
                     <button
                       onClick={async () => {
-                        if (!isLive || !selectedRunner) return;
-                        if (!stakeValid) {
-                          setToast({ message: `Green-up stake £${gStake.toFixed(2)} invalid (min £2)`, type: "error" });
-                          setTimeout(() => setToast(null), 4000);
-                          return;
+                        const result = await execAction({
+                          actionName: "CANCEL", marketId, selectionId: posSelectionId, side: pos.side as "BACK" | "LAY",
+                          price: pos.entry_price, size: pos.stake, betId: pos.id, positionId: pos.id, isUnmatched: true,
+                        });
+                        if (result.success) {
+                          removeLivePosition(pos.id);
+                          setToast({ message: "Order cancelled", type: "success" });
+                          setTimeout(() => setToast(null), 3000);
                         }
-                        const success = await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: gSide as "BACK" | "LAY", price: hedgePrice, size: gStake });
-                        if (success) { await closeTradeAsGreenUp(pos.id, hedgePrice, livePnl ?? 0); }
                       }}
-                      disabled={tradeLoading || !stakeValid}
-                      className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold text-white bg-green-600/80 hover:bg-green-500 transition-colors disabled:opacity-40"
+                      disabled={tradeLoading}
+                      className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold text-white bg-red-600/80 hover:bg-red-500 transition-colors disabled:opacity-40"
                     >
-                      GREEN UP {livePnl !== null ? `${livePnl >= 0 ? "+" : "-"}£${Math.abs(livePnl).toFixed(2)}` : ""}
+                      CANCEL ORDER
                     </button>
-                    <button
-                      onClick={async () => {
-                        if (!isLive || !selectedRunner) return;
-                        if (!closeValid) {
-                          setToast({ message: `Close stake £${closeStake.toFixed(2)} invalid (min £2)`, type: "error" });
-                          setTimeout(() => setToast(null), 4000);
-                          return;
+                  </div>
+                ) : (() => {
+                  const hedgePrice = pos.side === "BACK" ? posLayPrice : posBackPrice;
+                  const gSide: "BACK" | "LAY" = pos.side === "BACK" ? "LAY" : "BACK";
+                  const gStake = hedgePrice > 1 ? Math.round(((pos.stake ?? 0) * (pos.entry_price ?? 0)) / hedgePrice * 100) / 100 : 0;
+                  const stakeValid = gStake >= 2 && gStake <= 10000;
+                  const closeStake = Math.round((pos.stake ?? 0) * 100) / 100;
+                  const closeValid = closeStake >= 2 && closeStake <= 10000;
+                  const noPrices = !hedgePrice || hedgePrice <= 1;
+
+                  // Calculate Betfair liability for the hedge
+                  const hedgeLiability = gStake > 0 ? calculateLiability(hedgePrice, gStake, gSide) : 0;
+                  const closeLiability = closeStake > 0 ? calculateLiability(hedgePrice, closeStake, gSide) : 0;
+                  const highLiability = hedgeLiability > 50;
+
+                  return (
+                  <div className="space-y-1.5 mb-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          const result = await execAction({
+                            actionName: "GREEN_UP", marketId, selectionId: posSelectionId, side: gSide,
+                            price: hedgePrice, size: gStake, positionId: pos.id, isMatchedPosition: true,
+                          });
+                          if (result.success) { await closeTradeAsGreenUp(pos.id, hedgePrice, livePnl ?? 0); }
+                        }}
+                        disabled={tradeLoading || noPrices || !stakeValid}
+                        title={!noPrices && stakeValid ? `${gSide} £${gStake.toFixed(2)} @ ${hedgePrice.toFixed(2)} | Liability: £${hedgeLiability.toFixed(2)}` : ""}
+                        className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold text-white bg-green-600/80 hover:bg-green-500 transition-colors disabled:opacity-40"
+                      >
+                        {noPrices
+                          ? "GREEN UP (no price)"
+                          : !stakeValid
+                            ? `GREEN UP (£${gStake.toFixed(2)} < £2 min)`
+                            : `GREEN UP ${livePnl !== null ? `${livePnl >= 0 ? "+" : "-"}£${Math.abs(livePnl).toFixed(2)}` : ""}`
                         }
-                        const success = await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: gSide as "BACK" | "LAY", price: hedgePrice, size: closeStake });
-                        if (success) { await closeTradeAsGreenUp(pos.id, hedgePrice, livePnl ?? 0); }
-                      }}
-                      disabled={tradeLoading || !closeValid}
-                      className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-white bg-gray-600/80 hover:bg-gray-500 transition-colors disabled:opacity-40"
-                    >
-                      CLOSE
-                    </button>
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const result = await execAction({
+                            actionName: "CLOSE", marketId, selectionId: posSelectionId, side: gSide,
+                            price: hedgePrice, size: closeStake, positionId: pos.id, isMatchedPosition: true,
+                          });
+                          if (result.success) { await closeTradeAsGreenUp(pos.id, hedgePrice, livePnl ?? 0); }
+                        }}
+                        disabled={tradeLoading || noPrices || !closeValid}
+                        title={!noPrices && closeValid ? `${gSide} £${closeStake.toFixed(2)} @ ${hedgePrice.toFixed(2)} | Liability: £${closeLiability.toFixed(2)}` : ""}
+                        className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-white bg-gray-600/80 hover:bg-gray-500 transition-colors disabled:opacity-40"
+                      >
+                        CLOSE
+                      </button>
+                    </div>
+                    {/* Liability info line */}
+                    {!noPrices && stakeValid && (
+                      <div className={`text-[9px] font-mono px-1 ${highLiability ? "text-amber-400" : "text-gray-600"}`}>
+                        {gSide} £{gStake.toFixed(2)} @ {hedgePrice.toFixed(2)} → liability £{hedgeLiability.toFixed(2)}
+                        {highLiability && " ⚠"}
+                      </div>
+                    )}
                   </div>
                   );
                 })()}
 
-                {/* Scale-out buttons */}
-                {currentOdds && currentOdds > 1 && pos.entry_price && pos.stake && (
+                {/* Scale-out buttons (matched positions only) */}
+                {!isUnmatched && pos.entry_price && pos.stake && (() => {
+                  const scaleHedgePrice = pos.side === "BACK" ? posLayPrice : posBackPrice;
+                  const scaleSide: "BACK" | "LAY" = pos.side === "BACK" ? "LAY" : "BACK";
+                  const noScalePrice = !scaleHedgePrice || scaleHedgePrice <= 1;
+                  if (noScalePrice) return null;
+                  return (
                   <div className="flex gap-1.5">
                     <span className="text-[10px] text-gray-600 self-center mr-0.5">Scale:</span>
                     {[0.25, 0.40, 0.50, 0.75].map((pct) => {
                       const scaleStake = Math.round(((pos.stake ?? 0) * pct) * 100) / 100;
+                      const scaleValid = scaleStake >= 2;
+                      const scaleLiab = scaleValid ? calculateLiability(scaleHedgePrice, scaleStake, scaleSide) : 0;
                       return (
                         <button
                           key={pct}
                           onClick={async () => {
-                            if (!isLive || !selectedRunner) return;
-                            const scaleSide = pos.side === "BACK" ? "LAY" : "BACK";
-                            await placeTrade({ marketId: marketId!, selectionId: selectedRunner.selectionId, side: scaleSide as "BACK" | "LAY", price: currentOdds, size: scaleStake });
-                            fetchTrades();
+                            const result = await execAction({
+                              actionName: "SCALE_OUT", marketId, selectionId: posSelectionId, side: scaleSide,
+                              price: scaleHedgePrice, size: scaleStake, positionId: pos.id, isMatchedPosition: true,
+                            });
+                            if (result.success) fetchTrades();
                           }}
-                          disabled={tradeLoading}
-                          className="px-2 py-1 rounded text-[10px] font-mono font-medium text-gray-400 bg-gray-800/60 hover:bg-gray-700 hover:text-white transition-colors disabled:opacity-40"
+                          disabled={tradeLoading || !scaleValid}
+                          title={!scaleValid ? `£${scaleStake.toFixed(2)} below £2 minimum` : `${scaleSide} £${scaleStake.toFixed(2)} @ ${scaleHedgePrice.toFixed(2)} · Liability £${scaleLiab.toFixed(2)}`}
+                          className={`px-2 py-1 rounded text-[10px] font-mono font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                            scaleValid
+                              ? "text-gray-400 bg-gray-800/60 hover:bg-gray-700 hover:text-white"
+                              : "text-gray-600 bg-gray-800/30 line-through"
+                          }`}
                         >
                           {Math.round(pct * 100)}%
                         </button>
                       );
                     })}
                   </div>
-                )}
+                  );
+                })()}
               </div>
               );
             })
@@ -2438,32 +2490,53 @@ function TradingPage() {
                       )}
                     </div>
                     <p className="text-[11px] text-gray-400 mb-2">{opt.description}</p>
-                    {key === "A" && opt.equalProfit !== undefined && (
-                      <div className="text-[11px] text-gray-500">
-                        Lock in:{" "}
-                        <span
-                          className={`font-mono ${
-                            opt.equalProfit >= 0 ? "text-green-400" : "text-red-400"
-                          }`}
-                        >
-                          {opt.equalProfit >= 0 ? "+" : ""}£{opt.equalProfit.toFixed(2)}
-                        </span>{" "}
-                        ({opt.greenUpSide} £{opt.greenUpStake?.toFixed(2)} @{" "}
-                        {opt.greenUpPrice?.toFixed(2)})
-                      </div>
-                    )}
-                    {key === "C" && (
-                      <div className="text-[11px] text-gray-500">
-                        Best:{" "}
-                        <span className="text-green-400 font-mono">
-                          +£{opt.bestCase?.toFixed(2)}
-                        </span>
-                        {" / "}Worst:{" "}
-                        <span className="text-red-400 font-mono">
-                          -£{Math.abs(opt.worstCase ?? 0).toFixed(2)}
-                        </span>
-                      </div>
-                    )}
+                    {key === "A" && opt.equalProfit !== undefined && (() => {
+                      const aLiab = (opt.greenUpStake && opt.greenUpPrice && opt.greenUpSide)
+                        ? calculateLiability(opt.greenUpPrice, opt.greenUpStake, opt.greenUpSide)
+                        : 0;
+                      return (
+                        <div className="text-[11px] text-gray-500">
+                          <div>
+                            Lock in:{" "}
+                            <span className={`font-mono ${opt.equalProfit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                              {opt.equalProfit >= 0 ? "+" : ""}£{opt.equalProfit.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className={`text-[10px] font-mono mt-0.5 ${aLiab > 50 ? "text-amber-400" : "text-gray-600"}`}>
+                            Requires {opt.greenUpSide} £{opt.greenUpStake?.toFixed(2)} @ {opt.greenUpPrice?.toFixed(2)} · Liability £{aLiab.toFixed(2)}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {key === "B" && opt.canBreakEven && opt.hedgeStake && opt.hedgePrice && opt.hedgeSide && (() => {
+                      const bLiab = calculateLiability(opt.hedgePrice, opt.hedgeStake, opt.hedgeSide);
+                      return (
+                        <div className={`text-[10px] font-mono ${bLiab > 50 ? "text-amber-400" : "text-gray-600"}`}>
+                          Requires {opt.hedgeSide} £{opt.hedgeStake.toFixed(2)} @ {opt.hedgePrice.toFixed(2)} · Liability £{bLiab.toFixed(2)}
+                        </div>
+                      );
+                    })()}
+                    {key === "C" && (() => {
+                      const cSide = opt.hedgeSide as "BACK" | "LAY" | undefined;
+                      const cLiab = (opt.hedgeStake && opt.hedgePrice && cSide)
+                        ? calculateLiability(opt.hedgePrice, opt.hedgeStake, cSide)
+                        : 0;
+                      return (
+                        <div className="text-[11px] text-gray-500">
+                          <div>
+                            Best:{" "}
+                            <span className="text-green-400 font-mono">+£{opt.bestCase?.toFixed(2)}</span>
+                            {" / "}Worst:{" "}
+                            <span className="text-red-400 font-mono">-£{Math.abs(opt.worstCase ?? 0).toFixed(2)}</span>
+                          </div>
+                          {cLiab > 0 && (
+                            <div className={`text-[10px] font-mono mt-0.5 ${cLiab > 50 ? "text-amber-400" : "text-gray-600"}`}>
+                              Requires {cSide} £{opt.hedgeStake?.toFixed(2)} @ {opt.hedgePrice?.toFixed(2)} · Liability £{cLiab.toFixed(2)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {key === "D" && opt.available && (
                       <div className="text-[11px] text-gray-500">
                         Recovery:{" "}
@@ -2980,7 +3053,7 @@ function TradingPage() {
                 tradeLoading={tradeLoading}
                 onExecute={async (side, price, size) => {
                   if (!marketId || !selectedRunner || !isLive) return;
-                  await placeTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size });
+                  await execAction({ actionName: "PLACE_TRADE", marketId, selectionId: selectedRunner.selectionId, side, price, size });
                 }}
               />
                         <GameMatrix
@@ -3029,7 +3102,7 @@ function TradingPage() {
                   tradeLoading={tradeLoading}
                   onExecute={async (side, price, size) => {
                     if (!marketId || !selectedRunner || !isLive) return;
-                    await placeTrade({ marketId, selectionId: selectedRunner.selectionId, side, price, size });
+                    await execAction({ actionName: "PLACE_TRADE", marketId, selectionId: selectedRunner.selectionId, side, price, size });
                   }}
                 />
                             <GameMatrix

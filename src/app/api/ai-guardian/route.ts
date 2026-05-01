@@ -299,6 +299,8 @@ async function assessPosition(payload: AssessPayload) {
 
 /* ─── Action: executeOption ─── */
 
+const JSONRPC_URL = "https://api.betfair.com/exchange/betting/json-rpc/v1";
+
 async function executeOption(
   req: NextRequest,
   payload: {
@@ -312,6 +314,9 @@ async function executeOption(
   const sessionToken =
     req.headers.get("x-betfair-token") ??
     req.cookies.get("betfair_session")?.value;
+  const tokenType =
+    req.headers.get("x-betfair-token-type") || "BEARER";
+
   if (!sessionToken) {
     return NextResponse.json(
       { success: false, error: "Connect Betfair in Settings to execute trades" },
@@ -341,15 +346,24 @@ async function executeOption(
     );
   }
 
-  const res = await fetch(`${BETTING_API}/placeOrders/`, {
-    method: "POST",
-    headers: {
-      "X-Authentication": sessionToken,
-      "X-Application": appKey,
-      "Content-Type": "application/json",
-      "Accept-Encoding": "gzip",
-    },
-    body: JSON.stringify({
+  // Client-side validation before sending to Betfair
+  if (hedgeStake < 2) {
+    return NextResponse.json(
+      { success: false, error: `Betfair minimum stake is £2. This action would place £${hedgeStake.toFixed(2)}.` },
+      { status: 400 }
+    );
+  }
+  if (!Number.isFinite(hedgePrice) || hedgePrice < 1.01 || hedgePrice > 1000) {
+    return NextResponse.json(
+      { success: false, error: `Invalid hedge price: ${hedgePrice}` },
+      { status: 400 }
+    );
+  }
+
+  const rpcBody = {
+    jsonrpc: "2.0",
+    method: "SportsAPING/v1.0/placeOrders",
+    params: {
       marketId,
       instructions: [
         {
@@ -363,27 +377,62 @@ async function executeOption(
           },
         },
       ],
-    }),
+    },
+    id: 1,
+  };
+
+  const res = await fetch(JSONRPC_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `${tokenType} ${sessionToken}`,
+      "X-Application": appKey,
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "Accept-Encoding": "gzip",
+    },
+    body: JSON.stringify(rpcBody),
   });
 
+  const responseText = await res.text();
   if (!res.ok) {
-    const text = await res.text();
     return NextResponse.json(
-      { success: false, error: `Betfair API error: ${res.status} ${text}` },
+      { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}` },
       { status: res.status }
     );
   }
 
-  const data = await res.json();
-
-  if (data.status === "FAILURE") {
+  let parsed;
+  try {
+    parsed = JSON.parse(responseText);
+  } catch {
     return NextResponse.json(
-      { success: false, error: data.errorCode ?? "Order placement failed" },
+      { success: false, error: `Betfair returned non-JSON: ${responseText.slice(0, 300)}` },
+      { status: 502 }
+    );
+  }
+
+  if (parsed.error) {
+    const errorCode = parsed.error?.data?.APINGException?.errorCode ?? "UNKNOWN";
+    const errorDetails = parsed.error?.data?.APINGException?.errorDetails ?? "";
+    return NextResponse.json(
+      { success: false, error: `Betfair: ${errorCode}${errorDetails ? ` — ${errorDetails}` : ""}` },
       { status: 400 }
     );
   }
 
-  const betIds = (data.instructionReports ?? []).map(
+  const data = parsed.result;
+
+  if (data?.status === "FAILURE") {
+    const instrErrors = (data.instructionReports ?? [])
+      .filter((r: { status: string }) => r.status === "FAILURE")
+      .map((r: { errorCode: string }) => r.errorCode);
+    return NextResponse.json(
+      { success: false, error: `Order failed: ${data.errorCode ?? "UNKNOWN"}${instrErrors.length ? ` (${instrErrors.join(", ")})` : ""}` },
+      { status: 400 }
+    );
+  }
+
+  const betIds = (data?.instructionReports ?? []).map(
     (r: { betId: string }) => r.betId
   );
 

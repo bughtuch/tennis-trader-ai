@@ -117,7 +117,7 @@ interface AppState {
     side: "BACK" | "LAY";
     price: number;
     size: number;
-  }) => Promise<boolean>;
+  }) => Promise<{ success: boolean; betId?: string }>;
   clearTradeMessages: () => void;
 
   // Unmatched Orders
@@ -323,18 +323,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       const data = await res.json();
       if (data.success) {
-        const betId = data.betIds?.[0] ?? "unknown";
+        const betId = data.betIds?.[0] ?? undefined;
         set({
           tradeLoading: false,
-          lastTradeSuccess: `${side} £${size} @ ${price} placed (Bet ${betId})`,
+          lastTradeSuccess: `${side} £${size} @ ${price} placed (Bet ${betId ?? "unknown"})`,
         });
-        return true;
+        return { success: true, betId };
       }
-      set({ tradeError: data.error ?? "Trade failed", tradeLoading: false });
-      return false;
+      let errorMsg = data.error ?? "Trade failed";
+      // Enhance INSUFFICIENT_FUNDS with liability context
+      if (errorMsg.includes("INSUFFICIENT_FUNDS") || errorMsg.includes("BET_ACTION_ERROR")) {
+        const liability = side === "LAY" ? Math.round((price - 1) * size * 100) / 100 : size;
+        errorMsg = `This hedge requires £${liability.toFixed(2)} liability. Add funds or reduce position size.`;
+      }
+      set({ tradeError: errorMsg, tradeLoading: false });
+      return { success: false };
     } catch {
       set({ tradeError: "Network error placing trade", tradeLoading: false });
-      return false;
+      return { success: false };
     }
   },
 

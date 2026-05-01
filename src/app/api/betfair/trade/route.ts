@@ -145,20 +145,37 @@ export async function POST(req: NextRequest) {
       console.log("[trade] Full Betfair response:", JSON.stringify(parsed, null, 2));
 
       if (parsed.error) {
-        console.log("[trade] Error code:", parsed.error?.data?.APINGException?.errorCode);
-        console.log("[trade] Error details:", parsed.error?.data?.APINGException?.errorDetails);
+        const apiErrorCode = parsed.error?.data?.APINGException?.errorCode ?? "UNKNOWN";
+        const apiErrorDetails = parsed.error?.data?.APINGException?.errorDetails ?? "";
+        console.log("[trade] Error code:", apiErrorCode);
+        console.log("[trade] Error details:", apiErrorDetails);
         return NextResponse.json(
-          { success: false, error: parsed.error?.data?.exceptionname ?? parsed.error?.message ?? "Betfair error" },
+          { success: false, error: `Betfair: ${apiErrorCode}${apiErrorDetails ? ` — ${apiErrorDetails}` : ""}` },
           { status: 400 }
         );
       }
 
       const data = parsed.result;
 
-      if (data?.status === "FAILURE") {
-        console.log("[trade] Order FAILURE:", data.errorCode);
+      if (data?.status === "FAILURE" || data?.status === "PROCESSED_WITH_ERRORS") {
+        // Surface instruction-level errors with full detail
+        const instrReports = data.instructionReports ?? [];
+        const instrErrors = instrReports
+          .filter((r: { status: string }) => r.status === "FAILURE")
+          .map((r: { errorCode?: string; errorAction?: string; instruction?: { side?: string; limitOrder?: { price?: number; size?: number } } }) => {
+            const parts = [r.errorCode ?? "UNKNOWN"];
+            if (r.errorAction) parts.push(r.errorAction);
+            const lo = r.instruction?.limitOrder;
+            if (lo) parts.push(`${r.instruction?.side ?? ""} £${lo.size ?? "?"} @ ${lo.price ?? "?"}`);
+            return parts.join(" ");
+          });
+        const errorMsg = instrErrors.length
+          ? `${data.errorCode ?? data.status}: ${instrErrors.join("; ")}`
+          : (data.errorCode ?? "Order placement failed");
+        console.log("[trade] Order FAILURE:", errorMsg);
+        console.log("[trade] Full instructionReports:", JSON.stringify(instrReports, null, 2));
         return NextResponse.json(
-          { success: false, error: data.errorCode ?? "Order placement failed" },
+          { success: false, error: errorMsg },
           { status: 400 }
         );
       }
