@@ -203,7 +203,11 @@ function TradingPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /* ─── Real Trade Modal ─── */
+  /* ─── Safe Mode / Pro Mode ─── */
+  const [tradingMode, setTradingMode] = useState<"safe" | "pro">(() => {
+    try { return (localStorage.getItem("trading_mode") as "safe" | "pro") || "safe"; } catch { return "safe"; }
+  });
+  const [showProModeWarning, setShowProModeWarning] = useState(false);
   const [pendingRealTrade, setPendingRealTrade] = useState<{ price: number; side: "BACK" | "LAY" } | null>(null);
 
   /* ─── Streak Protection Settings ─── */
@@ -1047,13 +1051,11 @@ function TradingPage() {
       return;
     }
 
-    // First-time real trade confirmation
-    try {
-      if (!localStorage.getItem("realTradeConfirmed")) {
-        setPendingRealTrade({ price, side });
-        return;
-      }
-    } catch { /* SSR guard */ }
+    // Safe mode: show confirmation modal before placing
+    if (tradingMode === "safe") {
+      setPendingRealTrade({ price, side });
+      return;
+    }
 
     // Add pending order indicator for in-play bet delay
     if (marketBook?.inplay) {
@@ -1069,11 +1071,8 @@ function TradingPage() {
   }
 
   /* ─── Real trade execution (from confirmation modal) ─── */
-  async function executeConfirmedRealTrade(price: number, side: "BACK" | "LAY", dontAskAgain: boolean) {
+  async function executeConfirmedRealTrade(price: number, side: "BACK" | "LAY") {
     if (!marketId || !selectedRunner) return;
-    if (dontAskAgain) {
-      try { localStorage.setItem("realTradeConfirmed", "true"); } catch { /* SSR guard */ }
-    }
     if (marketBook?.inplay) {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
@@ -1375,6 +1374,7 @@ function TradingPage() {
     fetchTrades,
     cooldownUntil,
     fetchCoachInsight,
+    tradingMode,
   };
 
   useEffect(() => {
@@ -1394,12 +1394,10 @@ function TradingPage() {
             return;
           }
           if (bestBack && s.marketId && s.selectedRunner && s.isConnected) {
-            try {
-              if (!localStorage.getItem("realTradeConfirmed")) {
-                s.setPendingRealTrade({ price: bestBack.price, side: "BACK" as const });
-                break;
-              }
-            } catch { /* SSR guard */ }
+            if (s.tradingMode === "safe") {
+              s.setPendingRealTrade({ price: bestBack.price, side: "BACK" as const });
+              break;
+            }
             if (s.marketBook?.inplay) {
               s.addPendingOrder({ id: `${Date.now()}-kb`, side: "BACK", price: bestBack.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
             }
@@ -1419,12 +1417,10 @@ function TradingPage() {
             return;
           }
           if (bestLay && s.marketId && s.selectedRunner && s.isConnected) {
-            try {
-              if (!localStorage.getItem("realTradeConfirmed")) {
-                s.setPendingRealTrade({ price: bestLay.price, side: "LAY" as const });
-                break;
-              }
-            } catch { /* SSR guard */ }
+            if (s.tradingMode === "safe") {
+              s.setPendingRealTrade({ price: bestLay.price, side: "LAY" as const });
+              break;
+            }
             if (s.marketBook?.inplay) {
               s.addPendingOrder({ id: `${Date.now()}-kb`, side: "LAY", price: bestLay.price, size: s.activeStake, placedAt: Date.now(), delaySeconds: 5 });
             }
@@ -1517,12 +1513,31 @@ function TradingPage() {
         </div>
       </div>
 
-      {/* Stake Selector */}
-      <div className="px-3 md:px-4 py-2.5 border-b border-gray-800/50 overflow-x-auto">
-        <div className="flex items-center gap-2 flex-nowrap">
-          <span className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium shrink-0">
-            STAKE
-          </span>
+      {/* Mode Toggle + Stake Selector */}
+      <div className="px-3 md:px-4 py-2.5 border-b border-gray-800/50">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium">STAKE</span>
+          <button
+            onClick={() => {
+              if (tradingMode === "safe") {
+                setShowProModeWarning(true);
+              } else {
+                setTradingMode("safe");
+                try { localStorage.setItem("trading_mode", "safe"); } catch { /* SSR */ }
+                setToast({ message: "Safe Mode — trades require confirmation", type: "success" });
+                setTimeout(() => setToast(null), 3000);
+              }
+            }}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all border ${
+              tradingMode === "safe"
+                ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                : "bg-red-500/10 text-red-400 border-red-500/30 animate-pulse"
+            }`}
+          >
+            {tradingMode === "safe" ? "SAFE MODE" : "PRO MODE"}
+          </button>
+        </div>
+        <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
           {STAKES.map((stake) => (
             <button
               key={stake}
@@ -2760,18 +2775,54 @@ function TradingPage() {
         </div>
       )}
 
-      {/* ─── Real Trade Confirm Modal ─── */}
+      {/* ─── Safe Mode Confirm Modal ─── */}
       {pendingRealTrade && (
         <RealTradeConfirmModal
           side={pendingRealTrade.side}
           price={pendingRealTrade.price}
           stake={activeStake}
-          onConfirm={(dontAskAgain) => {
-            executeConfirmedRealTrade(pendingRealTrade.price, pendingRealTrade.side, dontAskAgain);
+          runner={displayPlayers[selectedPlayer].name}
+          onConfirm={() => {
+            executeConfirmedRealTrade(pendingRealTrade.price, pendingRealTrade.side);
             setPendingRealTrade(null);
           }}
           onCancel={() => setPendingRealTrade(null)}
         />
+      )}
+
+      {/* ─── Pro Mode Warning Modal ─── */}
+      {showProModeWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-amber-500/30 rounded-2xl p-6 max-w-sm mx-4 space-y-4">
+            <div className="text-center space-y-2">
+              <div className="text-3xl">⚡</div>
+              <h2 className="text-lg font-bold text-white">Enable Pro Mode?</h2>
+              <p className="text-sm text-amber-400/90">
+                Pro Mode places trades instantly with no confirmation dialog. Use only if you understand Betfair liability.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowProModeWarning(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium text-gray-400 bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800 transition-all"
+              >
+                Stay Safe
+              </button>
+              <button
+                onClick={() => {
+                  setTradingMode("pro");
+                  try { localStorage.setItem("trading_mode", "pro"); } catch { /* SSR */ }
+                  setShowProModeWarning(false);
+                  setToast({ message: "Pro Mode enabled — trades execute instantly", type: "error" });
+                  setTimeout(() => setToast(null), 4000);
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-amber-600 to-red-500 hover:from-amber-500 hover:to-red-400 transition-all"
+              >
+                Enable Pro Mode
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ─── Market Status Bar ─── */}
