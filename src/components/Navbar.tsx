@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
@@ -30,7 +30,6 @@ export default function Navbar() {
   const [user, setUser] = useState<User | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { isConnected, restoreSession, subscriptionStatus, subscriptionLoaded, fetchSubscriptionStatus } = useAppStore();
-  const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRestored = useRef(false);
 
   useEffect(() => {
@@ -64,41 +63,13 @@ export default function Navbar() {
     }
   }, [user, subscriptionLoaded, fetchSubscriptionStatus]);
 
-  // Keep-alive interval (every 20 minutes) when connected
-  const runKeepAlive = useCallback(async () => {
-    try {
-      const res = await fetch("/api/betfair/keep-alive", { method: "POST" });
-      const data = await res.json();
-      if (!data.success) {
-        useAppStore.getState().restoreSession();
-      }
-    } catch {
-      // Network error — will retry next interval
-    }
-  }, []);
+  // Keep-alive is handled by BetfairKeepAlive component — no duplicate here
 
-  useEffect(() => {
-    if (isConnected) {
-      keepAliveRef.current = setInterval(runKeepAlive, 20 * 60 * 1000);
-    } else {
-      if (keepAliveRef.current) {
-        clearInterval(keepAliveRef.current);
-        keepAliveRef.current = null;
-      }
-    }
-    return () => {
-      if (keepAliveRef.current) {
-        clearInterval(keepAliveRef.current);
-        keepAliveRef.current = null;
-      }
-    };
-  }, [isConnected, runKeepAlive]);
-
-  // Silent vendor session check on mount (browser-originated refresh)
+  // Silent vendor session check on mount (debounced to 10 minutes)
   useEffect(() => {
     try {
       const last = sessionStorage.getItem("lastVendorCheck");
-      if (last && Date.now() - Number(last) < 5 * 60 * 1000) return;
+      if (last && Date.now() - Number(last) < 10 * 60 * 1000) return;
       sessionStorage.setItem("lastVendorCheck", String(Date.now()));
       fetch("/api/betfair/vendor-check").catch(() => {});
     } catch {
