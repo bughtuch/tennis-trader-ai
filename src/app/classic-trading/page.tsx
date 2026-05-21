@@ -993,7 +993,7 @@ function ClassicTradingPage() {
 
       {/* ─── Desktop layout: ladders dominant ─── */}
       {/* Wide desktop (≥1280px): 4-column with side panels */}
-      <div className="hidden xl:block px-4 pt-5 pb-6">
+      <div className="hidden xl:block px-4 pt-8 pb-6">
         <div className="flex gap-4 max-w-[1800px] mx-auto">
           {/* AI Panel — narrow sidebar */}
           <div className="w-[220px] shrink-0">
@@ -1046,7 +1046,7 @@ function ClassicTradingPage() {
       </div>
 
       {/* Mid desktop (1024-1279px): ladders top, panels below */}
-      <div className="hidden lg:block xl:hidden px-4 pt-5 pb-6">
+      <div className="hidden lg:block xl:hidden px-4 pt-8 pb-6">
         {/* Ladders row — full width, side by side */}
         <div className="grid grid-cols-2 gap-4 max-w-[960px] mx-auto">
           <ClassicLadder
@@ -1112,7 +1112,7 @@ function ClassicTradingPage() {
           </div>
         </div>
 
-        <div className="px-3 py-4">
+        <div className="px-3 pt-5 pb-4">
           {activeTab === "ladders" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[700px] mx-auto">
               <ClassicLadder
