@@ -267,6 +267,8 @@ function PaperMarketList() {
 
         {/* Market Cards */}
         {!loading && !error && markets.length > 0 && (
+          <div className="space-y-3">
+            <h2 className="text-sm font-semibold text-gray-300 tracking-wide">Browse Live Matches</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {markets.map((market) => (
               <button
@@ -333,6 +335,7 @@ function PaperMarketList() {
                 </div>
               </button>
             ))}
+          </div>
           </div>
         )}
       </div>
@@ -691,9 +694,28 @@ function PaperTradingPage() {
   const isConnected = false;
   const isLive = false;
 
+  /* ─── Ensure vendor session is fresh on mount ─── */
+  const vendorCheckDone = useRef(false);
+  useEffect(() => {
+    if (vendorCheckDone.current) return;
+    vendorCheckDone.current = true;
+    fetch("/api/betfair/vendor-check").catch(() => {});
+  }, []);
+
   /* ─── Fetch prices via vendor session (read-only, 2-second poll) ─── */
-  const fetchPrices = useCallback(() => {
-    if (marketId) fetchMarketBook([marketId]);
+  const retryPending = useRef(false);
+  const fetchPrices = useCallback(async () => {
+    if (!marketId) return;
+    await fetchMarketBook([marketId]);
+    // If no marketBook after fetch, retry once after 3s
+    const { marketBook: currentBook } = useAppStore.getState();
+    if (!currentBook && !retryPending.current) {
+      retryPending.current = true;
+      setTimeout(async () => {
+        await fetchMarketBook([marketId]);
+        retryPending.current = false;
+      }, 3000);
+    }
   }, [marketId, fetchMarketBook]);
 
   useEffect(() => {
@@ -2383,12 +2405,34 @@ function PaperTradingPage() {
       {/* Paper Mode Banner */}
       <div className="border-b border-gray-700/50 bg-gray-800/30">
         <div className="px-2 md:px-4 py-1.5 flex items-center gap-2">
+          <button
+            onClick={() => {
+              try { localStorage.removeItem("lastMarket"); } catch { /* SSR guard */ }
+              window.location.href = "/paper";
+            }}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors shrink-0"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            Markets
+          </button>
+          <span className="text-gray-700">|</span>
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-700/40 text-gray-400">
             PAPER MODE
           </span>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-500 flex-1 min-w-0 truncate">
             Practicing with real odds — no money moves
           </span>
+          <button
+            onClick={() => {
+              try { localStorage.removeItem("lastMarket"); } catch { /* SSR guard */ }
+              window.location.href = "/paper";
+            }}
+            className="shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-medium text-blue-400 bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/20 transition-all"
+          >
+            Change Match
+          </button>
         </div>
       </div>
 
@@ -2446,12 +2490,30 @@ function PaperTradingPage() {
         />
       )}
 
+      {/* ─── Match Finished Overlay (CLOSED market) ─── */}
+      {marketBook?.status === "CLOSED" && (
+        <div className="border-b border-gray-700/50 bg-gray-800/50">
+          <div className="max-w-2xl mx-auto px-4 py-4 flex flex-col items-center gap-3">
+            <p className="text-sm text-gray-300 font-medium">This match has finished</p>
+            <button
+              onClick={() => {
+                try { localStorage.removeItem("lastMarket"); } catch { /* SSR guard */ }
+                window.location.href = "/paper";
+              }}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 transition-all"
+            >
+              Select New Match
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ─── Market Status Bar ─── */}
       <div className="border-b border-gray-800/50 bg-gray-900/30">
         <div className="px-2 md:px-4 py-2 flex items-center justify-center gap-2 md:gap-3 flex-wrap text-xs">
           <span className="text-gray-400 font-medium">{tournament}</span>
           <span className="text-gray-700">|</span>
-          {isLive && marketBook ? (
+          {marketBook ? (
             <>
               {marketBook.status === "SUSPENDED" ? (
                 <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-500/15 text-red-400 animate-pulse">

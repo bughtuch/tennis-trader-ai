@@ -662,6 +662,8 @@ function SettingsPage() {
               {/* OAuth login — recommended */}
               <a
                 href="/api/betfair/auth/redirect"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[#FFB80C] to-[#E5A500] hover:from-[#E5A500] hover:to-[#CC9200] transition-all flex items-center justify-center gap-2 shadow-lg"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

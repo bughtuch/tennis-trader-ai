@@ -3077,8 +3077,8 @@ function TradingPage() {
         </div>
       </div>
 
-      {/* ─── Tab Bar (mobile + tablet, hidden on desktop 1920+) ─── */}
-      <div className="min-[1920px]:hidden sticky top-14 z-40 border-b border-gray-800/50 bg-gray-900/95 backdrop-blur-sm max-w-full">
+      {/* ─── Tab Bar (mobile + tablet, hidden on desktop 1200+) ─── */}
+      <div className="min-[1200px]:hidden sticky top-14 z-40 border-b border-gray-800/50 bg-gray-900/95 backdrop-blur-sm max-w-full">
         <div className="flex">
           {[
             { id: "ladder" as const, label: "Ladder" },
@@ -3109,7 +3109,7 @@ function TradingPage() {
       {/* ─── YOUR POSITION ─── */}
       {openPositions.length > 0 && outcomePnl && (
         <div className="border-b border-gray-800/50 bg-gray-900/40">
-          <div className="max-w-2xl min-[1920px]:max-w-6xl mx-auto px-4 py-3">
+          <div className="max-w-2xl min-[1200px]:max-w-6xl mx-auto px-4 py-3">
             <div className="rounded-xl border border-gray-700/50 bg-gray-800/30 p-4 space-y-2">
               <div className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium">YOUR POSITION</div>
               {/* Show each open position entry */}
@@ -3151,8 +3151,8 @@ function TradingPage() {
 
       {/* ─── Content Area ─── */}
       <div className="max-w-full overflow-x-hidden">
-        {/* DESKTOP ONLY: Three-column grid (1920px+) */}
-        <div className="hidden min-[1920px]:block px-6 py-4 max-w-[1920px] mx-auto">
+        {/* DESKTOP ONLY: Three-column grid (1200px+) */}
+        <div className="hidden min-[1200px]:block px-6 py-4 max-w-[1920px] mx-auto">
           <div className="flex gap-4">
             <div className="w-1/4 min-w-0">{aiPanel}</div>
             <div className="w-1/2 min-w-0 space-y-4">
@@ -3200,8 +3200,8 @@ function TradingPage() {
           </div>
         </div>
 
-        {/* MOBILE + TABLET: Single panel with tab switching (<1920px) */}
-        <div className="min-[1920px]:hidden px-2 md:px-4 py-3 md:py-4 max-w-full">
+        {/* MOBILE + TABLET: Single panel with tab switching (<1200px) */}
+        <div className="min-[1200px]:hidden px-2 md:px-4 py-3 md:py-4 max-w-full">
           <div className="transition-opacity duration-200 ease-in-out space-y-4">
             {activeTab === "ladder" && (
               <>
