@@ -919,7 +919,7 @@ function ClassicTradingPage() {
               {sessionPnl >= 0 ? "+" : ""}£{sessionPnl.toFixed(2)}
             </span>
             <span className="text-gray-300">|</span>
-            <Link href="/trading" className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">
+            <Link href={`/trading?${searchParams.toString()}`} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">
               Modern View &rarr;
             </Link>
           </div>

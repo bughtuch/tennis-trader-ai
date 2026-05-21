@@ -2910,6 +2910,13 @@ function TradingPage() {
             </svg>
             {sessionTimeStr}
           </span>
+          <span className="text-gray-700">|</span>
+          <Link
+            href={`/classic-trading?${searchParams.toString()}`}
+            className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+          >
+            Classic View
+          </Link>
         </div>
       </div>
 
