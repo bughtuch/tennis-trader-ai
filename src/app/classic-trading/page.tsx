@@ -842,7 +842,7 @@ function ClassicTradingPage() {
 
   /* ─── RENDER ─── */
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900">
+    <main className="min-h-screen bg-gray-100 text-gray-900 pb-16">
       {/* ─── Toast ─── */}
       {toast && (
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-sm font-medium shadow-lg ${
@@ -870,8 +870,8 @@ function ClassicTradingPage() {
       )}
 
       {/* ─── Header ─── */}
-      <header className="border-b border-gray-200 bg-white sticky top-0 z-40">
-        <div className="px-3 py-2 flex items-center justify-between flex-wrap gap-2">
+      <header className="border-b border-gray-200 bg-white sticky top-0 z-40 shadow-sm">
+        <div className="px-4 py-2.5 flex items-center justify-between flex-wrap gap-2">
           {/* Left: navigation + match info */}
           <div className="flex items-center gap-3">
             <Link
@@ -919,7 +919,10 @@ function ClassicTradingPage() {
               {sessionPnl >= 0 ? "+" : ""}£{sessionPnl.toFixed(2)}
             </span>
             <span className="text-gray-300">|</span>
-            <Link href={`/trading?${searchParams.toString()}`} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium">
+            <Link
+              href={`/trading?${searchParams.toString()}`}
+              className="px-2.5 py-1 rounded-lg text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
+            >
               Modern View &rarr;
             </Link>
           </div>
@@ -938,7 +941,7 @@ function ClassicTradingPage() {
         </div>
 
         {/* Stake row */}
-        <div className="px-3 py-2 border-t border-gray-100 flex items-center gap-3 flex-wrap">
+        <div className="px-4 py-2 border-t border-gray-100 flex items-center gap-3 flex-wrap">
           <span className="text-[10px] font-semibold tracking-wider uppercase text-gray-500">STAKE</span>
           <div className="flex items-center gap-1.5">
             {STAKES.map((stake) => (
@@ -988,15 +991,16 @@ function ClassicTradingPage() {
         </div>
       </header>
 
-      {/* ─── Desktop layout (≥1024px): 4-column ─── */}
-      <div className="hidden lg:block px-3 py-3">
-        <div className="flex gap-3 max-w-[1600px] mx-auto" style={{ minHeight: "calc(100vh - 140px)" }}>
-          {/* AI Panel */}
-          <div className="w-[200px] shrink-0">
+      {/* ─── Desktop layout: ladders dominant ─── */}
+      {/* Wide desktop (≥1280px): 4-column with side panels */}
+      <div className="hidden xl:block px-4 pt-5 pb-6">
+        <div className="flex gap-4 max-w-[1800px] mx-auto">
+          {/* AI Panel — narrow sidebar */}
+          <div className="w-[220px] shrink-0">
             {aiPanel}
           </div>
 
-          {/* Player 1 Ladder */}
+          {/* Player 1 Ladder — dominant */}
           <div className="flex-1 min-w-0">
             <ClassicLadder
               runner={runner0}
@@ -1015,7 +1019,7 @@ function ClassicTradingPage() {
             />
           </div>
 
-          {/* Player 2 Ladder */}
+          {/* Player 2 Ladder — dominant */}
           <div className="flex-1 min-w-0">
             <ClassicLadder
               runner={runner1}
@@ -1034,17 +1038,59 @@ function ClassicTradingPage() {
             />
           </div>
 
-          {/* Positions Panel */}
-          <div className="w-[300px] shrink-0">
+          {/* Positions Panel — narrow sidebar */}
+          <div className="w-[280px] shrink-0">
             {positionPanel}
           </div>
+        </div>
+      </div>
+
+      {/* Mid desktop (1024-1279px): ladders top, panels below */}
+      <div className="hidden lg:block xl:hidden px-4 pt-5 pb-6">
+        {/* Ladders row — full width, side by side */}
+        <div className="grid grid-cols-2 gap-4 max-w-[960px] mx-auto">
+          <ClassicLadder
+            runner={runner0}
+            playerName={displayPlayers.player1.name}
+            playerOdds={playerOdds.player1}
+            isConnected={isConnected}
+            isInPlay={!!marketBook?.inplay}
+            unmatchedByPrice={unmatchedByPriceP1}
+            onTrade={(price, side) => {
+              if (runner0) handleTradeClick(runner0.selectionId, price, side, "player1");
+            }}
+            activeStake={activeStake}
+            tradeLoading={tradeLoading}
+            netPosition={p1Agg ? { side: p1Agg.netSide, stake: p1Agg.netStake, avgEntry: p1Agg.avgEntry } : null}
+            unrealisedPnl={getUnrealizedPnl("player1")}
+          />
+          <ClassicLadder
+            runner={runner1}
+            playerName={displayPlayers.player2.name}
+            playerOdds={playerOdds.player2}
+            isConnected={isConnected}
+            isInPlay={!!marketBook?.inplay}
+            unmatchedByPrice={unmatchedByPriceP2}
+            onTrade={(price, side) => {
+              if (runner1) handleTradeClick(runner1.selectionId, price, side, "player2");
+            }}
+            activeStake={activeStake}
+            tradeLoading={tradeLoading}
+            netPosition={p2Agg ? { side: p2Agg.netSide, stake: p2Agg.netStake, avgEntry: p2Agg.avgEntry } : null}
+            unrealisedPnl={getUnrealizedPnl("player2")}
+          />
+        </div>
+        {/* AI + Positions row below ladders */}
+        <div className="grid grid-cols-2 gap-4 max-w-[960px] mx-auto mt-4">
+          <div>{aiPanel}</div>
+          <div>{positionPanel}</div>
         </div>
       </div>
 
       {/* ─── Tablet/Mobile layout (<1024px) ─── */}
       <div className="lg:hidden">
         {/* Tab bar */}
-        <div className="sticky top-[88px] z-30 border-b border-gray-200 bg-white">
+        <div className="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur-sm">
           <div className="flex">
             {[
               { id: "ladders" as const, label: "Ladders" },
@@ -1066,58 +1112,55 @@ function ClassicTradingPage() {
           </div>
         </div>
 
-        <div className="px-2 py-3">
+        <div className="px-3 py-4">
           {activeTab === "ladders" && (
-            <div className="space-y-3">
-              {/* Two ladders side-by-side on tablet (≥640px), stacked on mobile */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <ClassicLadder
-                  runner={runner0}
-                  playerName={displayPlayers.player1.name}
-                  playerOdds={playerOdds.player1}
-                  isConnected={isConnected}
-                  isInPlay={!!marketBook?.inplay}
-                  unmatchedByPrice={unmatchedByPriceP1}
-                  onTrade={(price, side) => {
-                    if (runner0) handleTradeClick(runner0.selectionId, price, side, "player1");
-                  }}
-                  activeStake={activeStake}
-                  tradeLoading={tradeLoading}
-                  netPosition={p1Agg ? { side: p1Agg.netSide, stake: p1Agg.netStake, avgEntry: p1Agg.avgEntry } : null}
-                  unrealisedPnl={getUnrealizedPnl("player1")}
-                />
-                <ClassicLadder
-                  runner={runner1}
-                  playerName={displayPlayers.player2.name}
-                  playerOdds={playerOdds.player2}
-                  isConnected={isConnected}
-                  isInPlay={!!marketBook?.inplay}
-                  unmatchedByPrice={unmatchedByPriceP2}
-                  onTrade={(price, side) => {
-                    if (runner1) handleTradeClick(runner1.selectionId, price, side, "player2");
-                  }}
-                  activeStake={activeStake}
-                  tradeLoading={tradeLoading}
-                  netPosition={p2Agg ? { side: p2Agg.netSide, stake: p2Agg.netStake, avgEntry: p2Agg.avgEntry } : null}
-                  unrealisedPnl={getUnrealizedPnl("player2")}
-                />
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[700px] mx-auto">
+              <ClassicLadder
+                runner={runner0}
+                playerName={displayPlayers.player1.name}
+                playerOdds={playerOdds.player1}
+                isConnected={isConnected}
+                isInPlay={!!marketBook?.inplay}
+                unmatchedByPrice={unmatchedByPriceP1}
+                onTrade={(price, side) => {
+                  if (runner0) handleTradeClick(runner0.selectionId, price, side, "player1");
+                }}
+                activeStake={activeStake}
+                tradeLoading={tradeLoading}
+                netPosition={p1Agg ? { side: p1Agg.netSide, stake: p1Agg.netStake, avgEntry: p1Agg.avgEntry } : null}
+                unrealisedPnl={getUnrealizedPnl("player1")}
+              />
+              <ClassicLadder
+                runner={runner1}
+                playerName={displayPlayers.player2.name}
+                playerOdds={playerOdds.player2}
+                isConnected={isConnected}
+                isInPlay={!!marketBook?.inplay}
+                unmatchedByPrice={unmatchedByPriceP2}
+                onTrade={(price, side) => {
+                  if (runner1) handleTradeClick(runner1.selectionId, price, side, "player2");
+                }}
+                activeStake={activeStake}
+                tradeLoading={tradeLoading}
+                netPosition={p2Agg ? { side: p2Agg.netSide, stake: p2Agg.netStake, avgEntry: p2Agg.avgEntry } : null}
+                unrealisedPnl={getUnrealizedPnl("player2")}
+              />
             </div>
           )}
-          {activeTab === "positions" && positionPanel}
-          {activeTab === "ai" && aiPanel}
+          {activeTab === "positions" && <div className="max-w-[600px] mx-auto">{positionPanel}</div>}
+          {activeTab === "ai" && <div className="max-w-[600px] mx-auto">{aiPanel}</div>}
         </div>
       </div>
 
-      {/* ─── Keyboard Shortcuts Tooltip ─── */}
-      <div className="fixed bottom-4 right-4 z-50 hidden lg:block">
-        <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-[10px] text-gray-500">
-          <span className="font-semibold text-gray-700">Shortcuts:</span>{" "}
-          <kbd className="px-1 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono">B</kbd> Back{" "}
-          <kbd className="px-1 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono">L</kbd> Lay{" "}
-          <kbd className="px-1 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono">G</kbd> Green{" "}
-          <kbd className="px-1 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono">C</kbd> Cancel{" "}
-          <kbd className="px-1 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono">1-5</kbd> Stake
+      {/* ─── Keyboard Shortcuts Bar ─── */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 hidden xl:block border-t border-gray-200 bg-white/95 backdrop-blur-sm">
+        <div className="max-w-[1800px] mx-auto px-4 py-2 flex items-center justify-center gap-4 text-[10px] text-gray-500">
+          <span className="font-semibold text-gray-600">Shortcuts</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">B</kbd><span>Back</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">L</kbd><span>Lay</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">G</kbd><span>Green</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">C</kbd><span>Cancel</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">1-5</kbd><span>Stake</span>
         </div>
       </div>
     </main>
