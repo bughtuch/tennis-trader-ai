@@ -608,6 +608,25 @@ function ClassicTradingPage() {
     }
   }
 
+  /* ─── Liability reduction handler ─── */
+  async function handleReduceLiability(runner: "player1" | "player2", tradeSide: "BACK" | "LAY", tradePrice: number, tradeStake: number) {
+    if (!marketId) return;
+    const selId = runner === "player1" ? runner0?.selectionId : runner1?.selectionId;
+    if (!selId) return;
+
+    if (marketBook?.inplay) {
+      const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      addPendingOrder({ id: pendingId, side: tradeSide, price: tradePrice, size: tradeStake, placedAt: Date.now(), delaySeconds: 5 });
+    }
+    const result = await execAction({
+      actionName: "PLACE_TRADE", marketId, selectionId: selId,
+      side: tradeSide, price: tradePrice, size: tradeStake,
+    });
+    if (result.success) {
+      addLivePosition({ marketId, selectionId: selId, side: tradeSide, price: tradePrice, size: tradeStake, betId: result.betId });
+    }
+  }
+
   /* ─── AI Signals ─── */
   async function fetchAiSignal() {
     setAiSignalLoading(true);
@@ -824,6 +843,7 @@ function ClassicTradingPage() {
       p2BackPrice={p2BackPrice}
       p2LayPrice={p2LayPrice}
       marketSuspended={marketBook?.status === "SUSPENDED"}
+      onReduceLiability={handleReduceLiability}
     />
   );
 

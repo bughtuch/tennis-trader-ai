@@ -2,6 +2,7 @@
 
 import { calculateLiability } from "@/lib/tradingMaths";
 import ClassicHedgePreview from "@/components/classic/ClassicHedgePreview";
+import ClassicLiabilityTools from "@/components/classic/ClassicLiabilityTools";
 
 /* ─── Types ─── */
 
@@ -80,6 +81,7 @@ interface ClassicPositionPanelProps {
   p2BackPrice: number;
   p2LayPrice: number;
   marketSuspended: boolean;
+  onReduceLiability: (runner: "player1" | "player2", tradeSide: "BACK" | "LAY", tradePrice: number, tradeStake: number) => Promise<void>;
 }
 
 function r2(v: number): number {
@@ -110,6 +112,7 @@ export default function ClassicPositionPanel({
   p2BackPrice,
   p2LayPrice,
   marketSuspended,
+  onReduceLiability,
 }: ClassicPositionPanelProps) {
   const hasP1Position = player1Agg && player1Agg.netSide !== "FLAT";
   const hasP2Position = player2Agg && player2Agg.netSide !== "FLAT";
@@ -189,6 +192,34 @@ export default function ClassicPositionPanel({
                 currentBackPrice={p2BackPrice}
                 currentLayPrice={p2LayPrice}
                 marketSuspended={marketSuspended}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ─── Liability Reduction ─── */}
+        {hasAnyPosition && (
+          <div className="p-3 space-y-2">
+            {hasP1Position && player1Agg && (
+              <ClassicLiabilityTools
+                playerName={player1Name}
+                agg={player1Agg}
+                currentBackPrice={p1BackPrice}
+                currentLayPrice={p1LayPrice}
+                marketSuspended={marketSuspended}
+                onExecute={(side, price, stake) => onReduceLiability("player1", side, price, stake)}
+                tradeLoading={tradeLoading}
+              />
+            )}
+            {hasP2Position && player2Agg && (
+              <ClassicLiabilityTools
+                playerName={player2Name}
+                agg={player2Agg}
+                currentBackPrice={p2BackPrice}
+                currentLayPrice={p2LayPrice}
+                marketSuspended={marketSuspended}
+                onExecute={(side, price, stake) => onReduceLiability("player2", side, price, stake)}
+                tradeLoading={tradeLoading}
               />
             )}
           </div>
