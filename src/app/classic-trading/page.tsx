@@ -819,6 +819,11 @@ function ClassicTradingPage() {
       closedTrades={tradeHistory}
       sessionPnl={sessionPnl}
       winRate={winRate}
+      p1BackPrice={p1BackPrice}
+      p1LayPrice={p1LayPrice}
+      p2BackPrice={p2BackPrice}
+      p2LayPrice={p2LayPrice}
+      marketSuspended={marketBook?.status === "SUSPENDED"}
     />
   );
 

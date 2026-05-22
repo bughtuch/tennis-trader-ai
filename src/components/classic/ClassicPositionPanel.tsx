@@ -1,6 +1,7 @@
 "use client";
 
 import { calculateLiability } from "@/lib/tradingMaths";
+import ClassicHedgePreview from "@/components/classic/ClassicHedgePreview";
 
 /* ─── Types ─── */
 
@@ -73,6 +74,12 @@ interface ClassicPositionPanelProps {
   closedTrades: SupabaseTrade[];
   sessionPnl: number;
   winRate: number;
+  // Hedge preview prices
+  p1BackPrice: number;
+  p1LayPrice: number;
+  p2BackPrice: number;
+  p2LayPrice: number;
+  marketSuspended: boolean;
 }
 
 function r2(v: number): number {
@@ -98,6 +105,11 @@ export default function ClassicPositionPanel({
   closedTrades,
   sessionPnl,
   winRate,
+  p1BackPrice,
+  p1LayPrice,
+  p2BackPrice,
+  p2LayPrice,
+  marketSuspended,
 }: ClassicPositionPanelProps) {
   const hasP1Position = player1Agg && player1Agg.netSide !== "FLAT";
   const hasP2Position = player2Agg && player2Agg.netSide !== "FLAT";
@@ -154,6 +166,30 @@ export default function ClassicPositionPanel({
                   £{player2GreenUp.equalProfit.toFixed(2)}
                 </span>
               </button>
+            )}
+          </div>
+        )}
+
+        {/* ─── AI Hedge Preview ─── */}
+        {hasAnyPosition && (
+          <div className="p-3 space-y-2">
+            {hasP1Position && player1Agg && (
+              <ClassicHedgePreview
+                playerName={player1Name}
+                agg={player1Agg}
+                currentBackPrice={p1BackPrice}
+                currentLayPrice={p1LayPrice}
+                marketSuspended={marketSuspended}
+              />
+            )}
+            {hasP2Position && player2Agg && (
+              <ClassicHedgePreview
+                playerName={player2Name}
+                agg={player2Agg}
+                currentBackPrice={p2BackPrice}
+                currentLayPrice={p2LayPrice}
+                marketSuspended={marketSuspended}
+              />
             )}
           </div>
         )}
