@@ -867,7 +867,7 @@ function ClassicTradingPage() {
 
   /* ─── RENDER ─── */
   return (
-    <main className="min-h-screen bg-gray-100 text-gray-900 pb-16">
+    <main className="min-h-screen bg-gray-100 text-gray-900 pb-4 xl:pb-14">
       {/* ─── Toast ─── */}
       {toast && (
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-sm font-medium shadow-lg ${
@@ -896,27 +896,29 @@ function ClassicTradingPage() {
 
       {/* ─── Header ─── */}
       <header className="border-b border-gray-200 bg-white sticky top-0 z-40 shadow-sm">
-        <div className="px-4 py-2.5 flex items-center justify-between flex-wrap gap-2">
+        {/* Row 1: Nav + match + status */}
+        <div className="px-3 sm:px-4 py-2 flex items-center justify-between gap-x-3 gap-y-1 flex-wrap">
           {/* Left: navigation + match info */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Link
               href="/markets"
-              className="text-xs font-medium text-blue-600 hover:text-blue-800"
+              className="text-xs font-medium text-blue-600 hover:text-blue-800 shrink-0"
             >
               &larr; Markets
             </Link>
-            <span className="text-gray-300">|</span>
-            <span className="text-xs text-gray-500">{tournament}</span>
-            <span className="text-gray-300">|</span>
-            <span className="text-sm font-bold text-gray-900">
+            <span className="text-gray-300 hidden sm:inline">|</span>
+            <span className="text-xs text-gray-500 hidden sm:inline">{tournament}</span>
+            <span className="text-gray-300 hidden sm:inline">|</span>
+            <span className="text-sm font-bold text-gray-900 truncate">
               {p1Flag} {displayPlayers.player1.short}
               <span className="mx-1 text-gray-400">vs</span>
               {displayPlayers.player2.short} {p2Flag}
             </span>
           </div>
 
-          {/* Center: Status */}
-          <div className="flex items-center gap-2 text-xs">
+          {/* Right: Status + stream + view toggle */}
+          <div className="flex items-center gap-1.5 sm:gap-2 text-xs shrink-0">
+            {/* Market status badge */}
             {marketBook ? (
               <>
                 {marketBook.status === "SUSPENDED" ? (
@@ -924,56 +926,45 @@ function ClassicTradingPage() {
                 ) : marketBook.status === "CLOSED" ? (
                   <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-200 text-gray-500">CLOSED</span>
                 ) : marketBook.inplay ? (
-                  <>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">IN-PLAY</span>
-                    <span className="text-[10px] text-amber-600">~5s delay</span>
-                  </>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">IN-PLAY</span>
                 ) : (
                   <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">PRE-MATCH</span>
                 )}
-                <span className="text-gray-400">|</span>
-                <span className="text-gray-500 font-mono">{formatVolume(marketBook.totalMatched)} matched</span>
+                <span className="text-gray-500 font-mono hidden md:inline">{formatVolume(marketBook.totalMatched)} matched</span>
               </>
             ) : (
-              <span className="text-gray-400">Awaiting connection</span>
+              <span className="text-gray-400 text-[10px]">Connecting</span>
             )}
-            <span className="text-gray-300">|</span>
-            <span className="text-gray-500">{sessionTimeStr}</span>
-            <span className="text-gray-300">|</span>
-            <span className={`font-mono font-semibold ${sessionPnl >= 0 ? "text-green-600" : "text-red-600"}`}>
-              {sessionPnl >= 0 ? "+" : ""}£{sessionPnl.toFixed(2)}
-            </span>
-            <span className="text-gray-300">|</span>
-            <Link
-              href={`/trading?${searchParams.toString()}`}
-              className="px-2.5 py-1 rounded-lg text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all"
-            >
-              Modern View &rarr;
-            </Link>
-          </div>
-
-          {/* Right: Stream status */}
-          <div className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${
+            {/* Stream indicator */}
+            <div className={`w-2 h-2 rounded-full shrink-0 ${
               streamStatus === "connected" ? "bg-green-500" :
               streamStatus === "connecting" ? "bg-amber-400 animate-pulse" :
               "bg-gray-400"
             }`} />
-            <span className="text-[10px] text-gray-500">
-              {streamStatus === "connected" ? "Live" : streamStatus === "connecting" ? "Connecting..." : "Disconnected"}
+            {/* Session P&L */}
+            <span className={`font-mono font-semibold text-[11px] ${sessionPnl >= 0 ? "text-green-600" : "text-red-600"}`}>
+              {sessionPnl >= 0 ? "+" : ""}£{sessionPnl.toFixed(2)}
             </span>
+            <span className="text-gray-400 text-[10px] hidden lg:inline">{sessionTimeStr}</span>
+            {/* View toggle */}
+            <Link
+              href={`/trading?${searchParams.toString()}`}
+              className="px-2 py-0.5 rounded text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-all hidden sm:inline-block"
+            >
+              Modern &rarr;
+            </Link>
           </div>
         </div>
 
-        {/* Stake row */}
-        <div className="px-4 py-2 border-t border-gray-100 flex items-center gap-3 flex-wrap">
+        {/* Row 2: Stake controls */}
+        <div className="px-3 sm:px-4 py-1.5 border-t border-gray-100 flex items-center gap-2 sm:gap-3 flex-wrap">
           <span className="text-[10px] font-semibold tracking-wider uppercase text-gray-500">STAKE</span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             {STAKES.map((stake) => (
               <button
                 key={stake}
                 onClick={() => { setSelectedStake(stake); setCustomStakeInput(""); }}
-                className={`px-3 py-1.5 rounded text-xs font-semibold transition-all border ${
+                className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded text-[11px] sm:text-xs font-semibold transition-all border ${
                   selectedStake === stake && !customStakeInput
                     ? "bg-blue-600 text-white border-blue-600"
                     : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
@@ -987,10 +978,9 @@ function ClassicTradingPage() {
               placeholder="Custom"
               value={customStakeInput}
               onChange={(e) => { setCustomStakeInput(e.target.value); setSelectedStake(null); }}
-              className="w-20 px-2 py-1.5 rounded border border-gray-300 text-xs font-mono text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+              className="w-16 sm:w-20 px-2 py-1 sm:py-1.5 rounded border border-gray-300 text-[11px] sm:text-xs font-mono text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
             />
           </div>
-          <span className="text-gray-300">|</span>
           <button
             onClick={() => {
               if (tradingMode === "safe") {
@@ -1005,23 +995,23 @@ function ClassicTradingPage() {
                 setTimeout(() => setToast(null), 3000);
               }
             }}
-            className={`px-2.5 py-1 rounded text-[10px] font-bold tracking-wide transition-all border ${
+            className={`px-2 py-1 rounded text-[10px] font-bold tracking-wide transition-all border ${
               tradingMode === "safe"
                 ? "bg-blue-50 text-blue-600 border-blue-200"
                 : "bg-red-50 text-red-600 border-red-200 animate-pulse"
             }`}
           >
-            {tradingMode === "safe" ? "SAFE MODE" : "PRO MODE"}
+            {tradingMode === "safe" ? "SAFE" : "PRO"}
           </button>
         </div>
       </header>
 
       {/* ─── Desktop layout: ladders dominant ─── */}
       {/* Wide desktop (≥1280px): 4-column with side panels */}
-      <div className="hidden xl:block px-4 pt-12 pb-6">
-        <div className="flex gap-4 max-w-[1800px] mx-auto">
+      <div className="hidden xl:block px-3 2xl:px-4 pt-6 pb-6">
+        <div className="flex gap-3 2xl:gap-4 max-w-[1800px] mx-auto">
           {/* AI Panel — narrow sidebar */}
-          <div className="w-[220px] shrink-0">
+          <div className="w-[200px] 2xl:w-[220px] shrink-0 min-w-0 overflow-hidden">
             {aiPanel}
           </div>
 
@@ -1064,16 +1054,16 @@ function ClassicTradingPage() {
           </div>
 
           {/* Positions Panel — narrow sidebar */}
-          <div className="w-[280px] shrink-0">
+          <div className="w-[260px] 2xl:w-[280px] shrink-0 min-w-0 overflow-hidden">
             {positionPanel}
           </div>
         </div>
       </div>
 
       {/* Mid desktop (1024-1279px): ladders top, panels below */}
-      <div className="hidden lg:block xl:hidden px-4 pt-12 pb-6">
+      <div className="hidden lg:block xl:hidden px-4 pt-6 pb-6">
         {/* Ladders row — full width, side by side */}
-        <div className="grid grid-cols-2 gap-4 max-w-[960px] mx-auto">
+        <div className="grid grid-cols-2 gap-3 mx-auto">
           <ClassicLadder
             runner={runner0}
             playerName={displayPlayers.player1.name}
@@ -1106,7 +1096,7 @@ function ClassicTradingPage() {
           />
         </div>
         {/* AI + Positions row below ladders */}
-        <div className="grid grid-cols-2 gap-4 max-w-[960px] mx-auto mt-4">
+        <div className="grid grid-cols-2 gap-3 mx-auto mt-4">
           <div>{aiPanel}</div>
           <div>{positionPanel}</div>
         </div>
@@ -1114,8 +1104,8 @@ function ClassicTradingPage() {
 
       {/* ─── Tablet/Mobile layout (<1024px) ─── */}
       <div className="lg:hidden">
-        {/* Tab bar */}
-        <div className="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur-sm">
+        {/* Tab bar — not sticky (header already is) */}
+        <div className="border-b border-gray-200 bg-white">
           <div className="flex">
             {[
               { id: "ladders" as const, label: "Ladders" },
@@ -1125,7 +1115,7 @@ function ClassicTradingPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 py-3 text-xs font-semibold text-center transition-all border-b-2 ${
+                className={`flex-1 py-2.5 text-xs font-semibold text-center transition-all border-b-2 ${
                   activeTab === tab.id
                     ? "text-blue-600 border-blue-500 bg-blue-50/50"
                     : "text-gray-500 border-transparent hover:text-gray-700"
@@ -1137,9 +1127,9 @@ function ClassicTradingPage() {
           </div>
         </div>
 
-        <div className="px-3 pt-6 pb-4">
+        <div className="px-2 sm:px-3 pt-4 pb-4">
           {activeTab === "ladders" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[700px] mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-w-[700px] mx-auto">
               <ClassicLadder
                 runner={runner0}
                 playerName={displayPlayers.player1.name}

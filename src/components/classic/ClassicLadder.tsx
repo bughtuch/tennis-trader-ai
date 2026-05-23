@@ -127,7 +127,7 @@ export default function ClassicLadder({
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-gray-900 truncate max-w-[140px]">
+          <span className="text-sm font-bold text-gray-900 truncate max-w-[100px] sm:max-w-[140px]">
             {playerName}
           </span>
           {netPosition && netPosition.side !== "FLAT" && (
