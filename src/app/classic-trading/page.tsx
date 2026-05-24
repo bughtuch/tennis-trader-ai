@@ -888,16 +888,16 @@ function ClassicTradingPage() {
           <button
             onClick={() => handleGreenUp("player1")}
             disabled={tradeLoading || isSuspended}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
               p1GreenUp.equalProfit >= 0
-                ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-200"
                 : "bg-red-500 hover:bg-red-600 text-white"
             } disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             GREEN {displayPlayers.player1.short} {p1GreenUp.equalProfit >= 0 ? "+" : ""}£{p1GreenUp.equalProfit.toFixed(2)}
           </button>
         ) : (
-          <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed">
+          <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
             GREEN P1
           </button>
         )}
@@ -905,16 +905,16 @@ function ClassicTradingPage() {
           <button
             onClick={() => handleGreenUp("player2")}
             disabled={tradeLoading || isSuspended}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
               p2GreenUp.equalProfit >= 0
-                ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-200"
                 : "bg-red-500 hover:bg-red-600 text-white"
             } disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             GREEN {displayPlayers.player2.short} {p2GreenUp.equalProfit >= 0 ? "+" : ""}£{p2GreenUp.equalProfit.toFixed(2)}
           </button>
         ) : (
-          <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed">
+          <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
             GREEN P2
           </button>
         )}
@@ -947,9 +947,11 @@ function ClassicTradingPage() {
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                   canExecute
                     ? pct === 100
-                      ? "bg-green-50 text-green-700 border-green-300 hover:bg-green-100"
+                      ? "bg-emerald-500 hover:bg-emerald-400 text-white border-emerald-500 shadow-sm shadow-emerald-200"
                       : "bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100"
-                    : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                    : pct === 100
+                      ? "bg-emerald-100 text-emerald-400 border-emerald-200 cursor-not-allowed"
+                      : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
                 }`}
               >
                 {label}
