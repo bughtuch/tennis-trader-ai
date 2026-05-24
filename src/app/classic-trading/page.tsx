@@ -12,6 +12,7 @@ import { validateAndExecute, type ActionName, type TradeActionParams } from "@/l
 import ClassicLadder from "@/components/classic/ClassicLadder";
 import ClassicPositionPanel from "@/components/classic/ClassicPositionPanel";
 import ClassicAIPanel from "@/components/classic/ClassicAIPanel";
+import { calculateLiabilityReduction } from "@/components/classic/ClassicLiabilityTools";
 import RealTradeConfirmModal from "@/components/RealTradeConfirmModal";
 
 /* ─── Types ─── */
@@ -865,6 +866,101 @@ function ClassicTradingPage() {
     />
   );
 
+  /* ─── Trade Controls Strip ─── */
+  const hasAnyPosition = (p1Agg && p1Agg.netSide !== "FLAT") || (p2Agg && p2Agg.netSide !== "FLAT");
+  const isSuspended = marketBook?.status === "SUSPENDED";
+
+  const tradeControlsStrip = (
+    <div className="border border-gray-300 rounded-lg bg-white px-3 py-2.5 sm:px-4 sm:py-3">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] font-bold tracking-wider uppercase text-gray-500">
+          TRADE CONTROLS
+        </span>
+        {!hasAnyPosition && (
+          <span className="text-[10px] text-gray-400 italic">
+            Open a position to use hedge/liability tools
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* GREEN ALL */}
+        {p1GreenUp && p1Agg && p1Agg.netSide !== "FLAT" ? (
+          <button
+            onClick={() => handleGreenUp("player1")}
+            disabled={tradeLoading || isSuspended}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              p1GreenUp.equalProfit >= 0
+                ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                : "bg-red-500 hover:bg-red-600 text-white"
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            GREEN {displayPlayers.player1.short} {p1GreenUp.equalProfit >= 0 ? "+" : ""}£{p1GreenUp.equalProfit.toFixed(2)}
+          </button>
+        ) : (
+          <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed">
+            GREEN P1
+          </button>
+        )}
+        {p2GreenUp && p2Agg && p2Agg.netSide !== "FLAT" ? (
+          <button
+            onClick={() => handleGreenUp("player2")}
+            disabled={tradeLoading || isSuspended}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              p2GreenUp.equalProfit >= 0
+                ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                : "bg-red-500 hover:bg-red-600 text-white"
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            GREEN {displayPlayers.player2.short} {p2GreenUp.equalProfit >= 0 ? "+" : ""}£{p2GreenUp.equalProfit.toFixed(2)}
+          </button>
+        ) : (
+          <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed">
+            GREEN P2
+          </button>
+        )}
+
+        <span className="w-px h-5 bg-gray-300 mx-1" />
+
+        {/* LIABILITY REDUCTION BUTTONS */}
+        {(() => {
+          // Pick the runner with a position for liability buttons
+          const activeAgg = (p1Agg && p1Agg.netSide !== "FLAT") ? p1Agg : (p2Agg && p2Agg.netSide !== "FLAT") ? p2Agg : null;
+          const activeRunner: "player1" | "player2" = (p1Agg && p1Agg.netSide !== "FLAT") ? "player1" : "player2";
+          const backPrice = activeRunner === "player1" ? p1BackPrice : p2BackPrice;
+          const layPrice = activeRunner === "player1" ? p1LayPrice : p2LayPrice;
+
+          const pcts = [25, 50, 75, 100] as const;
+
+          return pcts.map((pct) => {
+            const calc = activeAgg ? calculateLiabilityReduction(activeAgg, backPrice, layPrice, pct) : null;
+            const canExecute = !!calc && !tradeLoading && !isSuspended;
+            const label = pct === 100 ? "FREE BET" : `−${pct}%`;
+
+            return (
+              <button
+                key={pct}
+                onClick={async () => {
+                  if (!calc) return;
+                  await handleReduceLiability(activeRunner, calc.tradeSide, calc.tradePrice, calc.tradeStake);
+                }}
+                disabled={!canExecute}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  canExecute
+                    ? pct === 100
+                      ? "bg-green-50 text-green-700 border-green-300 hover:bg-green-100"
+                      : "bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100"
+                    : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          });
+        })()}
+      </div>
+    </div>
+  );
+
   /* ─── RENDER ─── */
   return (
     <main className="min-h-screen bg-gray-100 text-gray-900 pb-4 xl:pb-14">
@@ -1006,9 +1102,16 @@ function ClassicTradingPage() {
         </div>
       </header>
 
+      {/* ─── Top spacing — clear gap below sticky header ─── */}
+      <div className="h-8 lg:h-10" aria-hidden="true" />
+
       {/* ─── Desktop layout: ladders dominant ─── */}
       {/* Wide desktop (≥1280px): 4-column with side panels */}
-      <div className="hidden xl:block px-3 2xl:px-4 pt-6 pb-6">
+      <div className="hidden xl:block px-3 2xl:px-4 pb-6">
+        {/* Trade Controls Strip — above ladders */}
+        <div className="max-w-[1800px] mx-auto mb-3">
+          {tradeControlsStrip}
+        </div>
         <div className="flex gap-3 2xl:gap-4 max-w-[1800px] mx-auto">
           {/* AI Panel — narrow sidebar */}
           <div className="w-[200px] 2xl:w-[220px] shrink-0 min-w-0 overflow-hidden self-start">
@@ -1061,7 +1164,11 @@ function ClassicTradingPage() {
       </div>
 
       {/* Mid desktop (1024-1279px): ladders top, panels below */}
-      <div className="hidden lg:block xl:hidden px-4 pt-6 pb-6">
+      <div className="hidden lg:block xl:hidden px-4 pb-6">
+        {/* Trade Controls Strip */}
+        <div className="mb-3">
+          {tradeControlsStrip}
+        </div>
         {/* Ladders row — full width, side by side */}
         <div className="grid grid-cols-2 gap-3 mx-auto">
           <ClassicLadder
@@ -1129,7 +1236,9 @@ function ClassicTradingPage() {
 
         <div className="px-2 sm:px-3 pt-4 pb-4">
           {activeTab === "ladders" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-w-[700px] mx-auto">
+            <div className="max-w-[700px] mx-auto space-y-3">
+              {tradeControlsStrip}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <ClassicLadder
                 runner={runner0}
                 playerName={displayPlayers.player1.name}
@@ -1160,6 +1269,7 @@ function ClassicTradingPage() {
                 netPosition={p2Agg ? { side: p2Agg.netSide, stake: p2Agg.netStake, avgEntry: p2Agg.avgEntry } : null}
                 unrealisedPnl={getUnrealizedPnl("player2")}
               />
+              </div>
             </div>
           )}
           {activeTab === "positions" && <div className="max-w-[600px] mx-auto">{positionPanel}</div>}
