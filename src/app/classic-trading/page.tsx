@@ -963,7 +963,7 @@ function ClassicTradingPage() {
 
   /* ─── RENDER ─── */
   return (
-    <main className="min-h-screen bg-gray-100 text-gray-900 pb-4 xl:pb-14">
+    <main className="min-h-screen bg-gray-100 text-gray-900 pt-14 pb-4 xl:pb-14">
       {/* ─── Toast ─── */}
       {toast && (
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-sm font-medium shadow-lg ${
@@ -990,8 +990,11 @@ function ClassicTradingPage() {
         />
       )}
 
+      {/* ─── Gap below global navbar ─── */}
+      <div className="h-12" aria-hidden="true" />
+
       {/* ─── Header ─── */}
-      <header className="border-b border-gray-200 bg-white sticky top-0 z-40 shadow-sm">
+      <header className="border-b border-gray-200 bg-white sticky top-14 z-40 shadow-sm">
         {/* Row 1: Nav + match + status */}
         <div className="px-3 sm:px-4 py-2 flex items-center justify-between gap-x-3 gap-y-1 flex-wrap">
           {/* Left: navigation + match info */}
@@ -1102,12 +1105,9 @@ function ClassicTradingPage() {
         </div>
       </header>
 
-      {/* ─── Top spacing — clear gap below sticky header ─── */}
-      <div className="h-8 lg:h-10" aria-hidden="true" />
-
       {/* ─── Desktop layout: ladders dominant ─── */}
       {/* Wide desktop (≥1280px): 4-column with side panels */}
-      <div className="hidden xl:block px-3 2xl:px-4 pb-6">
+      <div className="hidden xl:block px-3 2xl:px-4 pt-4 pb-6">
         {/* Trade Controls Strip — above ladders */}
         <div className="max-w-[1800px] mx-auto mb-3">
           {tradeControlsStrip}
@@ -1164,7 +1164,7 @@ function ClassicTradingPage() {
       </div>
 
       {/* Mid desktop (1024-1279px): ladders top, panels below */}
-      <div className="hidden lg:block xl:hidden px-4 pb-6">
+      <div className="hidden lg:block xl:hidden px-4 pt-4 pb-6">
         {/* Trade Controls Strip */}
         <div className="mb-3">
           {tradeControlsStrip}
