@@ -2913,9 +2913,9 @@ function TradingPage() {
           <span className="text-gray-700">|</span>
           <Link
             href={`/classic-trading?${searchParams.toString()}`}
-            className="px-2.5 py-1 rounded-lg text-[10px] font-semibold text-gray-400 bg-gray-800/50 border border-gray-700/40 hover:text-white hover:bg-gray-700/60 hover:border-gray-600 transition-all"
+            className="px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-blue-500 to-indigo-500 border border-blue-400/50 hover:from-blue-400 hover:to-indigo-400 hover:shadow-lg hover:shadow-blue-500/20 transition-all"
           >
-            Classic Trader View
+            Pro Trader View
           </Link>
         </div>
       </div>
