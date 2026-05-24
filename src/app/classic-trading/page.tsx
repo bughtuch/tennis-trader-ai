@@ -1011,7 +1011,7 @@ function ClassicTradingPage() {
       <div className="hidden xl:block px-3 2xl:px-4 pt-6 pb-6">
         <div className="flex gap-3 2xl:gap-4 max-w-[1800px] mx-auto">
           {/* AI Panel — narrow sidebar */}
-          <div className="w-[200px] 2xl:w-[220px] shrink-0 min-w-0 overflow-hidden">
+          <div className="w-[200px] 2xl:w-[220px] shrink-0 min-w-0 overflow-hidden self-start">
             {aiPanel}
           </div>
 
@@ -1054,7 +1054,7 @@ function ClassicTradingPage() {
           </div>
 
           {/* Positions Panel — narrow sidebar */}
-          <div className="w-[260px] 2xl:w-[280px] shrink-0 min-w-0 overflow-hidden">
+          <div className="w-[260px] 2xl:w-[280px] shrink-0 min-w-0 overflow-hidden self-start">
             {positionPanel}
           </div>
         </div>

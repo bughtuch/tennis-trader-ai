@@ -125,13 +125,13 @@ export default function ClassicLadder({
   return (
     <div className="border border-gray-300 rounded-lg overflow-hidden bg-white">
       {/* Header */}
-      <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-gray-900 truncate max-w-[100px] sm:max-w-[140px]">
+      <div className="px-3 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm font-bold text-gray-900 truncate max-w-[100px] sm:max-w-[160px]">
             {playerName}
           </span>
           {netPosition && netPosition.side !== "FLAT" && (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${
               netPosition.side === "BACK"
                 ? "bg-blue-100 text-blue-700"
                 : "bg-pink-100 text-pink-700"
@@ -140,12 +140,12 @@ export default function ClassicLadder({
             </span>
           )}
         </div>
-        <div className="text-right">
-          <span className="text-lg font-bold font-mono text-gray-900">
+        <div className="text-right shrink-0">
+          <span className="text-xl font-bold font-mono text-gray-900">
             {playerOdds > 0 ? playerOdds.toFixed(2) : "--"}
           </span>
           {unrealisedPnl != null && unrealisedPnl !== 0 && (
-            <div className={`text-[10px] font-mono font-semibold ${
+            <div className={`text-[11px] font-mono font-semibold ${
               unrealisedPnl >= 0 ? "text-green-600" : "text-red-600"
             }`}>
               {unrealisedPnl >= 0 ? "+" : ""}£{unrealisedPnl.toFixed(2)}
@@ -155,14 +155,14 @@ export default function ClassicLadder({
       </div>
 
       {/* Column headers */}
-      <div className="grid grid-cols-3 text-center text-[10px] font-semibold tracking-wider uppercase border-b border-gray-200 bg-gray-50">
-        <div className="py-1 text-blue-600">BACK</div>
-        <div className="py-1 text-gray-500">PRICE</div>
-        <div className="py-1 text-pink-600">LAY</div>
+      <div className="grid grid-cols-3 text-center text-[11px] font-semibold tracking-[0.12em] uppercase border-b border-gray-200 bg-gray-50">
+        <div className="py-1.5 text-blue-600">BACK</div>
+        <div className="py-1.5 text-gray-500">PRICE</div>
+        <div className="py-1.5 text-pink-600">LAY</div>
       </div>
 
       {/* Ladder rows */}
-      <div className="divide-y divide-gray-100">
+      <div>
         {ladderRows.length === 0 ? (
           <div className="py-8 text-center text-xs text-gray-400">
             {isConnected ? "Awaiting prices..." : "No connection"}
@@ -176,14 +176,14 @@ export default function ClassicLadder({
             return (
               <div
                 key={row.price}
-                className="grid grid-cols-3 items-center"
-                style={{ height: "26px" }}
+                className="grid grid-cols-3 items-center border-b border-gray-100 last:border-b-0"
+                style={{ height: "36px" }}
               >
                 {/* BACK cell */}
                 <button
                   onClick={() => onTrade(row.price, "BACK")}
                   disabled={tradeLoading || !isConnected}
-                  className={`h-full relative text-right pr-2 font-mono text-[11px] transition-colors ${
+                  className={`h-full relative text-right pr-3 font-mono text-sm transition-colors ${
                     row.isBestBack
                       ? "bg-blue-200 hover:bg-blue-300 font-semibold text-blue-900"
                       : row.backSize > 0
@@ -203,13 +203,13 @@ export default function ClassicLadder({
                   </span>
                   {/* Unmatched indicator */}
                   {hasUnmatchedBack && (
-                    <span className="absolute top-0.5 left-1 w-1.5 h-1.5 rounded-full bg-amber-500 z-10" />
+                    <span className="absolute top-1 left-1 w-1.5 h-1.5 rounded-full bg-amber-500 z-10" />
                   )}
                 </button>
 
                 {/* PRICE cell */}
                 <div
-                  className={`h-full flex items-center justify-center font-mono text-xs font-bold ${
+                  className={`h-full flex items-center justify-center font-mono text-sm font-bold ${
                     row.isLastTraded
                       ? "bg-green-100 text-green-800 ring-1 ring-inset ring-green-300"
                       : "bg-gray-50 text-gray-700"
@@ -222,7 +222,7 @@ export default function ClassicLadder({
                 <button
                   onClick={() => onTrade(row.price, "LAY")}
                   disabled={tradeLoading || !isConnected}
-                  className={`h-full relative text-left pl-2 font-mono text-[11px] transition-colors ${
+                  className={`h-full relative text-left pl-3 font-mono text-sm transition-colors ${
                     row.isBestLay
                       ? "bg-pink-200 hover:bg-pink-300 font-semibold text-pink-900"
                       : row.laySize > 0
@@ -240,7 +240,7 @@ export default function ClassicLadder({
                     {row.laySize > 0 ? `£${row.laySize}` : ""}
                   </span>
                   {hasUnmatchedLay && (
-                    <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-amber-500 z-10" />
+                    <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500 z-10" />
                   )}
                 </button>
               </div>
@@ -250,7 +250,7 @@ export default function ClassicLadder({
       </div>
 
       {/* Footer: status */}
-      <div className="px-3 py-1.5 border-t border-gray-200 bg-gray-50 flex items-center justify-between text-[10px] text-gray-500">
+      <div className="px-3 py-2 border-t border-gray-200 bg-gray-50 flex items-center justify-between text-[11px] text-gray-500">
         <span>
           {isInPlay ? (
             <span className="text-green-600 font-semibold">IN-PLAY</span>
