@@ -289,6 +289,15 @@ function TradingPage() {
   /* Live positions: confirmed trades (matched or unmatched) */
   const [livePositions, setLivePositions] = useState<SupabaseTrade[]>([]);
 
+  /* Clear local positions when switching markets to prevent stale display */
+  const prevMarketIdRef = useRef(marketId);
+  useEffect(() => {
+    if (marketId !== prevMarketIdRef.current) {
+      prevMarketIdRef.current = marketId;
+      setLivePositions([]);
+    }
+  }, [marketId]);
+
   /* Trade history from Supabase (for SESSION P&L) */
   const [tradeHistory, setTradeHistory] = useState<SupabaseTrade[]>([]);
 
@@ -663,6 +672,7 @@ function TradingPage() {
     // 2. Add remaining Betfair unmatched orders not in livePositions
     for (const o of unmatchedOrders) {
       if (seenBetIds.has(o.betId)) continue;
+      if (o.marketId !== marketId) continue;
       const isPartial = (o.sizeMatched as number) > 0;
       if (isPartial) {
         // Matched portion we didn't know about (placed in previous session)
@@ -990,6 +1000,7 @@ function TradingPage() {
   /* ─── Unmatched orders by price for ladder overlay (Feature 3) ─── */
   const unmatchedByPrice = new Map<number, { backSize: number; laySize: number }>();
   for (const order of unmatchedOrders) {
+    if (order.marketId !== marketId) continue;
     if (!selectedRunner || order.selectionId !== selectedRunner.selectionId) continue;
     const entry = unmatchedByPrice.get(order.price) ?? { backSize: 0, laySize: 0 };
     if (order.side === "BACK") entry.backSize += order.sizeRemaining as number;
@@ -1747,14 +1758,14 @@ function TradingPage() {
       </div>
 
       {/* Unmatched Orders List */}
-      {unmatchedOrders.filter(o => !selectedRunner || o.selectionId === selectedRunner.selectionId).length > 0 && (
+      {unmatchedOrders.filter(o => o.marketId === marketId && (!selectedRunner || o.selectionId === selectedRunner.selectionId)).length > 0 && (
         <div className="px-3 md:px-4 py-2 border-t border-gray-800/50 bg-gray-900/20">
           <div className="text-[10px] tracking-[0.15em] uppercase text-amber-400 font-medium mb-1.5">
             UNMATCHED ORDERS
           </div>
           <div className="space-y-1">
             {unmatchedOrders
-              .filter(o => !selectedRunner || o.selectionId === selectedRunner.selectionId)
+              .filter(o => o.marketId === marketId && (!selectedRunner || o.selectionId === selectedRunner.selectionId))
               .map((order) => (
               <div key={order.betId} className="flex items-center justify-between py-1 px-2 rounded bg-amber-500/5 border border-amber-500/10">
                 <div className="flex items-center gap-2 text-xs">
@@ -1776,13 +1787,13 @@ function TradingPage() {
       )}
 
       {/* Cancel All Button */}
-      {unmatchedOrders.length > 0 && marketId && (
+      {unmatchedOrders.filter(o => o.marketId === marketId).length > 0 && marketId && (
         <div className="px-3 md:px-4 py-2 border-t border-gray-800/50">
           <button
             onClick={() => cancelOrder({ marketId })}
             className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 transition-all"
           >
-            CANCEL ALL ({unmatchedOrders.length} unmatched)
+            CANCEL ALL ({unmatchedOrders.filter(o => o.marketId === marketId).length} unmatched)
           </button>
         </div>
       )}
