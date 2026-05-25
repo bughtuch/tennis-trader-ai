@@ -159,6 +159,16 @@ function ClassicTradingPage() {
 
   /* ─── Live positions ─── */
   const [livePositions, setLivePositions] = useState<SupabaseTrade[]>([]);
+
+  /* Clear local positions when switching markets to prevent stale display */
+  const prevMarketIdRef = useRef(marketId);
+  useEffect(() => {
+    if (marketId !== prevMarketIdRef.current) {
+      prevMarketIdRef.current = marketId;
+      setLivePositions([]);
+    }
+  }, [marketId]);
+
   const [tradeHistory, setTradeHistory] = useState<SupabaseTrade[]>([]);
 
   const fetchTrades = useCallback(async () => {
@@ -328,6 +338,7 @@ function ClassicTradingPage() {
 
     for (const o of unmatchedOrders) {
       if (seenBetIds.has(o.betId)) continue;
+      if (o.marketId !== marketId) continue;
       const isPartial = (o.sizeMatched as number) > 0;
       if (isPartial) matched.push(orderToTrade(o, o.sizeMatched as number));
       if ((o.sizeRemaining as number) > 0) unmatched.push(orderToUnmatched(o, isPartial));
@@ -414,6 +425,7 @@ function ClassicTradingPage() {
     const map = new Map<number, { backSize: number; laySize: number }>();
     if (!runner0) return map;
     for (const order of unmatchedOrders) {
+      if (order.marketId !== marketId) continue;
       if (order.selectionId !== runner0.selectionId) continue;
       const entry = map.get(order.price) ?? { backSize: 0, laySize: 0 };
       if (order.side === "BACK") entry.backSize += order.sizeRemaining as number;
@@ -421,12 +433,13 @@ function ClassicTradingPage() {
       map.set(order.price, entry);
     }
     return map;
-  }, [unmatchedOrders, runner0]);
+  }, [unmatchedOrders, runner0, marketId]);
 
   const unmatchedByPriceP2 = useMemo(() => {
     const map = new Map<number, { backSize: number; laySize: number }>();
     if (!runner1) return map;
     for (const order of unmatchedOrders) {
+      if (order.marketId !== marketId) continue;
       if (order.selectionId !== runner1.selectionId) continue;
       const entry = map.get(order.price) ?? { backSize: 0, laySize: 0 };
       if (order.side === "BACK") entry.backSize += order.sizeRemaining as number;
@@ -434,7 +447,7 @@ function ClassicTradingPage() {
       map.set(order.price, entry);
     }
     return map;
-  }, [unmatchedOrders, runner1]);
+  }, [unmatchedOrders, runner1, marketId]);
 
   /* ─── Position aggregation per runner ─── */
   function getAggregatedPositionForRunner(selectionId: number | undefined) {
