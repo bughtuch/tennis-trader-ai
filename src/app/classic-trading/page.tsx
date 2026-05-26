@@ -60,6 +60,19 @@ function formatVolume(v: number) {
   return `£${Math.round(v)}`;
 }
 
+function calcPressure(runner: { ex?: { availableToBack?: { price: number; size: number }[]; availableToLay?: { price: number; size: number }[] } } | null) {
+  if (!runner?.ex) return { direction: "balanced" as const, strength: 0 };
+  const backs = runner.ex.availableToBack ?? [];
+  const lays = runner.ex.availableToLay ?? [];
+  const backDepth = backs.reduce((sum, ps, i) => sum + ps.size * (1 / (i + 1)), 0);
+  const layDepth = lays.reduce((sum, ps, i) => sum + ps.size * (1 / (i + 1)), 0);
+  const total = backDepth + layDepth;
+  if (total === 0) return { direction: "balanced" as const, strength: 0 };
+  const imbalance = (layDepth - backDepth) / total;
+  if (Math.abs(imbalance) < 0.15) return { direction: "balanced" as const, strength: 0 };
+  return { direction: imbalance > 0 ? "back" as const : "lay" as const, strength: Math.min(Math.abs(imbalance), 1) };
+}
+
 /* ─── Page wrapper ─── */
 
 export default function ClassicTradingPageWrapper() {
@@ -220,6 +233,9 @@ function ClassicTradingPage() {
     }
     return count;
   }, [tradeHistory]);
+
+  /* ─── Recenter trigger ─── */
+  const [recenterTrigger, setRecenterTrigger] = useState(0);
 
   /* ─── Store ─── */
   const {
@@ -495,6 +511,27 @@ function ClassicTradingPage() {
   const p1GreenUp = getGreenUpForRunner(p1Agg, p1LayPrice);
   const p2GreenUp = getGreenUpForRunner(p2Agg, p2LayPrice);
 
+  /* ─── Pressure per runner ─── */
+  const p1Pressure = useMemo(() => calcPressure(runner0), [runner0]);
+  const p2Pressure = useMemo(() => calcPressure(runner1), [runner1]);
+
+  /* ─── Dual ladder relationship ─── */
+  const p1Short = displayPlayers.player1.short;
+  const p2Short = displayPlayers.player2.short;
+  const ladderRelationship = useMemo(() => {
+    const p1 = p1Pressure;
+    const p2 = p2Pressure;
+    if (p1.direction === "back" && p2.direction === "lay")
+      return `${p1Short} shortening, ${p2Short} drifting`;
+    if (p1.direction === "lay" && p2.direction === "back")
+      return `${p2Short} shortening, ${p1Short} drifting`;
+    if (p1.direction === "back" && p2.direction === "back")
+      return "Both ladders under back pressure";
+    if (p1.direction === "lay" && p2.direction === "lay")
+      return "Both ladders under lay pressure";
+    return null;
+  }, [p1Pressure, p2Pressure, p1Short, p2Short]);
+
   /* ─── Unrealized P&L per runner ─── */
   function getUnrealizedPnl(playerKey: "player1" | "player2"): number | null {
     const playerName = displayPlayers[playerKey].name;
@@ -645,6 +682,14 @@ function ClassicTradingPage() {
   async function fetchAiSignal() {
     setAiSignalLoading(true);
     try {
+      // Build ladder context from top-3 depth
+      const p1Backs = runner0?.ex?.availableToBack ?? [];
+      const p1Lays = runner0?.ex?.availableToLay ?? [];
+      const p2Backs = runner1?.ex?.availableToBack ?? [];
+      const p2Lays = runner1?.ex?.availableToLay ?? [];
+      const sum3 = (arr: { size: number }[]) => arr.slice(0, 3).reduce((s, ps) => s + ps.size, 0);
+      const ladderContext = `${displayPlayers.player1.short} back depth £${Math.round(sum3(p1Backs))} / lay depth £${Math.round(sum3(p1Lays))}. ${displayPlayers.player2.short} back depth £${Math.round(sum3(p2Backs))} / lay depth £${Math.round(sum3(p2Lays))}.`;
+
       const res = await fetch("/api/ai-signals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -656,6 +701,7 @@ function ClassicTradingPage() {
             odds1: displayPlayers.player1.odds,
             odds2: displayPlayers.player2.odds,
             tournament, surface: "Hard",
+            ladderContext,
           },
         }),
       });
@@ -807,6 +853,9 @@ function ClassicTradingPage() {
         case "3": s.setSelectedStake(STAKES[2]); s.setCustomStakeInput(""); break;
         case "4": s.setSelectedStake(STAKES[3]); s.setCustomStakeInput(""); break;
         case "5": s.setSelectedStake(STAKES[4]); s.setCustomStakeInput(""); break;
+        case "enter":
+          setRecenterTrigger((prev) => prev + 1);
+          break;
       }
     }
     document.addEventListener("keydown", handleKeyDown);
@@ -876,6 +925,7 @@ function ClassicTradingPage() {
       isInPlay={!!marketBook?.inplay}
       sessionPnl={sessionPnl}
       consecutiveLosses={consecutiveLosses}
+      ladderRelationship={ladderRelationship}
     />
   );
 
@@ -1149,6 +1199,8 @@ function ClassicTradingPage() {
               tradeLoading={tradeLoading}
               netPosition={p1Agg ? { side: p1Agg.netSide, stake: p1Agg.netStake, avgEntry: p1Agg.avgEntry } : null}
               unrealisedPnl={getUnrealizedPnl("player1")}
+              pressure={p1Pressure}
+              recenterTrigger={recenterTrigger}
             />
           </div>
 
@@ -1168,6 +1220,8 @@ function ClassicTradingPage() {
               tradeLoading={tradeLoading}
               netPosition={p2Agg ? { side: p2Agg.netSide, stake: p2Agg.netStake, avgEntry: p2Agg.avgEntry } : null}
               unrealisedPnl={getUnrealizedPnl("player2")}
+              pressure={p2Pressure}
+              recenterTrigger={recenterTrigger}
             />
           </div>
 
@@ -1200,6 +1254,8 @@ function ClassicTradingPage() {
             tradeLoading={tradeLoading}
             netPosition={p1Agg ? { side: p1Agg.netSide, stake: p1Agg.netStake, avgEntry: p1Agg.avgEntry } : null}
             unrealisedPnl={getUnrealizedPnl("player1")}
+            pressure={p1Pressure}
+            recenterTrigger={recenterTrigger}
           />
           <ClassicLadder
             runner={runner1}
@@ -1215,6 +1271,8 @@ function ClassicTradingPage() {
             tradeLoading={tradeLoading}
             netPosition={p2Agg ? { side: p2Agg.netSide, stake: p2Agg.netStake, avgEntry: p2Agg.avgEntry } : null}
             unrealisedPnl={getUnrealizedPnl("player2")}
+            pressure={p2Pressure}
+            recenterTrigger={recenterTrigger}
           />
         </div>
         {/* AI + Positions row below ladders */}
@@ -1268,6 +1326,8 @@ function ClassicTradingPage() {
                 tradeLoading={tradeLoading}
                 netPosition={p1Agg ? { side: p1Agg.netSide, stake: p1Agg.netStake, avgEntry: p1Agg.avgEntry } : null}
                 unrealisedPnl={getUnrealizedPnl("player1")}
+                pressure={p1Pressure}
+                recenterTrigger={recenterTrigger}
               />
               <ClassicLadder
                 runner={runner1}
@@ -1283,6 +1343,8 @@ function ClassicTradingPage() {
                 tradeLoading={tradeLoading}
                 netPosition={p2Agg ? { side: p2Agg.netSide, stake: p2Agg.netStake, avgEntry: p2Agg.avgEntry } : null}
                 unrealisedPnl={getUnrealizedPnl("player2")}
+                pressure={p2Pressure}
+                recenterTrigger={recenterTrigger}
               />
               </div>
             </div>
@@ -1301,6 +1363,7 @@ function ClassicTradingPage() {
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">G</kbd><span>Green</span>
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">C</kbd><span>Cancel</span>
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">1-5</kbd><span>Stake</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">Enter</kbd><span>Recenter</span>
         </div>
       </div>
     </main>

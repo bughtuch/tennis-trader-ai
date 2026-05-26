@@ -30,6 +30,7 @@ interface ClassicAIPanelProps {
   isInPlay: boolean;
   sessionPnl: number;
   consecutiveLosses: number;
+  ladderRelationship?: string | null;
 }
 
 /* ─── Component ─── */
@@ -48,6 +49,7 @@ export default function ClassicAIPanel({
   isInPlay,
   sessionPnl,
   consecutiveLosses,
+  ladderRelationship,
 }: ClassicAIPanelProps) {
   const [signalOpen, setSignalOpen] = useState(true);
   const [guardianOpen, setGuardianOpen] = useState(true);
@@ -66,6 +68,13 @@ export default function ClassicAIPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+        {/* ─── Ladder Relationship ─── */}
+        {ladderRelationship && (
+          <div className="text-[10px] tracking-[0.12em] uppercase font-medium text-gray-500 px-3 py-2 border-b border-gray-100">
+            LADDER READ &middot; {ladderRelationship}
+          </div>
+        )}
+
         {/* ─── AI Signal ─── */}
         <div className="p-3">
           <button

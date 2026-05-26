@@ -17,6 +17,7 @@ interface MatchContext {
   score?: string;
   server?: string;
   recentAction?: string;
+  ladderContext?: string;
 }
 
 /* ─── Signal Configs ─── */
@@ -28,21 +29,21 @@ function getConfig(signalType: SignalType) {
         model: "claude-haiku-4-5-20251001",
         maxTokens: 400,
         system:
-          "You are an expert tennis trading analyst for Betfair Exchange. Provide concise, actionable trading analysis. Focus on: H2H records, surface form, fatigue, market pricing efficiency. Always specify if you see value and which side (back or lay). Be specific about odds levels. Keep response under 200 words.",
+          "You are a professional Betfair tennis exchange trader preparing a pre-match read. Speak like a trader reviewing the card. Reference likely price movements, key levels, and where value might sit. Use language like: 'Expect the favourite to trade lower if holds early service games', 'Value on the lay if opener goes with serve'. Never use generic analyst language. Never say 'confidence' as a percentage. Keep under 150 words.",
       };
     case "in_play":
       return {
         model: "claude-haiku-4-5-20251001",
         maxTokens: 150,
         system:
-          "You are a real-time tennis trading analyst. Analyse the current match state and identify momentum shifts, break opportunities, and market mispricings. Be extremely concise - max 50 words. Focus on what's actionable RIGHT NOW.",
+          "You are a professional Betfair tennis exchange trader giving real-time ladder reads. Speak like a trader, not a commentator. Use language like: 'Favourite being backed after hold of serve', 'Move lacks follow-through on the lay side', 'Sustained buying pressure supporting this drift', 'Outer ladder thinning as price shortens'. Reference price action and order flow, not match statistics. Never use motivational language. Never say 'confidence' or 'edge' as percentages. Max 40 words. One sentence preferred.",
       };
     case "edge_alert":
       return {
         model: "claude-haiku-4-5-20251001",
         maxTokens: 200,
         system:
-          "You are a tennis trading edge detector. When you identify a gap between market price and fair value, explain it clearly. Max 80 words. State: edge direction, player, current odds vs fair odds, confidence, reasoning.",
+          "You are a professional Betfair tennis exchange trader who spotted a pricing inefficiency. Explain it like you'd tell another trader on the desk. Reference the ladder: which side has weight, where the price should be, what's driving the mispricing. Never say 'confidence' as a percentage. Max 60 words.",
       };
   }
 }
@@ -72,6 +73,7 @@ function buildUserPrompt(
         `Server: ${ctx.server ?? "Unknown"}`,
         `Current odds: ${p1} ${ctx.odds1 ?? "?"} / ${p2} ${ctx.odds2 ?? "?"}`,
         ctx.recentAction ? `Recent: ${ctx.recentAction}` : "",
+        ctx.ladderContext ? `Ladder: ${ctx.ladderContext}` : "",
         "",
         "What's the actionable play right now?",
       ]

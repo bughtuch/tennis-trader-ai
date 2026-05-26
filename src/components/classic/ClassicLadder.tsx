@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { type PriceSize } from "@/lib/store";
 import { type BetfairRunner } from "@/lib/store";
 import { roundToTick, moveByTicks } from "@/lib/tradingMaths";
@@ -28,6 +28,8 @@ interface ClassicLadderProps {
   tradeLoading: boolean;
   netPosition?: { side: "BACK" | "LAY" | "FLAT"; stake: number; avgEntry: number } | null;
   unrealisedPnl?: number | null;
+  pressure?: { direction: "back" | "lay" | "balanced"; strength: number };
+  recenterTrigger?: number;
 }
 
 /* ─── Component ─── */
@@ -44,7 +46,35 @@ export default function ClassicLadder({
   tradeLoading,
   netPosition,
   unrealisedPnl,
+  pressure,
+  recenterTrigger,
 }: ClassicLadderProps) {
+  /* ─── Recenter state ─── */
+  const [manualCenter, setManualCenter] = useState<number | null>(null);
+  const recenterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!recenterTrigger || recenterTrigger === 0) return;
+    const ltp = (runner as { lastTradedPrice?: number } | null)?.lastTradedPrice;
+    const backs = runner?.ex?.availableToBack ?? [];
+    const lays = runner?.ex?.availableToLay ?? [];
+    const bestBack = backs[0]?.price ?? 0;
+    const bestLay = lays[0]?.price ?? 0;
+    const center = ltp && ltp > 0
+      ? ltp
+      : bestBack && bestLay
+        ? (bestBack + bestLay) / 2
+        : bestBack || bestLay || 0;
+    if (center > 0) {
+      setManualCenter(roundToTick(center));
+      if (recenterTimeoutRef.current) clearTimeout(recenterTimeoutRef.current);
+      recenterTimeoutRef.current = setTimeout(() => setManualCenter(null), 5000);
+    }
+    return () => {
+      if (recenterTimeoutRef.current) clearTimeout(recenterTimeoutRef.current);
+    };
+  }, [recenterTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* Build ladder rows from runner exchange data */
   const ladderRows = useMemo((): LadderRow[] => {
     if (!runner?.ex) {
@@ -88,7 +118,7 @@ export default function ClassicLadder({
     const bestLayPrice = lays[0]?.price ?? 0;
     const lastTradedPrice = (runner as { lastTradedPrice?: number }).lastTradedPrice ?? 0;
 
-    const centerPrice = roundToTick(
+    const centerPrice = manualCenter ?? roundToTick(
       bestBackPrice && bestLayPrice
         ? (bestBackPrice + bestLayPrice) / 2
         : bestBackPrice || bestLayPrice || 2.0,
@@ -116,7 +146,7 @@ export default function ClassicLadder({
       tick = next;
     }
     return rows;
-  }, [runner, playerOdds]);
+  }, [runner, playerOdds, manualCenter]);
 
   const maxSize = ladderRows.length > 0
     ? Math.max(...ladderRows.map((r) => Math.max(r.backSize, r.laySize)), 1)
@@ -141,7 +171,7 @@ export default function ClassicLadder({
           )}
         </div>
         <div className="text-right shrink-0">
-          <span className="text-xl font-bold font-mono text-gray-900">
+          <span className="text-xl font-bold font-mono [font-variant-numeric:tabular-nums] text-gray-900">
             {playerOdds > 0 ? playerOdds.toFixed(2) : "--"}
           </span>
           {unrealisedPnl != null && unrealisedPnl !== 0 && (
@@ -154,6 +184,19 @@ export default function ClassicLadder({
         </div>
       </div>
 
+      {/* Pressure indicator */}
+      {pressure && (
+        <div className="text-[10px] font-medium tracking-[0.15em] uppercase text-center py-1 border-b border-gray-100">
+          {pressure.direction === "back" ? (
+            <span className="text-blue-500/60">&uarr; BACK PRESSURE</span>
+          ) : pressure.direction === "lay" ? (
+            <span className="text-pink-500/60">&darr; LAY PRESSURE</span>
+          ) : (
+            <span className="text-gray-400/50">&rarr; BALANCED</span>
+          )}
+        </div>
+      )}
+
       {/* Column headers */}
       <div className="grid grid-cols-3 text-center text-[11px] font-semibold tracking-[0.12em] uppercase border-b border-gray-200 bg-gray-50">
         <div className="py-1.5 text-blue-600">BACK</div>
@@ -162,7 +205,7 @@ export default function ClassicLadder({
       </div>
 
       {/* Ladder rows */}
-      <div>
+      <div className="min-h-0">
         {ladderRows.length === 0 ? (
           <div className="py-8 text-center text-xs text-gray-400">
             {isConnected ? "Awaiting prices..." : "No connection"}
@@ -183,7 +226,7 @@ export default function ClassicLadder({
                 <button
                   onClick={() => onTrade(row.price, "BACK")}
                   disabled={tradeLoading || !isConnected}
-                  className={`h-full relative text-right pr-3 font-mono text-sm transition-colors ${
+                  className={`h-full relative text-right pr-3 font-mono [font-variant-numeric:tabular-nums] text-sm transition-colors ${
                     row.isBestBack
                       ? "bg-blue-200 hover:bg-blue-300 font-semibold text-blue-900"
                       : row.backSize > 0
@@ -194,7 +237,7 @@ export default function ClassicLadder({
                   {/* Depth bar */}
                   {row.backSize > 0 && (
                     <div
-                      className="absolute inset-y-0 right-0 bg-blue-200/40"
+                      className="absolute inset-y-0 right-0 bg-blue-200/40 transition-[width] duration-300 ease-out"
                       style={{ width: `${Math.min((row.backSize / maxSize) * 100, 100)}%` }}
                     />
                   )}
@@ -209,9 +252,9 @@ export default function ClassicLadder({
 
                 {/* PRICE cell */}
                 <div
-                  className={`h-full flex items-center justify-center font-mono text-sm font-bold ${
+                  className={`h-full flex items-center justify-center font-mono [font-variant-numeric:tabular-nums] text-sm font-bold ${
                     row.isLastTraded
-                      ? "bg-green-100 text-green-800 ring-1 ring-inset ring-green-300"
+                      ? "bg-green-50 text-green-700 ring-1 ring-inset ring-green-200"
                       : "bg-gray-50 text-gray-700"
                   }`}
                 >
@@ -222,7 +265,7 @@ export default function ClassicLadder({
                 <button
                   onClick={() => onTrade(row.price, "LAY")}
                   disabled={tradeLoading || !isConnected}
-                  className={`h-full relative text-left pl-3 font-mono text-sm transition-colors ${
+                  className={`h-full relative text-left pl-3 font-mono [font-variant-numeric:tabular-nums] text-sm transition-colors ${
                     row.isBestLay
                       ? "bg-pink-200 hover:bg-pink-300 font-semibold text-pink-900"
                       : row.laySize > 0
@@ -232,7 +275,7 @@ export default function ClassicLadder({
                 >
                   {row.laySize > 0 && (
                     <div
-                      className="absolute inset-y-0 left-0 bg-pink-200/40"
+                      className="absolute inset-y-0 left-0 bg-pink-200/40 transition-[width] duration-300 ease-out"
                       style={{ width: `${Math.min((row.laySize / maxSize) * 100, 100)}%` }}
                     />
                   )}
