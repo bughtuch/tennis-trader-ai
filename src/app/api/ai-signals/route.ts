@@ -19,6 +19,8 @@ interface MatchContext {
   server?: string;
   recentAction?: string;
   ladderContext?: string;
+  scoreConfidence?: "reliable" | "estimated" | "unavailable";
+  matchStateContext?: string;
 }
 
 /* ─── Signal Configs ─── */
@@ -95,28 +97,38 @@ function buildUserPrompt(
         "Give your pre-match trading read: surface-adjusted form, serve/return matchup, key price levels, and edge rating (none/mild/moderate/strong).",
       ].join("\n");
 
-    case "in_play":
+    case "in_play": {
+      // Use structured match state context if available
+      const matchState = ctx.matchStateContext ?? (ctx.score ? `Score: ${ctx.score}. Server: ${ctx.server ?? "Unknown"}.` : "Score unavailable — read price action only.");
       return [
         `Match: ${p1} vs ${p2} (${surface})`,
-        `Score: ${ctx.score ?? "Unknown"}`,
-        `Server: ${ctx.server ?? "Unknown"}`,
+        matchState,
         `Current odds: ${p1} ${ctx.odds1 ?? "?"} / ${p2} ${ctx.odds2 ?? "?"}`,
         ctx.recentAction ? `Recent: ${ctx.recentAction}` : "",
         ctx.ladderContext ? `Ladder: ${ctx.ladderContext}` : "",
         "",
-        "What's the actionable play right now? Reference serve-game context and ladder.",
+        ctx.scoreConfidence === "unavailable"
+          ? "Score data unavailable. Give a ladder/price-action read only — do not guess the score."
+          : ctx.scoreConfidence === "estimated"
+            ? "Score is estimated and may be inaccurate. Caveat any scoreboard-based analysis. What's the actionable play?"
+            : "What's the actionable play right now? Reference serve-game context and ladder.",
       ]
         .filter(Boolean)
         .join("\n");
+    }
 
-    case "edge_alert":
+    case "edge_alert": {
+      const scoreInfo = ctx.matchStateContext ?? (ctx.score ? `Score: ${ctx.score}.` : "Score unavailable.");
       return [
         `Match: ${p1} vs ${p2} (${surface})`,
-        `Score: ${ctx.score ?? "Pre-match"}`,
+        scoreInfo,
         `Current odds: ${p1} ${ctx.odds1 ?? "?"} / ${p2} ${ctx.odds2 ?? "?"}`,
         "",
-        "Is there a pricing edge? State direction, where the price should be, and what serve/scoreboard context supports it.",
+        ctx.scoreConfidence === "unavailable"
+          ? "Score unavailable. Is there a pricing edge based on price action and ladder weight alone?"
+          : "Is there a pricing edge? State direction, where the price should be, and what serve/scoreboard context supports it.",
       ].join("\n");
+    }
   }
 }
 

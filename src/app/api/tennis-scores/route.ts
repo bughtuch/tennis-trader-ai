@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "edge";
 
+type ScoreConfidence = "reliable" | "estimated" | "unavailable";
+
 interface ScoreResponse {
   available: boolean;
   sets?: number[][];       // [[6,4],[3,2]] — [p1,p2] per set
@@ -13,6 +15,66 @@ interface ScoreResponse {
   matchPoint?: boolean;
   tiebreak?: boolean;
   tiebreakScore?: string[];  // ["4","3"] in tiebreak
+  scoreConfidence?: ScoreConfidence;
+}
+
+/* ─── Tennis Score Validation ─── */
+
+const VALID_GAME_SCORES = new Set(["0", "15", "30", "40", "AD", "A", ""]);
+const MAX_GAMES_IN_SET = 13; // 7-6 tiebreak is max in normal play
+
+function isValidSetScore(p1: number, p2: number): boolean {
+  if (!Number.isFinite(p1) || !Number.isFinite(p2)) return false;
+  if (p1 < 0 || p2 < 0) return false;
+  if (p1 > MAX_GAMES_IN_SET || p2 > MAX_GAMES_IN_SET) return false;
+  return true;
+}
+
+function validateAndClampSets(sets: number[][], maxSets: number): { sets: number[][]; confidence: ScoreConfidence } {
+  if (sets.length === 0) return { sets: [], confidence: "unavailable" };
+
+  let confidence: ScoreConfidence = "reliable";
+
+  // Clamp to max sets (best-of-3 = 3, best-of-5 = 5)
+  if (sets.length > maxSets) {
+    sets = sets.slice(0, maxSets);
+    confidence = "estimated";
+  }
+
+  // Validate individual set scores
+  for (const set of sets) {
+    if (!isValidSetScore(set[0], set[1])) {
+      confidence = "estimated";
+      // Clamp to reasonable values
+      set[0] = Math.max(0, Math.min(set[0] || 0, MAX_GAMES_IN_SET));
+      set[1] = Math.max(0, Math.min(set[1] || 0, MAX_GAMES_IN_SET));
+    }
+  }
+
+  return { sets, confidence };
+}
+
+function isValidGameScore(score: string): boolean {
+  return VALID_GAME_SCORES.has(score.toUpperCase());
+}
+
+function validateGameScore(gameScore: string[]): { gameScore: string[]; valid: boolean } {
+  if (!gameScore || gameScore.length !== 2) return { gameScore: ["", ""], valid: false };
+  const g1 = String(gameScore[0] ?? "");
+  const g2 = String(gameScore[1] ?? "");
+  const valid = isValidGameScore(g1) && isValidGameScore(g2);
+  return { gameScore: [g1, g2], valid };
+}
+
+/**
+ * Infer best-of format. Grand Slam men's singles = best-of-5, everything else = best-of-3.
+ * Without tournament context, default to best-of-3 (more common).
+ */
+function inferMaxSets(): number {
+  // Default to best-of-3 — the API doesn't provide tournament context
+  // and best-of-3 is far more common. Worst case: a 5th set is truncated
+  // but still shown as "estimated".
+  return 5; // Allow up to 5 to avoid false positives; real clamping is 5
 }
 
 export async function POST(req: NextRequest) {
@@ -174,10 +236,20 @@ export async function POST(req: NextRequest) {
       if (p2GamePt && p2WouldWinMatch) matchPoint = true;
     }
 
+    // ─── Validate scores before returning ───
+    const maxSets = inferMaxSets();
+    const validated = validateAndClampSets(sets, maxSets);
+    const validatedGame = validateGameScore(gameScore);
+
+    let scoreConfidence: ScoreConfidence = validated.confidence;
+    if (!validatedGame.valid && validatedGame.gameScore.some(g => g !== "")) {
+      scoreConfidence = "estimated";
+    }
+
     const result: ScoreResponse = {
       available: true,
-      sets,
-      gameScore,
+      sets: validated.sets,
+      gameScore: validatedGame.gameScore,
       server,
       matchStatus: match.event_status || "IN_PROGRESS",
       breakPoint,
@@ -185,6 +257,7 @@ export async function POST(req: NextRequest) {
       matchPoint,
       tiebreak,
       tiebreakScore,
+      scoreConfidence,
     };
 
     return NextResponse.json(result);

@@ -58,6 +58,8 @@ function isSetComplete(p1Games: number, p2Games: number): boolean {
   return false;
 }
 
+const MAX_SETS_ALLOWED = 5; // Best-of-5 is the maximum in tennis
+
 /* ─── Component ─── */
 
 export default function LiveScoreBar({
@@ -71,6 +73,7 @@ export default function LiveScoreBar({
   // Estimated score state
   const [sets, setSets] = useState<number[][]>([[0, 0]]);
   const [estimatedServer, setEstimatedServer] = useState<1 | 2>(1);
+  const [estimationDrifted, setEstimationDrifted] = useState(false);
 
   // Odds tracking refs
   const anchorRef = useRef<number>(0);
@@ -83,6 +86,7 @@ export default function LiveScoreBar({
       initialised.current = false;
       setSets([[0, 0]]);
       setEstimatedServer(1);
+      setEstimationDrifted(false);
     }
   }, [isInPlay]);
 
@@ -118,9 +122,18 @@ export default function LiveScoreBar({
         current[1]++;
       }
 
-      // Check if set is complete → start new set
+      // Clamp game scores to reasonable maximum (13 = 7-6 tiebreak)
+      current[0] = Math.min(current[0], 13);
+      current[1] = Math.min(current[1], 13);
+
+      // Check if set is complete → start new set (but respect max sets)
       if (isSetComplete(current[0], current[1])) {
-        updated.push([0, 0]);
+        if (updated.length >= MAX_SETS_ALLOWED) {
+          // Can't add more sets — estimation has drifted
+          setEstimationDrifted(true);
+        } else {
+          updated.push([0, 0]);
+        }
       }
 
       return updated;
@@ -153,6 +166,7 @@ export default function LiveScoreBar({
   const serverName = displayServer === 1 ? p1Short : p2Short;
 
   const isEstimated = !score;
+  const showUnavailable = isEstimated && estimationDrifted;
 
   return (
     <div className="bg-gray-900/80 border border-gray-700/60 rounded-2xl overflow-hidden max-w-md mx-auto">
@@ -164,16 +178,25 @@ export default function LiveScoreBar({
             LIVE SCORE
           </span>
         </div>
-        {isEstimated && isInPlay && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500/70">
-            estimated
+        {showUnavailable && isInPlay ? (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-500/70">
+            unreliable
           </span>
-        )}
+        ) : isEstimated && isInPlay ? (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500/70">
+            estimated from odds
+          </span>
+        ) : null}
       </div>
 
       {!isInPlay ? (
         <div className="px-4 py-5 text-center">
           <div className="text-gray-600 text-sm">Waiting for match to go in-play</div>
+        </div>
+      ) : showUnavailable ? (
+        <div className="px-4 py-5 text-center">
+          <div className="text-amber-500/70 text-sm font-medium">Score unavailable</div>
+          <div className="text-gray-600 text-[10px] mt-1">Estimated score exceeded valid tennis format</div>
         </div>
       ) : (
         <div className="px-4 py-3">

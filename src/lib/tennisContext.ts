@@ -62,3 +62,77 @@ STRICT RULES — violating these makes the output useless to the trader:
 - NEVER reference a surface that doesn't match the tournament. If the tournament is French Open or Roland Garros, the surface is CLAY — never reference hard-court records.
 - Use tennis exchange trading language: hold of serve, break of serve, second serve pressure, return games, tiebreak pressure, clay-court rallies, hard-court serve dominance, grass-court short points, momentum after break, price shortening, price drifting, favourite, underdog, exchange pressure, weight of money, ladder depth.
 - Think in terms of individual player form, serve/return stats, surface-specific patterns, and scoreboard pressure — not team dynamics.`.trim();
+
+/* ─── Match State for AI Context ─── */
+
+export type ScoreConfidence = "reliable" | "estimated" | "unavailable";
+
+export interface MatchStateForAI {
+  score?: string;
+  server?: string;
+  breakPoint?: boolean;
+  setPoint?: boolean;
+  matchPoint?: boolean;
+  tiebreak?: boolean;
+  scoreConfidence: ScoreConfidence;
+  marketStatus: "pre_match" | "in_play" | "suspended";
+}
+
+/**
+ * Build a match-state context block for AI prompts.
+ * Clearly labels confidence so AI knows when to caveat its reads.
+ */
+export function formatMatchStateForPrompt(state: MatchStateForAI): string {
+  const lines: string[] = [];
+
+  lines.push(`Market status: ${state.marketStatus.replace("_", "-")}.`);
+
+  if (state.scoreConfidence === "unavailable" || !state.score) {
+    lines.push("Live score data is UNAVAILABLE. Base your read on price action and ladder context only. Do not guess or invent a scoreline.");
+    return lines.join(" ");
+  }
+
+  if (state.scoreConfidence === "estimated") {
+    lines.push(`Score (ESTIMATED — may not be accurate): ${state.score}.`);
+    lines.push("This score is estimated from price movement and may be wrong. Caveat any scoreboard-based analysis.");
+  } else {
+    lines.push(`Score: ${state.score}.`);
+  }
+
+  if (state.server) lines.push(`Server: ${state.server}.`);
+
+  const situational: string[] = [];
+  if (state.matchPoint) situational.push("MATCH POINT");
+  else if (state.setPoint) situational.push("SET POINT");
+  if (state.breakPoint) situational.push("BREAK POINT");
+  if (state.tiebreak) situational.push("TIEBREAK");
+  if (situational.length > 0) lines.push(`Situation: ${situational.join(", ")}.`);
+
+  return lines.join(" ");
+}
+
+/**
+ * Format sets array into human-readable score string.
+ * e.g. [[6,4],[3,2]] → "6-4, 3-2"
+ */
+export function formatSetsToString(
+  sets: number[][] | undefined,
+  gameScore?: string[],
+  tiebreak?: boolean,
+  tiebreakScore?: string[],
+): string | undefined {
+  if (!sets || sets.length === 0) return undefined;
+  const setStrings = sets.map((s) => `${s[0]}-${s[1]}`);
+  let result = setStrings.join(", ");
+
+  // Append current game score
+  if (gameScore && gameScore.length === 2 && (gameScore[0] || gameScore[1])) {
+    if (tiebreak && tiebreakScore && tiebreakScore.length === 2) {
+      result += ` (TB: ${tiebreakScore[0]}-${tiebreakScore[1]})`;
+    } else {
+      result += ` (${gameScore[0]}-${gameScore[1]})`;
+    }
+  }
+
+  return result;
+}

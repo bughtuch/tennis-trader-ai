@@ -14,6 +14,7 @@ import ClassicPositionPanel from "@/components/classic/ClassicPositionPanel";
 import ClassicAIPanel from "@/components/classic/ClassicAIPanel";
 import { calculateLiabilityReduction } from "@/components/classic/ClassicLiabilityTools";
 import RealTradeConfirmModal from "@/components/RealTradeConfirmModal";
+import { inferSurface, formatSetsToString, formatMatchStateForPrompt, type ScoreConfidence, type MatchStateForAI } from "@/lib/tennisContext";
 
 /* ─── Types ─── */
 
@@ -190,6 +191,32 @@ function ClassicTradingPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [guardianData, setGuardianData] = useState<any>(null);
   const [guardianLoading, setGuardianLoading] = useState(false);
+
+  /* ─── Live Scores ─── */
+  const [liveScore, setLiveScore] = useState<{
+    available: boolean; sets?: number[][]; gameScore?: string[];
+    server?: 1 | 2; matchStatus?: string; breakPoint?: boolean;
+    setPoint?: boolean; matchPoint?: boolean; tiebreak?: boolean;
+    tiebreakScore?: string[]; scoreConfidence?: ScoreConfidence;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!p1Name || !p2Name) return;
+    async function fetchScore() {
+      try {
+        const res = await fetch("/api/tennis-scores", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player1: p1Name, player2: p2Name }),
+        });
+        const data = await res.json();
+        setLiveScore(data.available ? data : null);
+      } catch { setLiveScore(null); }
+    }
+    fetchScore();
+    const id = setInterval(fetchScore, 15_000);
+    return () => clearInterval(id);
+  }, [p1Name, p2Name]);
 
   /* ─── Live positions ─── */
   const [livePositions, setLivePositions] = useState<SupabaseTrade[]>([]);
@@ -703,6 +730,31 @@ function ClassicTradingPage() {
     }
   }
 
+  /* ─── Build match state for AI ─── */
+  function buildMatchState(): MatchStateForAI {
+    const isSusp = marketBook?.status === "SUSPENDED";
+    const inPlay = !!marketBook?.inplay;
+    const marketStatus: MatchStateForAI["marketStatus"] = isSusp ? "suspended" : inPlay ? "in_play" : "pre_match";
+
+    if (!liveScore) {
+      return { scoreConfidence: "unavailable", marketStatus };
+    }
+    const scoreStr = formatSetsToString(liveScore.sets, liveScore.gameScore, liveScore.tiebreak, liveScore.tiebreakScore);
+    const serverName = liveScore.server === 1 ? displayPlayers.player1.short : liveScore.server === 2 ? displayPlayers.player2.short : undefined;
+    return {
+      score: scoreStr,
+      server: serverName,
+      breakPoint: liveScore.breakPoint,
+      setPoint: liveScore.setPoint,
+      matchPoint: liveScore.matchPoint,
+      tiebreak: liveScore.tiebreak,
+      scoreConfidence: liveScore.scoreConfidence ?? "reliable",
+      marketStatus,
+    };
+  }
+
+  const resolvedSurface = inferSurface(tournament, undefined);
+
   /* ─── AI Signals ─── */
   async function fetchAiSignal() {
     setAiSignalLoading(true);
@@ -715,6 +767,9 @@ function ClassicTradingPage() {
       const sum3 = (arr: { size: number }[]) => arr.slice(0, 3).reduce((s, ps) => s + ps.size, 0);
       const ladderContext = `${displayPlayers.player1.short} back depth £${Math.round(sum3(p1Backs))} / lay depth £${Math.round(sum3(p1Lays))}. ${displayPlayers.player2.short} back depth £${Math.round(sum3(p2Backs))} / lay depth £${Math.round(sum3(p2Lays))}.`;
 
+      const matchState = buildMatchState();
+      const matchStateContext = formatMatchStateForPrompt(matchState);
+
       const res = await fetch("/api/ai-signals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -725,7 +780,12 @@ function ClassicTradingPage() {
             player2: displayPlayers.player2.name,
             odds1: displayPlayers.player1.odds,
             odds2: displayPlayers.player2.odds,
-            tournament, surface: "Hard",
+            tournament,
+            surface: resolvedSurface,
+            score: matchState.score,
+            server: matchState.server,
+            scoreConfidence: matchState.scoreConfidence,
+            matchStateContext,
             ladderContext,
           },
         }),
@@ -743,6 +803,7 @@ function ClassicTradingPage() {
       const bestBack = displayPlayers[lastClickedRunner].odds;
       const runner = lastClickedRunner === "player1" ? runner0 : runner1;
       const bestLay = runner?.ex?.availableToLay?.[0]?.price ?? bestBack + 0.02;
+      const matchState = buildMatchState();
       const res = await fetch("/api/ai-guardian", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -753,7 +814,13 @@ function ClassicTradingPage() {
           entrySide: openPositions[0]?.side ?? "BACK",
           currentBackPrice: bestBack,
           currentLayPrice: bestLay,
-          matchContext: { player: displayPlayers[lastClickedRunner].name, surface: "Hard" },
+          matchContext: {
+            player: displayPlayers[lastClickedRunner].name,
+            surface: resolvedSurface,
+            score: matchState.score,
+            server: matchState.server,
+            scoreConfidence: matchState.scoreConfidence,
+          },
         }),
       });
       const data = await res.json();

@@ -17,6 +17,7 @@ interface MatchContext {
   server?: string;
   surface?: string;
   player?: string;
+  scoreConfidence?: "reliable" | "estimated" | "unavailable";
 }
 
 interface AssessPayload {
@@ -215,7 +216,16 @@ async function assessPosition(payload: AssessPayload) {
             messages: [
               {
                 role: "user",
-                content: `Position: ${entrySide} at ${entryPrice} for £${entryStake}. Current exit price: ${exitPrice}. Current P&L: £${currentPnl}. Player: ${matchContext.player ?? "unknown"}, score: ${matchContext.score ?? "unknown"}, server: ${matchContext.server ?? "unknown"}, surface: ${surface}. Based on serve-game context, should I hold, hedge, or exit?`,
+                content: [
+                  `Position: ${entrySide} at ${entryPrice} for £${entryStake}. Current exit price: ${exitPrice}. Current P&L: £${currentPnl}.`,
+                  `Player: ${matchContext.player ?? "unknown"}, surface: ${surface}.`,
+                  matchContext.scoreConfidence === "unavailable" || !matchContext.score
+                    ? "Score data unavailable — assess recovery based on price action and position size only. Do not invent a scoreline."
+                    : matchContext.scoreConfidence === "estimated"
+                      ? `Score (ESTIMATED, may be inaccurate): ${matchContext.score}. Server: ${matchContext.server ?? "unknown"}. Caveat any scoreboard-based assessment.`
+                      : `Score: ${matchContext.score}. Server: ${matchContext.server ?? "unknown"}.`,
+                  "Based on this context, should I hold, hedge, or exit?",
+                ].join(" "),
               },
             ],
           }),

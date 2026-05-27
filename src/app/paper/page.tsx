@@ -18,6 +18,7 @@ import AutomationRules from "@/components/AutomationRules";
 import LiveScoreBar from "@/components/LiveScoreBar";
 import ScaleOutButtons from "@/components/ScaleOutButtons";
 import { getOpenPaperTrades, getClosedPaperTrades, closePaperTrade as closePaperTradeLocal, getPaperStats } from "@/lib/paperTrades";
+import { inferSurface, formatSetsToString, formatMatchStateForPrompt, type MatchStateForAI } from "@/lib/tennisContext";
 
 
 interface SupabaseTrade {
@@ -1060,7 +1061,7 @@ function PaperTradingPage() {
             player1: p1Name,
             player2: p2Name,
             tournament,
-            surface: "Hard",
+            surface: resolvedSurface,
             odds1: livePlayerOdds.player1 || 2.0,
             odds2: livePlayerOdds.player2 || 2.0,
           }),
@@ -1078,10 +1079,40 @@ function PaperTradingPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marketId, p1Name, p2Name]);
 
+  /* ─── Build match state for AI ─── */
+  function buildMatchState(): MatchStateForAI {
+    const isSusp = marketBook?.status === "SUSPENDED";
+    const inPlay = !!marketBook?.inplay;
+    const marketStatus: MatchStateForAI["marketStatus"] = isSusp ? "suspended" : inPlay ? "in_play" : "pre_match";
+
+    if (!liveScore) {
+      return { scoreConfidence: "unavailable", marketStatus };
+    }
+    const scoreStr = formatSetsToString(liveScore.sets, liveScore.gameScore, liveScore.tiebreak, liveScore.tiebreakScore);
+    const p1Short = displayPlayers.player1.short;
+    const p2Short = displayPlayers.player2.short;
+    const serverName = liveScore.server === 1 ? p1Short : liveScore.server === 2 ? p2Short : undefined;
+    return {
+      score: scoreStr,
+      server: serverName,
+      breakPoint: liveScore.breakPoint,
+      setPoint: liveScore.setPoint,
+      matchPoint: liveScore.matchPoint,
+      tiebreak: liveScore.tiebreak,
+      scoreConfidence: (liveScore as { scoreConfidence?: "reliable" | "estimated" | "unavailable" }).scoreConfidence ?? "reliable",
+      marketStatus,
+    };
+  }
+
+  const resolvedSurface = inferSurface(tournament, undefined);
+
   /* ─── AI Signals fetch ─── */
   async function fetchAiSignal() {
     setAiSignalLoading(true);
     try {
+      const matchState = buildMatchState();
+      const matchStateContext = formatMatchStateForPrompt(matchState);
+
       const res = await fetch("/api/ai-signals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1093,7 +1124,11 @@ function PaperTradingPage() {
             odds1: activeDisplayPlayers.player1.odds,
             odds2: activeDisplayPlayers.player2.odds,
             tournament,
-            surface: "Hard",
+            surface: resolvedSurface,
+            score: matchState.score,
+            server: matchState.server,
+            scoreConfidence: matchState.scoreConfidence,
+            matchStateContext,
           },
         }),
       });
@@ -1137,6 +1172,7 @@ function PaperTradingPage() {
           ? selectedRunner.ex.availableToLay[0].price
           : bestBack + 0.02;
 
+      const matchState = buildMatchState();
       const res = await fetch("/api/ai-guardian", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1149,7 +1185,10 @@ function PaperTradingPage() {
           currentLayPrice: bestLay,
           matchContext: {
             player: displayPlayers[selectedPlayer].name,
-            surface: "Hard",
+            surface: resolvedSurface,
+            score: matchState.score,
+            server: matchState.server,
+            scoreConfidence: matchState.scoreConfidence,
           },
         }),
       });
