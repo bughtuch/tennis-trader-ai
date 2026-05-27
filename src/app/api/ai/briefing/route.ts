@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
+import { inferSurface, getSurfaceContext, TENNIS_PROMPT_GUARDRAILS } from "@/lib/tennisContext";
 
 export const runtime = "edge";
 
@@ -62,7 +63,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const userPrompt = `Pre-match briefing for: ${player1} (${odds1.toFixed(2)}) vs ${player2} (${odds2.toFixed(2)}) at ${tournament} on ${surface}.`;
+    const resolvedSurface = inferSurface(tournament, surface);
+    const surfaceCtx = getSurfaceContext(resolvedSurface);
+
+    const userPrompt = `Pre-match briefing for: ${player1} (${odds1.toFixed(2)}) vs ${player2} (${odds2.toFixed(2)}) at ${tournament} on ${resolvedSurface}.`;
 
     const res = await fetch(ANTHROPIC_API, {
       method: "POST",
@@ -74,8 +78,19 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-4-5-20250929",
         max_tokens: 250,
-        system:
-          "You are an expert tennis trading analyst. Generate a pre-match trading briefing in under 100 words. Include: key price levels to watch, likely odds movement patterns, when to enter, danger zones, and one specific edge if you see one. Be actionable for a Betfair trader, not a fan.",
+        system: [
+          "You are a professional Betfair tennis exchange trader preparing a pre-match briefing.",
+          `${surfaceCtx}`,
+          "Generate a trading briefing in under 100 words. Include:",
+          "- Key price levels to watch (specific odds)",
+          "- Serve/return matchup on this surface",
+          "- When to enter: after first hold? After early break? Pre-match value?",
+          "- Danger zones: where price could move sharply against you",
+          "- One specific edge if you see one",
+          "Be actionable for a Betfair exchange trader. Think in terms of price shortening, drifting, break pressure, hold of serve, and ladder weight — not fan opinions or punditry.",
+          "",
+          TENNIS_PROMPT_GUARDRAILS,
+        ].join("\n"),
         messages: [{ role: "user", content: userPrompt }],
       }),
     });

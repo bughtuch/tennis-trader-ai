@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { TENNIS_PROMPT_GUARDRAILS } from "@/lib/tennisContext";
 
 export const runtime = "edge";
 
@@ -59,8 +60,14 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 80,
-        system:
-          "You are a tennis trading coach. After each trade, give one specific lesson in under 25 words. Reference the actual numbers. Be honest - praise good decisions, flag mistakes. Never generic.",
+        system: [
+          "You are a Betfair tennis exchange trading coach. After each trade, give one specific lesson in under 25 words.",
+          "Reference the actual numbers. Be honest — praise good discipline on entries, flag impulsive trades or poor timing around serve games.",
+          "Use tennis trading language: hold of serve, break pressure, price shortening/drifting, green-up timing, momentum.",
+          "Never generic. Never reference team sports or financial markets.",
+          "",
+          TENNIS_PROMPT_GUARDRAILS,
+        ].join("\n"),
         messages: [{ role: "user", content: userPrompt }],
       }),
     });

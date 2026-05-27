@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { inferSurface, getSurfaceContext, TENNIS_PROMPT_GUARDRAILS } from "@/lib/tennisContext";
 
 export const runtime = "edge";
 
@@ -22,35 +23,63 @@ interface MatchContext {
 
 /* ─── Signal Configs ─── */
 
-function getConfig(signalType: SignalType) {
+function getConfig(signalType: SignalType, surface: string) {
+  const surfaceCtx = getSurfaceContext(surface);
+
   switch (signalType) {
     case "pre_match":
       return {
         model: "claude-haiku-4-5-20251001",
         maxTokens: 400,
-        system:
-          "You are a professional Betfair tennis exchange trader preparing a pre-match read. Speak like a trader reviewing the card. Reference likely price movements, key levels, and where value might sit. Use language like: 'Expect the favourite to trade lower if holds early service games', 'Value on the lay if opener goes with serve'. Never use generic analyst language. Never say 'confidence' as a percentage. Keep under 150 words.",
+        system: [
+          "You are a professional Betfair tennis exchange trader preparing a pre-match read.",
+          "Speak like a trader reviewing the card — not a commentator, pundit, or financial analyst.",
+          `Surface context: ${surfaceCtx}`,
+          "Reference likely price movements, key levels, and where value might sit.",
+          "Use language like: 'Expect the favourite to shorten if holds early service games', 'Value on the lay if opener goes with serve', 'Break pressure could see price drift past X.XX'.",
+          "Structure: surface-adjusted form read, serve/return matchup, key price levels, one actionable edge rating (none/mild/moderate/strong).",
+          "Keep under 150 words.",
+          "",
+          TENNIS_PROMPT_GUARDRAILS,
+        ].join("\n"),
       };
     case "in_play":
       return {
         model: "claude-haiku-4-5-20251001",
         maxTokens: 150,
-        system:
-          "You are a professional Betfair tennis exchange trader giving real-time ladder reads. Speak like a trader, not a commentator. Use language like: 'Favourite being backed after hold of serve', 'Move lacks follow-through on the lay side', 'Sustained buying pressure supporting this drift', 'Outer ladder thinning as price shortens'. Reference price action and order flow, not match statistics. Never use motivational language. Never say 'confidence' or 'edge' as percentages. Max 40 words. One sentence preferred.",
+        system: [
+          "You are a professional Betfair tennis exchange trader giving real-time ladder reads.",
+          "Speak like a trader on the desk, not a commentator or analyst.",
+          `Surface: ${surface}.`,
+          "Use language like: 'Favourite being backed after hold of serve', 'Move lacks follow-through on the lay side', 'Sustained buying pressure supporting this drift', 'Outer ladder thinning as price shortens', 'Break of serve — expect sharp shortening', 'Second serve pressure building on the return game'.",
+          "Reference price action, order flow, and serve-game context — not abstract statistics.",
+          "Max 40 words. One sentence preferred.",
+          "",
+          TENNIS_PROMPT_GUARDRAILS,
+        ].join("\n"),
       };
     case "edge_alert":
       return {
         model: "claude-haiku-4-5-20251001",
         maxTokens: 200,
-        system:
-          "You are a professional Betfair tennis exchange trader who spotted a pricing inefficiency. Explain it like you'd tell another trader on the desk. Reference the ladder: which side has weight, where the price should be, what's driving the mispricing. Never say 'confidence' as a percentage. Max 60 words.",
+        system: [
+          "You are a professional Betfair tennis exchange trader who spotted a pricing inefficiency.",
+          "Explain it like you'd tell another trader on the desk.",
+          `Surface: ${surface}.`,
+          "Reference the ladder: which side has weight, where the price should be based on scoreboard and serve-game context, and what's driving the mispricing.",
+          "Consider whether the move is supported by serve pressure, break momentum, or just panic money.",
+          "Max 60 words.",
+          "",
+          TENNIS_PROMPT_GUARDRAILS,
+        ].join("\n"),
       };
   }
 }
 
 function buildUserPrompt(
   signalType: SignalType,
-  ctx: MatchContext
+  ctx: MatchContext,
+  surface: string,
 ): string {
   const p1 = ctx.player1 ?? "Player 1";
   const p2 = ctx.player2 ?? "Player 2";
@@ -60,34 +89,33 @@ function buildUserPrompt(
       return [
         `Match: ${p1} vs ${p2}`,
         `Tournament: ${ctx.tournament ?? "Unknown"}`,
-        `Surface: ${ctx.surface ?? "Unknown"}`,
+        `Surface: ${surface}`,
         `Current odds: ${p1} ${ctx.odds1 ?? "?"} / ${p2} ${ctx.odds2 ?? "?"}`,
         "",
-        "Provide: H2H assessment, surface form analysis, fatigue check, edge rating (none/mild/moderate/strong), and confidence (0-100%).",
+        "Give your pre-match trading read: surface-adjusted form, serve/return matchup, key price levels, and edge rating (none/mild/moderate/strong).",
       ].join("\n");
 
     case "in_play":
       return [
-        `Match: ${p1} vs ${p2}`,
+        `Match: ${p1} vs ${p2} (${surface})`,
         `Score: ${ctx.score ?? "Unknown"}`,
         `Server: ${ctx.server ?? "Unknown"}`,
         `Current odds: ${p1} ${ctx.odds1 ?? "?"} / ${p2} ${ctx.odds2 ?? "?"}`,
         ctx.recentAction ? `Recent: ${ctx.recentAction}` : "",
         ctx.ladderContext ? `Ladder: ${ctx.ladderContext}` : "",
         "",
-        "What's the actionable play right now?",
+        "What's the actionable play right now? Reference serve-game context and ladder.",
       ]
         .filter(Boolean)
         .join("\n");
 
     case "edge_alert":
       return [
-        `Match: ${p1} vs ${p2}`,
+        `Match: ${p1} vs ${p2} (${surface})`,
         `Score: ${ctx.score ?? "Pre-match"}`,
-        `Surface: ${ctx.surface ?? "Unknown"}`,
         `Current odds: ${p1} ${ctx.odds1 ?? "?"} / ${p2} ${ctx.odds2 ?? "?"}`,
         "",
-        "Is there a pricing edge? State direction, fair odds, confidence, and reasoning.",
+        "Is there a pricing edge? State direction, where the price should be, and what serve/scoreboard context supports it.",
       ].join("\n");
   }
 }
@@ -163,8 +191,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const config = getConfig(signalType);
-    const userPrompt = buildUserPrompt(signalType, matchContext);
+    const surface = inferSurface(matchContext.tournament, matchContext.surface);
+    const config = getConfig(signalType, surface);
+    const userPrompt = buildUserPrompt(signalType, matchContext, surface);
 
     const res = await fetch(ANTHROPIC_API, {
       method: "POST",

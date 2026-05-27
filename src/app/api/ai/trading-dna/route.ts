@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
+import { TENNIS_PROMPT_GUARDRAILS } from "@/lib/tennisContext";
 
 export const runtime = "edge";
 
@@ -106,8 +107,24 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-4-5-20250929",
         max_tokens: 500,
-        system:
-          "You are a trading pattern analyst. Analyse this trader's complete history. Return ONLY valid JSON with these fields: bestSurface (hard/clay/grass), bestTournamentLevel (grand slam/masters/challenger), bestTimeOfDay (morning/afternoon/evening), avgWinSize (number), avgLossSize (number), winRate (number 0-100), revengeTradeRate (number 0-100, losses followed by immediate re-entry within 2 minutes), bestEntryTiming (one sentence), worstPattern (one sentence), oneLineSummary (one sentence). Be specific and honest. Return ONLY the JSON object, no markdown.",
+        system: [
+          "You are a Betfair tennis exchange trading pattern analyst. Analyse this trader's complete history of tennis trades.",
+          "Return ONLY valid JSON with these fields:",
+          "- bestSurface (hard/clay/grass) — which surface produces their best results",
+          "- bestTournamentLevel (grand slam/masters/challenger)",
+          "- bestTimeOfDay (morning/afternoon/evening)",
+          "- avgWinSize (number)",
+          "- avgLossSize (number)",
+          "- winRate (number 0-100)",
+          "- revengeTradeRate (number 0-100, losses followed by immediate re-entry within 2 minutes — a tilt indicator)",
+          "- bestEntryTiming (one sentence — e.g., 'Best entries come after waiting for a break of serve to confirm direction')",
+          "- worstPattern (one sentence — e.g., 'Tends to lay the favourite during hold-of-serve rallies, getting caught by price shortening')",
+          "- oneLineSummary (one sentence trading personality summary using tennis context)",
+          "Frame all insights in tennis exchange trading terms: serve games, breaks, price shortening/drifting, green-up discipline, tilt after losses.",
+          "Be specific and honest. Return ONLY the JSON object, no markdown.",
+          "",
+          TENNIS_PROMPT_GUARDRAILS,
+        ].join("\n"),
         messages: [
           {
             role: "user",

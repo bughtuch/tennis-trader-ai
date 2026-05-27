@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calculateGreenUp, moveByTicks } from "@/lib/tradingMaths";
+import { inferSurface, TENNIS_PROMPT_GUARDRAILS } from "@/lib/tennisContext";
 
 type Side = "BACK" | "LAY";
 
@@ -191,6 +192,8 @@ async function assessPosition(payload: AssessPayload) {
           worstCasePrice
         );
 
+        const surface = inferSurface(undefined, matchContext.surface);
+
         const res = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: {
@@ -201,12 +204,18 @@ async function assessPosition(payload: AssessPayload) {
           body: JSON.stringify({
             model: "claude-haiku-4-5-20251001",
             max_tokens: 200,
-            system:
-              "You are a tennis trading risk advisor. Assess position recovery likelihood. Respond ONLY in JSON: {\"recoveryChance\": 0-100, \"reasoning\": \"one sentence\", \"recommendation\": \"exit|hedge|hold\", \"waitGames\": number}",
+            system: [
+              "You are a Betfair tennis exchange position advisor. Assess whether this losing position can recover based on serve-game dynamics and scoreboard context.",
+              `Surface: ${surface}. Factor surface into recovery likelihood — on clay, breaks are more common so recovery from a break down is more likely; on grass, holds dominate so being on the wrong side of a break is harder to recover from.`,
+              "Think in terms of: who is serving, break/hold patterns, momentum after break, second serve pressure, and whether the price move is scoreboard-driven or panic money.",
+              "Respond ONLY in JSON: {\"recoveryChance\": 0-100, \"reasoning\": \"one sentence using tennis context\", \"recommendation\": \"exit|hedge|hold\", \"waitGames\": number}",
+              "",
+              TENNIS_PROMPT_GUARDRAILS,
+            ].join("\n"),
             messages: [
               {
                 role: "user",
-                content: `Position: ${entrySide} at ${entryPrice} for £${entryStake}. Current exit price: ${exitPrice}. Current P&L: £${currentPnl}. Match: ${matchContext.player ?? "unknown"}, score: ${matchContext.score ?? "unknown"}, server: ${matchContext.server ?? "unknown"}, surface: ${matchContext.surface ?? "unknown"}. Should I hold, hedge, or exit?`,
+                content: `Position: ${entrySide} at ${entryPrice} for £${entryStake}. Current exit price: ${exitPrice}. Current P&L: £${currentPnl}. Player: ${matchContext.player ?? "unknown"}, score: ${matchContext.score ?? "unknown"}, server: ${matchContext.server ?? "unknown"}, surface: ${surface}. Based on serve-game context, should I hold, hedge, or exit?`,
               },
             ],
           }),
@@ -265,13 +274,13 @@ async function assessPosition(payload: AssessPayload) {
 
   let statusMessage: string;
   if (currentPnl >= 0) {
-    statusMessage = `Position is profitable. Lock in £${currentPnl.toFixed(2)} or hold for more.`;
+    statusMessage = `In profit at £${currentPnl.toFixed(2)}. Green up to lock it in, or hold if serve-game context supports further shortening.`;
   } else if (urgency === "low") {
-    statusMessage = `Slightly underwater at £${currentPnl.toFixed(2)}. Consider hedging.`;
+    statusMessage = `Slightly offside at £${currentPnl.toFixed(2)}. Could recover on a break of serve — consider partial hedge to reduce exposure.`;
   } else if (urgency === "medium") {
-    statusMessage = `Position losing £${Math.abs(currentPnl).toFixed(2)}. Hedge recommended.`;
+    statusMessage = `Position losing £${Math.abs(currentPnl).toFixed(2)}. Hedge or reduce liability — waiting for a break back is higher risk from here.`;
   } else {
-    statusMessage = `Significant loss of £${Math.abs(currentPnl).toFixed(2)}. Exit or hedge urgently.`;
+    statusMessage = `Down £${Math.abs(currentPnl).toFixed(2)}. Price has moved significantly against you. Exit or hedge to stop further drift.`;
   }
 
   // AI recommendation: prefer the best option given the situation
