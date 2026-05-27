@@ -138,6 +138,28 @@ export function calculateLiabilityReduction(
   }
 }
 
+/* ─── Raw stake calc (for min-stake detection) ─── */
+
+function getRawLiabilityStake(
+  agg: AggregatedPosition,
+  currentBackPrice: number,
+  currentLayPrice: number,
+  percentage: number,
+): number | null {
+  if (agg.netSide === "FLAT" || agg.avgEntry <= 1.01 || agg.netStake <= 0) return null;
+  const pct = percentage / 100;
+  if (agg.netSide === "BACK") {
+    const tradePrice = currentLayPrice;
+    if (!tradePrice || tradePrice <= 1.01) return null;
+    return r2(agg.netStake * pct);
+  } else {
+    const tradePrice = currentBackPrice;
+    if (!tradePrice || tradePrice <= 1.01) return null;
+    const currentLiability = r2(agg.netStake * (agg.avgEntry - 1));
+    return r2((currentLiability * pct) / (tradePrice - 1));
+  }
+}
+
 /* ─── Percentage buttons ─── */
 
 const PERCENTAGES = [25, 50, 75, 100] as const;
@@ -159,6 +181,9 @@ export default function ClassicLiabilityTools({
 
   const playerShort = playerName.split(" ").pop() ?? playerName;
   const calc = calculateLiabilityReduction(agg, currentBackPrice, currentLayPrice, selectedPct);
+  // Check if null is due to min-stake
+  const rawStake = !calc ? getRawLiabilityStake(agg, currentBackPrice, currentLayPrice, selectedPct) : null;
+  const belowMinStake = !calc && agg.netSide !== "FLAT" && rawStake !== null && rawStake > 0 && rawStake < 2;
   const disabled = !calc || marketSuspended;
 
   async function handleExecute() {
@@ -176,9 +201,9 @@ export default function ClassicLiabilityTools({
       {/* Toggle header */}
       <button
         onClick={() => setExpanded(!expanded)}
-        disabled={disabled}
+        disabled={disabled && !belowMinStake}
         className={`w-full px-3 py-2 flex items-center justify-between text-left transition-colors ${
-          disabled
+          disabled && !belowMinStake
             ? "opacity-40 cursor-not-allowed"
             : "hover:bg-gray-100 cursor-pointer"
         }`}
@@ -190,14 +215,29 @@ export default function ClassicLiabilityTools({
           <span className="text-[10px] text-gray-400">{playerShort}</span>
         </div>
         <div className="flex items-center gap-2">
-          {calc && (
+          {belowMinStake ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700">
+              BELOW £2 MIN
+            </span>
+          ) : calc ? (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700">
               £{calc.currentLiability.toFixed(2)}
             </span>
-          )}
+          ) : null}
           <span className="text-[10px] text-gray-400">{expanded ? "▾" : "▸"}</span>
         </div>
       </button>
+
+      {/* Below min stake message */}
+      {expanded && belowMinStake && !calc && (
+        <div className="px-3 pb-3 pt-1 border-t border-gray-200">
+          <div className="text-[10px] text-amber-600 italic text-center py-2">
+            Calculated hedge £{rawStake?.toFixed(2)} — below Betfair £2 minimum.
+            <br />
+            Position already close to fully hedged.
+          </div>
+        </div>
+      )}
 
       {/* Expanded content */}
       {expanded && calc && (

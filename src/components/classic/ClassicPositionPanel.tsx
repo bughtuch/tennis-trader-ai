@@ -58,6 +58,8 @@ interface GreenUpCalc {
   profitIfLose: number;
 }
 
+type PositionState = "open" | "free_bet" | "locked_green" | "locked_red";
+
 interface ClassicPositionPanelProps {
   openPositions: SupabaseTrade[];
   unmatchedOrders: UnmatchedDisplayOrder[];
@@ -67,6 +69,8 @@ interface ClassicPositionPanelProps {
   player2Name: string;
   player1GreenUp: GreenUpCalc | null;
   player2GreenUp: GreenUpCalc | null;
+  player1PositionState: PositionState;
+  player2PositionState: PositionState;
   outcomePnl: { ifPlayer1Wins: number; ifPlayer2Wins: number } | null;
   onGreenUp: (runner: "player1" | "player2") => Promise<void>;
   onCancelOrder: (betId: string) => Promise<void>;
@@ -99,6 +103,8 @@ export default function ClassicPositionPanel({
   player2Name,
   player1GreenUp,
   player2GreenUp,
+  player1PositionState,
+  player2PositionState,
   outcomePnl,
   onGreenUp,
   onCancelOrder,
@@ -135,41 +141,143 @@ export default function ClassicPositionPanel({
               GREEN UP
             </div>
 
-            {hasP1Position && player1GreenUp && (
-              <button
-                onClick={() => onGreenUp("player1")}
-                disabled={tradeLoading}
-                className={`w-full py-2 px-3 rounded-lg text-sm font-bold transition-all flex items-center justify-between ${
-                  player1GreenUp.equalProfit >= 0
-                    ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                    : "bg-red-500 hover:bg-red-600 text-white"
-                } ${tradeLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-              >
-                <span>GREEN {player1Name.split(" ").pop()}</span>
-                <span className="font-mono">
-                  {player1GreenUp.equalProfit >= 0 ? "+" : ""}
-                  £{player1GreenUp.equalProfit.toFixed(2)}
-                </span>
-              </button>
-            )}
+            {hasP1Position && (() => {
+              const p1Short = player1Name.split(" ").pop();
+              if (player1PositionState === "locked_green") {
+                const locked = outcomePnl ? Math.min(outcomePnl.ifPlayer1Wins, outcomePnl.ifPlayer2Wins) : 0;
+                return (
+                  <div className="w-full py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-between bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span>LOCKED GREEN</span>
+                    <span className="font-mono">+£{locked.toFixed(2)} guaranteed</span>
+                  </div>
+                );
+              }
+              if (player1PositionState === "free_bet") {
+                if (player1GreenUp && player1GreenUp.equalProfit >= 0) {
+                  return (
+                    <div className="space-y-1.5">
+                      <div className="w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 text-center">
+                        FREE BET ACTIVE · Upside running
+                      </div>
+                      <button
+                        onClick={() => onGreenUp("player1")}
+                        disabled={tradeLoading}
+                        className={`w-full py-2 px-3 rounded-lg text-sm font-bold transition-all flex items-center justify-between bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 ${tradeLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        <span>Optional: GREEN {p1Short}</span>
+                        <span className="font-mono">+£{player1GreenUp.equalProfit.toFixed(2)}</span>
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="w-full py-2 px-3 rounded-lg text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 text-center">
+                    FREE BET ACTIVE · Upside running
+                    <div className="text-[10px] font-normal text-emerald-600 mt-0.5">
+                      Green-up would reduce total return
+                    </div>
+                  </div>
+                );
+              }
+              // Min-stake check
+              if (player1GreenUp && player1GreenUp.greenUpStake < 2) {
+                return (
+                  <div className="w-full py-2 px-3 rounded-lg text-xs bg-amber-50 text-amber-600 border border-amber-200 text-center italic">
+                    Green-up stake £{player1GreenUp.greenUpStake.toFixed(2)} — below Betfair £2 minimum
+                  </div>
+                );
+              }
+              // Normal open state
+              if (player1GreenUp) {
+                return (
+                  <button
+                    onClick={() => onGreenUp("player1")}
+                    disabled={tradeLoading}
+                    className={`w-full py-2 px-3 rounded-lg text-sm font-bold transition-all flex items-center justify-between ${
+                      player1GreenUp.equalProfit >= 0
+                        ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                        : "bg-red-500 hover:bg-red-600 text-white"
+                    } ${tradeLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <span>GREEN {p1Short}</span>
+                    <span className="font-mono">
+                      {player1GreenUp.equalProfit >= 0 ? "+" : ""}
+                      £{player1GreenUp.equalProfit.toFixed(2)}
+                    </span>
+                  </button>
+                );
+              }
+              return null;
+            })()}
 
-            {hasP2Position && player2GreenUp && (
-              <button
-                onClick={() => onGreenUp("player2")}
-                disabled={tradeLoading}
-                className={`w-full py-2 px-3 rounded-lg text-sm font-bold transition-all flex items-center justify-between ${
-                  player2GreenUp.equalProfit >= 0
-                    ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                    : "bg-red-500 hover:bg-red-600 text-white"
-                } ${tradeLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-              >
-                <span>GREEN {player2Name.split(" ").pop()}</span>
-                <span className="font-mono">
-                  {player2GreenUp.equalProfit >= 0 ? "+" : ""}
-                  £{player2GreenUp.equalProfit.toFixed(2)}
-                </span>
-              </button>
-            )}
+            {hasP2Position && (() => {
+              const p2Short = player2Name.split(" ").pop();
+              if (player2PositionState === "locked_green") {
+                const locked = outcomePnl ? Math.min(outcomePnl.ifPlayer1Wins, outcomePnl.ifPlayer2Wins) : 0;
+                return (
+                  <div className="w-full py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-between bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span>LOCKED GREEN</span>
+                    <span className="font-mono">+£{locked.toFixed(2)} guaranteed</span>
+                  </div>
+                );
+              }
+              if (player2PositionState === "free_bet") {
+                if (player2GreenUp && player2GreenUp.equalProfit >= 0) {
+                  return (
+                    <div className="space-y-1.5">
+                      <div className="w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 text-center">
+                        FREE BET ACTIVE · Upside running
+                      </div>
+                      <button
+                        onClick={() => onGreenUp("player2")}
+                        disabled={tradeLoading}
+                        className={`w-full py-2 px-3 rounded-lg text-sm font-bold transition-all flex items-center justify-between bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 ${tradeLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        <span>Optional: GREEN {p2Short}</span>
+                        <span className="font-mono">+£{player2GreenUp.equalProfit.toFixed(2)}</span>
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="w-full py-2 px-3 rounded-lg text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 text-center">
+                    FREE BET ACTIVE · Upside running
+                    <div className="text-[10px] font-normal text-emerald-600 mt-0.5">
+                      Green-up would reduce total return
+                    </div>
+                  </div>
+                );
+              }
+              // Min-stake check
+              if (player2GreenUp && player2GreenUp.greenUpStake < 2) {
+                return (
+                  <div className="w-full py-2 px-3 rounded-lg text-xs bg-amber-50 text-amber-600 border border-amber-200 text-center italic">
+                    Green-up stake £{player2GreenUp.greenUpStake.toFixed(2)} — below Betfair £2 minimum
+                  </div>
+                );
+              }
+              // Normal open state
+              if (player2GreenUp) {
+                return (
+                  <button
+                    onClick={() => onGreenUp("player2")}
+                    disabled={tradeLoading}
+                    className={`w-full py-2 px-3 rounded-lg text-sm font-bold transition-all flex items-center justify-between ${
+                      player2GreenUp.equalProfit >= 0
+                        ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                        : "bg-red-500 hover:bg-red-600 text-white"
+                    } ${tradeLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <span>GREEN {p2Short}</span>
+                    <span className="font-mono">
+                      {player2GreenUp.equalProfit >= 0 ? "+" : ""}
+                      £{player2GreenUp.equalProfit.toFixed(2)}
+                    </span>
+                  </button>
+                );
+              }
+              return null;
+            })()}
           </div>
         )}
 
@@ -183,6 +291,7 @@ export default function ClassicPositionPanel({
                 currentBackPrice={p1BackPrice}
                 currentLayPrice={p1LayPrice}
                 marketSuspended={marketSuspended}
+                positionState={player1PositionState}
               />
             )}
             {hasP2Position && player2Agg && (
@@ -192,6 +301,7 @@ export default function ClassicPositionPanel({
                 currentBackPrice={p2BackPrice}
                 currentLayPrice={p2LayPrice}
                 marketSuspended={marketSuspended}
+                positionState={player2PositionState}
               />
             )}
           </div>

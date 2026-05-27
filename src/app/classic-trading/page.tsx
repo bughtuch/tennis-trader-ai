@@ -52,6 +52,27 @@ interface UnmatchedDisplayOrder {
   isPartial: boolean;
 }
 
+/* ─── Position State Classification ─── */
+
+type PositionState = "open" | "free_bet" | "locked_green" | "locked_red";
+
+function classifyPositionState(
+  outcomePnl: { ifPlayer1Wins: number; ifPlayer2Wins: number } | null,
+  runner: "player1" | "player2",
+): PositionState {
+  if (!outcomePnl) return "open";
+  const ifThisWins = runner === "player1" ? outcomePnl.ifPlayer1Wins : outcomePnl.ifPlayer2Wins;
+  const ifThisLoses = runner === "player1" ? outcomePnl.ifPlayer2Wins : outcomePnl.ifPlayer1Wins;
+
+  // Both outcomes profitable → locked green
+  if (ifThisWins >= 0 && ifThisLoses >= 0) return "locked_green";
+  // One side zero/near-zero loss, other side profit → effective free bet
+  // Threshold: £0.50 — below this, effectively risk-free
+  if ((ifThisWins > 0 && ifThisLoses >= -0.50) || (ifThisLoses > 0 && ifThisWins >= -0.50))
+    return "free_bet";
+  return "open";
+}
+
 const STAKES = [5, 10, 25, 50, 100];
 
 function formatVolume(v: number) {
@@ -573,6 +594,10 @@ function ClassicTradingPage() {
     };
   }, [openPositions, runner0, runner1]);
 
+  /* ─── Position state per runner ─── */
+  const p1PositionState = classifyPositionState(outcomePnl, "player1");
+  const p2PositionState = classifyPositionState(outcomePnl, "player2");
+
   /* ─── Add live position ─── */
   function addLivePosition(params: { marketId: string; selectionId: number; side: "BACK" | "LAY"; price: number; size: number; betId?: string }) {
     const nameMap = new Map<number, string>();
@@ -889,6 +914,8 @@ function ClassicTradingPage() {
       player2Name={displayPlayers.player2.name}
       player1GreenUp={p1GreenUp}
       player2GreenUp={p2GreenUp}
+      player1PositionState={p1PositionState}
+      player2PositionState={p2PositionState}
       outcomePnl={outcomePnl}
       onGreenUp={handleGreenUp}
       onCancelOrder={async (betId) => {
@@ -946,41 +973,136 @@ function ClassicTradingPage() {
         )}
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        {/* GREEN ALL */}
-        {p1GreenUp && p1Agg && p1Agg.netSide !== "FLAT" ? (
-          <button
-            onClick={() => handleGreenUp("player1")}
-            disabled={tradeLoading || isSuspended}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
-              p1GreenUp.equalProfit >= 0
-                ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-200"
-                : "bg-red-500 hover:bg-red-600 text-white"
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            GREEN {displayPlayers.player1.short} {p1GreenUp.equalProfit >= 0 ? "+" : ""}£{p1GreenUp.equalProfit.toFixed(2)}
-          </button>
-        ) : (
-          <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
-            GREEN P1
-          </button>
-        )}
-        {p2GreenUp && p2Agg && p2Agg.netSide !== "FLAT" ? (
-          <button
-            onClick={() => handleGreenUp("player2")}
-            disabled={tradeLoading || isSuspended}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
-              p2GreenUp.equalProfit >= 0
-                ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-200"
-                : "bg-red-500 hover:bg-red-600 text-white"
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            GREEN {displayPlayers.player2.short} {p2GreenUp.equalProfit >= 0 ? "+" : ""}£{p2GreenUp.equalProfit.toFixed(2)}
-          </button>
-        ) : (
-          <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
-            GREEN P2
-          </button>
-        )}
+        {/* GREEN P1 */}
+        {(() => {
+          const hasPos = p1Agg && p1Agg.netSide !== "FLAT";
+          if (!hasPos) {
+            return (
+              <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
+                GREEN P1
+              </button>
+            );
+          }
+          if (p1PositionState === "locked_green") {
+            const locked = outcomePnl ? Math.min(outcomePnl.ifPlayer1Wins, outcomePnl.ifPlayer2Wins) : 0;
+            return (
+              <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                LOCKED +£{locked.toFixed(2)}
+              </span>
+            );
+          }
+          if (p1PositionState === "free_bet") {
+            if (p1GreenUp && p1GreenUp.equalProfit >= 0) {
+              return (
+                <button
+                  onClick={() => handleGreenUp("player1")}
+                  disabled={tradeLoading || isSuspended}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  LOCK {displayPlayers.player1.short} +£{p1GreenUp.equalProfit.toFixed(2)}
+                </button>
+              );
+            }
+            return (
+              <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                FREE BET · Upside running
+              </span>
+            );
+          }
+          // Min-stake check for open positions
+          if (p1GreenUp && p1GreenUp.greenUpStake < 2) {
+            return (
+              <span className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-200">
+                HEDGE &lt; £2 MIN
+              </span>
+            );
+          }
+          if (p1GreenUp) {
+            return (
+              <button
+                onClick={() => handleGreenUp("player1")}
+                disabled={tradeLoading || isSuspended}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                  p1GreenUp.equalProfit >= 0
+                    ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-200"
+                    : "bg-red-500 hover:bg-red-600 text-white"
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                GREEN {displayPlayers.player1.short} {p1GreenUp.equalProfit >= 0 ? "+" : ""}£{p1GreenUp.equalProfit.toFixed(2)}
+              </button>
+            );
+          }
+          return (
+            <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
+              GREEN P1
+            </button>
+          );
+        })()}
+        {/* GREEN P2 */}
+        {(() => {
+          const hasPos = p2Agg && p2Agg.netSide !== "FLAT";
+          if (!hasPos) {
+            return (
+              <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
+                GREEN P2
+              </button>
+            );
+          }
+          if (p2PositionState === "locked_green") {
+            const locked = outcomePnl ? Math.min(outcomePnl.ifPlayer1Wins, outcomePnl.ifPlayer2Wins) : 0;
+            return (
+              <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                LOCKED +£{locked.toFixed(2)}
+              </span>
+            );
+          }
+          if (p2PositionState === "free_bet") {
+            if (p2GreenUp && p2GreenUp.equalProfit >= 0) {
+              return (
+                <button
+                  onClick={() => handleGreenUp("player2")}
+                  disabled={tradeLoading || isSuspended}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  LOCK {displayPlayers.player2.short} +£{p2GreenUp.equalProfit.toFixed(2)}
+                </button>
+              );
+            }
+            return (
+              <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                FREE BET · Upside running
+              </span>
+            );
+          }
+          // Min-stake check for open positions
+          if (p2GreenUp && p2GreenUp.greenUpStake < 2) {
+            return (
+              <span className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-200">
+                HEDGE &lt; £2 MIN
+              </span>
+            );
+          }
+          if (p2GreenUp) {
+            return (
+              <button
+                onClick={() => handleGreenUp("player2")}
+                disabled={tradeLoading || isSuspended}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                  p2GreenUp.equalProfit >= 0
+                    ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-200"
+                    : "bg-red-500 hover:bg-red-600 text-white"
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                GREEN {displayPlayers.player2.short} {p2GreenUp.equalProfit >= 0 ? "+" : ""}£{p2GreenUp.equalProfit.toFixed(2)}
+              </button>
+            );
+          }
+          return (
+            <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
+              GREEN P2
+            </button>
+          );
+        })()}
 
         <span className="w-px h-5 bg-gray-300 mx-1" />
 
