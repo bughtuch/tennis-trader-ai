@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
 import { validateAndExecute, type TradeActionParams } from "@/lib/tradeActions";
+import { BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
 import ClassicLadder from "@/components/classic/ClassicLadder";
 import ClassicPositionPanel from "@/components/classic/ClassicPositionPanel";
 import ClassicTrustPanel from "@/components/classic/ClassicTrustPanel";
@@ -157,7 +158,7 @@ function ClassicTradingPage() {
   const activeStake = customStakeInput
     ? (Number(customStakeInput) || 0)
     : selectedStake ?? 25;
-  const stakeBelowMin = activeStake > 0 && activeStake < 2;
+  const stakeBelowMin = activeStake > 0 && activeStake < BETFAIR_MIN_STAKE;
 
   /* ─── Session timer ─── */
   const [sessionStart] = useState(() => Date.now());
@@ -868,7 +869,7 @@ function ClassicTradingPage() {
           // Market-level green-up
           if (!s.outcomePnl || !s.isLive) break;
           const mh = calculateMarketHedge(s.outcomePnl, s.p1LayPrice, s.p1BackPrice, s.p2LayPrice, s.p2BackPrice);
-          if (mh && mh.hedgeStake >= 2) {
+          if (mh && mh.hedgeStake >= BETFAIR_MIN_STAKE) {
             s.handleMarketHedge(mh.hedgeRunner, mh.hedgeSide, mh.hedgePrice, mh.hedgeStake);
           }
           break;
@@ -1011,10 +1012,10 @@ function ClassicTradingPage() {
               </span>
             );
           }
-          if (mh.hedgeStake < 2) {
+          if (mh.hedgeStake < BETFAIR_MIN_STAKE) {
             return (
               <span className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-200">
-                HEDGE &lt; £2 MIN
+                HEDGE &lt; £{BETFAIR_MIN_STAKE} MIN
               </span>
             );
           }
@@ -1213,7 +1214,7 @@ function ClassicTradingPage() {
           </div>
           {stakeBelowMin && customStakeInput && (
             <span className="text-[10px] text-amber-600 font-medium">
-              Below Betfair £2 min
+              Below Betfair £{BETFAIR_MIN_STAKE} min
             </span>
           )}
           <button

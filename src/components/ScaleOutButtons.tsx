@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { calculateLiability } from "@/lib/tradingMaths";
+import { calculateLiability, BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
 
 const SCALE_OPTIONS = [0.25, 0.40, 0.50, 0.75] as const;
 
@@ -47,8 +47,8 @@ export default function ScaleOutButtons({
     setExecuting(true);
 
     const scaleStake = r2(netStake * pct);
-    if (scaleStake < 2) {
-      onToast(`Betfair minimum stake is £2. ${Math.round(pct * 100)}% scale would place £${scaleStake.toFixed(2)}.`, "error");
+    if (scaleStake < BETFAIR_MIN_STAKE) {
+      onToast(`Betfair minimum stake is £${BETFAIR_MIN_STAKE}. ${Math.round(pct * 100)}% scale would place £${scaleStake.toFixed(2)}.`, "error");
       setExecuting(false);
       return;
     }
@@ -78,7 +78,7 @@ export default function ScaleOutButtons({
         <div className="flex gap-1.5 flex-1">
           {SCALE_OPTIONS.map((pct) => {
             const scaleSize = r2(netStake * pct);
-            const belowMin = scaleSize < 2;
+            const belowMin = scaleSize < BETFAIR_MIN_STAKE;
             const liability = !belowMin ? calculateLiability(scaleOutPrice, scaleSize, scaleSide) : 0;
             const isExecuted = executedPct === pct;
             const isDisabled = executing || tradeLoading || belowMin || (executedPct !== null && !isExecuted);
@@ -89,7 +89,7 @@ export default function ScaleOutButtons({
                 disabled={isDisabled}
                 title={
                   belowMin
-                    ? `£${scaleSize.toFixed(2)} below £2 minimum`
+                    ? `£${scaleSize.toFixed(2)} below £${BETFAIR_MIN_STAKE} minimum`
                     : `${scaleSide} £${scaleSize.toFixed(2)} @ ${scaleOutPrice.toFixed(2)} · Liability £${liability.toFixed(2)}`
                 }
                 className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
@@ -112,10 +112,10 @@ export default function ScaleOutButtons({
       </div>
       {/* Liability summary for the first valid scale option */}
       {(() => {
-        const firstValid = SCALE_OPTIONS.find((pct) => r2(netStake * pct) >= 2);
+        const firstValid = SCALE_OPTIONS.find((pct) => r2(netStake * pct) >= BETFAIR_MIN_STAKE);
         if (!firstValid) return (
           <div className="mt-1 text-[9px] font-mono text-gray-600 px-1">
-            All scale options below £2 minimum
+            All scale options below £{BETFAIR_MIN_STAKE} minimum
           </div>
         );
         const fStake = r2(netStake * firstValid);

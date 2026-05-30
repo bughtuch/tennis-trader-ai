@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "rea
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore, type PriceSize } from "@/lib/store";
-import { calculateGreenUp, moveByTicks, roundToTick, calculateOptimisedGreenUp } from "@/lib/tradingMaths";
+import { calculateGreenUp, moveByTicks, roundToTick, calculateOptimisedGreenUp, BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
 import RiskRewardPanel from "@/components/RiskRewardPanel";
 import ServeHoldStats from "@/components/ServeHoldStats";
 import SetWinningPrice from "@/components/SetWinningPrice";
@@ -467,7 +467,7 @@ function PaperTradingPage() {
 
   // Resolve active stake: custom input takes priority over quick buttons
   const activeStake = customStakeInput
-    ? Math.max(2, Number(customStakeInput) || 0)
+    ? (Number(customStakeInput) || 0)
     : selectedStake ?? 25;
 
   /* ─── Session timer state ─── */

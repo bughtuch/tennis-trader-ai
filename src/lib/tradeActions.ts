@@ -11,7 +11,7 @@
  *  4. Surfaces the exact Betfair error on failure
  */
 
-import { calculateLiability } from "@/lib/tradingMaths";
+import { calculateLiability, BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
 
 /* ─── Types ─── */
 
@@ -107,8 +107,8 @@ function validateFields(p: TradeActionParams): string | null {
   if (!p.price || p.price < 1.01) return "No tradable hedge price available.";
   if (p.price > 1000) return `Invalid price: ${p.price}`;
   if (!p.size || !Number.isFinite(p.size)) return "Missing stake size";
-  if (p.size < 2)
-    return `Betfair minimum stake is £2. This action would place £${p.size.toFixed(2)}.`;
+  if (p.size < BETFAIR_MIN_STAKE)
+    return `Betfair minimum stake is £${BETFAIR_MIN_STAKE}. This action would place £${p.size.toFixed(2)}.`;
 
   // Liability sanity check for LAY orders
   if (p.side === "LAY") {

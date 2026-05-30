@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { calculateGreenUp, moveByTicks } from "@/lib/tradingMaths";
+import { calculateGreenUp, moveByTicks, BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
 import { inferSurface, TENNIS_PROMPT_GUARDRAILS } from "@/lib/tennisContext";
 
 type Side = "BACK" | "LAY";
@@ -366,9 +366,9 @@ async function executeOption(
   }
 
   // Client-side validation before sending to Betfair
-  if (hedgeStake < 2) {
+  if (hedgeStake < BETFAIR_MIN_STAKE) {
     return NextResponse.json(
-      { success: false, error: `Betfair minimum stake is £2. This action would place £${hedgeStake.toFixed(2)}.` },
+      { success: false, error: `Betfair minimum stake is £${BETFAIR_MIN_STAKE}. This action would place £${hedgeStake.toFixed(2)}.` },
       { status: 400 }
     );
   }

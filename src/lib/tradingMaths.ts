@@ -24,6 +24,9 @@ const TICK_TABLE = [
 const MIN_PRICE = 1.01;
 const MAX_PRICE = 1000;
 
+/** Betfair Exchange minimum stake (GBP). Reduced from £2 to £1 on 7 Feb 2022. */
+export const BETFAIR_MIN_STAKE = 1;
+
 function r2(value: number): number {
   return Math.round(value * 100) / 100;
 }

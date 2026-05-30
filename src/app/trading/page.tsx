@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "rea
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore, type PriceSize, type PendingOrder } from "@/lib/store";
-import { calculateGreenUp, calculateLiability, moveByTicks, roundToTick } from "@/lib/tradingMaths";
+import { calculateGreenUp, calculateLiability, moveByTicks, roundToTick, BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
@@ -247,7 +247,7 @@ function TradingPage() {
 
   // Resolve active stake: custom input takes priority over quick buttons
   const activeStake = customStakeInput
-    ? Math.max(2, Number(customStakeInput) || 0)
+    ? (Number(customStakeInput) || 0)
     : selectedStake ?? 25;
 
   /* ─── Session timer state ─── */
@@ -1842,7 +1842,7 @@ function TradingPage() {
         // Use correct price for hedge side: LAY hedge uses lay price, BACK hedge uses back price
         const greenPrice = greenUpResult.greenUpSide === "LAY" ? currentLayPrice : currentBackPrice;
         if (!greenPrice || greenPrice <= 1) return null;
-        const stakeOk = greenUpResult.greenUpStake >= 2 && greenUpResult.greenUpStake <= 10000;
+        const stakeOk = greenUpResult.greenUpStake >= BETFAIR_MIN_STAKE && greenUpResult.greenUpStake <= 10000;
         const mainLiability = calculateLiability(greenPrice, greenUpResult.greenUpStake, greenUpResult.greenUpSide);
         const mainHighLiability = mainLiability > 50;
         return (
@@ -2270,9 +2270,9 @@ function TradingPage() {
               const hedgePrice = pos.side === "BACK" ? posLayPrice : posBackPrice;
               const gSide: "BACK" | "LAY" = pos.side === "BACK" ? "LAY" : "BACK";
               const gStake = hedgePrice > 1 ? Math.round(((pos.stake ?? 0) * (pos.entry_price ?? 0)) / hedgePrice * 100) / 100 : 0;
-              const stakeValid = gStake >= 2 && gStake <= 10000;
+              const stakeValid = gStake >= BETFAIR_MIN_STAKE && gStake <= 10000;
               const closeStake = Math.round((pos.stake ?? 0) * 100) / 100;
-              const closeValid = closeStake >= 2 && closeStake <= 10000;
+              const closeValid = closeStake >= BETFAIR_MIN_STAKE && closeStake <= 10000;
               const noPrices = !hedgePrice || hedgePrice <= 1;
               const hedgeLiability = gStake > 0 ? calculateLiability(hedgePrice, gStake, gSide) : 0;
               const closeLiability = closeStake > 0 ? calculateLiability(hedgePrice, closeStake, gSide) : 0;
@@ -2325,7 +2325,7 @@ function TradingPage() {
                       {noPrices
                         ? "GREEN UP (no price)"
                         : !stakeValid
-                          ? `GREEN UP (£${gStake.toFixed(2)} < £2 min)`
+                          ? `GREEN UP (£${gStake.toFixed(2)} < £${BETFAIR_MIN_STAKE} min)`
                           : `GREEN UP ${livePnl !== null ? `${livePnl >= 0 ? "+" : "-"}£${Math.abs(livePnl).toFixed(2)}` : ""}`
                       }
                     </button>
@@ -2362,7 +2362,7 @@ function TradingPage() {
                     <span className="text-[10px] text-gray-600 self-center mr-0.5">Scale:</span>
                     {[0.25, 0.40, 0.50, 0.75].map((pct) => {
                       const scaleStake = Math.round(((pos.stake ?? 0) * pct) * 100) / 100;
-                      const scaleValid = scaleStake >= 2;
+                      const scaleValid = scaleStake >= BETFAIR_MIN_STAKE;
                       const scaleLiab = scaleValid ? calculateLiability(scaleHedgePrice, scaleStake, scaleSide) : 0;
                       return (
                         <button
@@ -2375,7 +2375,7 @@ function TradingPage() {
                             if (result.success) fetchTrades();
                           }}
                           disabled={tradeLoading || !scaleValid}
-                          title={!scaleValid ? `£${scaleStake.toFixed(2)} below £2 minimum` : `${scaleSide} £${scaleStake.toFixed(2)} @ ${scaleHedgePrice.toFixed(2)} · Liability £${scaleLiab.toFixed(2)}`}
+                          title={!scaleValid ? `£${scaleStake.toFixed(2)} below £${BETFAIR_MIN_STAKE} minimum` : `${scaleSide} £${scaleStake.toFixed(2)} @ ${scaleHedgePrice.toFixed(2)} · Liability £${scaleLiab.toFixed(2)}`}
                           className={`px-2 py-1 rounded text-[10px] font-mono font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                             scaleValid
                               ? "text-gray-400 bg-gray-800/60 hover:bg-gray-700 hover:text-white"

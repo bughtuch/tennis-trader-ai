@@ -1,5 +1,7 @@
 "use client";
 
+import { BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
+
 /* ─── Types ─── */
 
 interface ClassicMarketHedgeProps {
@@ -142,7 +144,7 @@ export default function ClassicMarketHedge({
     (outcomePnl.ifPlayer2Wins > 0.50 && outcomePnl.ifPlayer1Wins >= -0.50)
   );
   const pricesMissing = !hedge && !isGreened;
-  const belowMinStake = hedge !== null && hedge.hedgeStake < 2;
+  const belowMinStake = hedge !== null && hedge.hedgeStake < BETFAIR_MIN_STAKE;
 
   const hedgeRunnerShort = hedge
     ? (hedge.hedgeRunner === "player1" ? p1Short : p2Short)
@@ -263,7 +265,7 @@ export default function ClassicMarketHedge({
           {/* Below min stake */}
           {belowMinStake && (
             <div className="text-[10px] text-amber-600 text-center italic">
-              Hedge stake £{hedge.hedgeStake.toFixed(2)} — below Betfair £2 minimum
+              Hedge stake £{hedge.hedgeStake.toFixed(2)} — below Betfair £{BETFAIR_MIN_STAKE} minimum
             </div>
           )}
 

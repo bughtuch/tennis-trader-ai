@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
 
 /* ─── Types ─── */
 
@@ -57,7 +58,7 @@ function calculateHedge(
   // hedge stake = (entryStake × entryPrice) / currentHedgePrice
   const hedgeStake = r2((agg.netStake * agg.avgEntry) / hedgePrice);
 
-  if (hedgeStake < 2 || !Number.isFinite(hedgeStake)) return null;
+  if (hedgeStake < BETFAIR_MIN_STAKE || !Number.isFinite(hedgeStake)) return null;
 
   let profitIfWin: number;
   let profitIfLose: number;
@@ -119,7 +120,7 @@ export default function ClassicHedgePreview({
 
   const hedge = calculateHedge(agg, currentBackPrice, currentLayPrice);
   const rawStake = getRawHedgeStake(agg, currentBackPrice, currentLayPrice);
-  const belowMinStake = !hedge && rawStake !== null && rawStake > 0 && rawStake < 2;
+  const belowMinStake = !hedge && rawStake !== null && rawStake > 0 && rawStake < BETFAIR_MIN_STAKE;
   const playerShort = playerName.split(" ").pop() ?? playerName;
   const isLockedGreen = positionState === "locked_green";
   const disabled = isLockedGreen || (!hedge && !belowMinStake) || marketSuspended;
@@ -186,7 +187,7 @@ export default function ClassicHedgePreview({
             </span>
           ) : belowMinStake ? (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700">
-              BELOW £2 MIN
+              BELOW £{BETFAIR_MIN_STAKE} MIN
             </span>
           ) : hedge ? (
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
@@ -217,7 +218,7 @@ export default function ClassicHedgePreview({
           {belowMinStake && !isLockedGreen && (
             <div className="text-center py-2 space-y-1">
               <div className="text-[11px] text-amber-600 font-semibold">
-                Hedge stake £{rawStake?.toFixed(2)} — below Betfair £2 minimum
+                Hedge stake £{rawStake?.toFixed(2)} — below Betfair £{BETFAIR_MIN_STAKE} minimum
               </div>
               <div className="text-[10px] text-gray-500 italic">
                 Position already close to fully hedged

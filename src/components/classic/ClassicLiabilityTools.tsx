@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
 
 /* ─── Types ─── */
 
@@ -79,7 +80,7 @@ export function calculateLiabilityReduction(
 
     // Lay stake = netStake × percentage to remove that fraction of downside
     const tradeStake = r2(agg.netStake * pct);
-    if (tradeStake < 2) return null;
+    if (tradeStake < BETFAIR_MIN_STAKE) return null;
 
     // After reduction:
     // If player loses: -netStake + tradeStake = -netStake × (1 - pct)
@@ -113,7 +114,7 @@ export function calculateLiabilityReduction(
 
     // Back stake = (liability × pct) / (backPrice - 1)
     const tradeStake = r2((currentLiability * pct) / (tradePrice - 1));
-    if (tradeStake < 2) return null;
+    if (tradeStake < BETFAIR_MIN_STAKE) return null;
 
     // After reduction:
     // If player wins: -liability + tradeStake × (backPrice - 1) = -liability × (1 - pct)
@@ -183,7 +184,7 @@ export default function ClassicLiabilityTools({
   const calc = calculateLiabilityReduction(agg, currentBackPrice, currentLayPrice, selectedPct);
   // Check if null is due to min-stake
   const rawStake = !calc ? getRawLiabilityStake(agg, currentBackPrice, currentLayPrice, selectedPct) : null;
-  const belowMinStake = !calc && agg.netSide !== "FLAT" && rawStake !== null && rawStake > 0 && rawStake < 2;
+  const belowMinStake = !calc && agg.netSide !== "FLAT" && rawStake !== null && rawStake > 0 && rawStake < BETFAIR_MIN_STAKE;
   const disabled = !calc || marketSuspended;
 
   async function handleExecute() {
@@ -217,7 +218,7 @@ export default function ClassicLiabilityTools({
         <div className="flex items-center gap-2">
           {belowMinStake ? (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700">
-              BELOW £2 MIN
+              BELOW £{BETFAIR_MIN_STAKE} MIN
             </span>
           ) : calc ? (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700">
@@ -232,7 +233,7 @@ export default function ClassicLiabilityTools({
       {expanded && belowMinStake && !calc && (
         <div className="px-3 pb-3 pt-1 border-t border-gray-200">
           <div className="text-[10px] text-amber-600 italic text-center py-2">
-            Calculated hedge £{rawStake?.toFixed(2)} — below Betfair £2 minimum.
+            Calculated hedge £{rawStake?.toFixed(2)} — below Betfair £{BETFAIR_MIN_STAKE} minimum.
             <br />
             Position already close to fully hedged.
           </div>
