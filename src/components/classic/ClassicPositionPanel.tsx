@@ -1,6 +1,5 @@
 "use client";
 
-import { calculateLiability } from "@/lib/tradingMaths";
 import ClassicHedgePreview from "@/components/classic/ClassicHedgePreview";
 import ClassicLiabilityTools from "@/components/classic/ClassicLiabilityTools";
 
@@ -27,20 +26,6 @@ interface SupabaseTrade {
   closed_at: string | null;
 }
 
-interface UnmatchedDisplayOrder {
-  betId: string;
-  displayId: string;
-  marketId: string;
-  selectionId: number;
-  player: string;
-  side: "BACK" | "LAY";
-  price: number;
-  sizeRemaining: number;
-  sizeMatched: number;
-  placedDate: string;
-  isPartial: boolean;
-}
-
 interface AggregatedPosition {
   netSide: "BACK" | "LAY" | "FLAT";
   netStake: number;
@@ -61,8 +46,6 @@ interface GreenUpCalc {
 type PositionState = "open" | "free_bet" | "locked_green" | "locked_red";
 
 interface ClassicPositionPanelProps {
-  openPositions: SupabaseTrade[];
-  unmatchedOrders: UnmatchedDisplayOrder[];
   player1Agg: AggregatedPosition | null;
   player2Agg: AggregatedPosition | null;
   player1Name: string;
@@ -73,8 +56,6 @@ interface ClassicPositionPanelProps {
   player2PositionState: PositionState;
   outcomePnl: { ifPlayer1Wins: number; ifPlayer2Wins: number } | null;
   onGreenUp: (runner: "player1" | "player2") => Promise<void>;
-  onCancelOrder: (betId: string) => Promise<void>;
-  onCancelAll: () => Promise<void>;
   tradeLoading: boolean;
   closedTrades: SupabaseTrade[];
   sessionPnl: number;
@@ -95,8 +76,6 @@ function r2(v: number): number {
 /* ─── Component ─── */
 
 export default function ClassicPositionPanel({
-  openPositions,
-  unmatchedOrders,
   player1Agg,
   player2Agg,
   player1Name,
@@ -107,8 +86,6 @@ export default function ClassicPositionPanel({
   player2PositionState,
   outcomePnl,
   onGreenUp,
-  onCancelOrder,
-  onCancelAll,
   tradeLoading,
   closedTrades,
   sessionPnl,
@@ -367,90 +344,7 @@ export default function ClassicPositionPanel({
           </div>
         )}
 
-        {/* ─── Open Positions ─── */}
-        <div className="p-3">
-          <div className="text-[10px] font-semibold tracking-wider uppercase text-gray-500 mb-2">
-            LIVE POSITIONS ({openPositions.length})
-          </div>
-          {openPositions.length === 0 ? (
-            <div className="text-xs text-gray-400 text-center py-2">No open positions</div>
-          ) : (
-            <div className="space-y-1.5">
-              {openPositions.map((pos) => (
-                <div key={pos.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${
-                      pos.side === "BACK"
-                        ? "bg-blue-100 text-blue-700"
-                        : "bg-pink-100 text-pink-700"
-                    }`}>
-                      {pos.side}
-                    </span>
-                    <span className="text-gray-700 truncate max-w-[80px]">
-                      {pos.player?.split(" ").pop()}
-                    </span>
-                  </div>
-                  <div className="font-mono text-gray-600">
-                    £{pos.stake?.toFixed(0)} @ {pos.entry_price?.toFixed(2)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ─── Unmatched Orders ─── */}
-        <div className="p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[10px] font-semibold tracking-wider uppercase text-gray-500">
-              UNMATCHED ({unmatchedOrders.length})
-            </div>
-            {unmatchedOrders.length > 0 && (
-              <button
-                onClick={onCancelAll}
-                disabled={tradeLoading}
-                className="text-[10px] font-semibold text-red-500 hover:text-red-600 disabled:opacity-50"
-              >
-                CANCEL ALL
-              </button>
-            )}
-          </div>
-          {unmatchedOrders.length === 0 ? (
-            <div className="text-xs text-gray-400 text-center py-2">No unmatched orders</div>
-          ) : (
-            <div className="space-y-1.5">
-              {unmatchedOrders.map((order) => {
-                const liability = calculateLiability(order.price, order.sizeRemaining, order.side);
-                return (
-                  <div key={order.displayId} className="flex items-center justify-between text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${
-                        order.side === "BACK"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-pink-100 text-pink-700"
-                      }`}>
-                        {order.side}
-                      </span>
-                      <span className="text-gray-700 truncate max-w-[60px]">
-                        {order.player.split(" ").pop()}
-                      </span>
-                      <span className="font-mono text-gray-500">
-                        £{order.sizeRemaining.toFixed(0)} @ {order.price.toFixed(2)}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => onCancelOrder(order.betId)}
-                      disabled={tradeLoading}
-                      className="text-red-500 hover:text-red-700 font-bold text-[10px] disabled:opacity-50"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {/* ─── Positions & Unmatched now in Trading State panel ─── */}
 
         {/* ─── Session P&L Summary ─── */}
         <div className="p-3">

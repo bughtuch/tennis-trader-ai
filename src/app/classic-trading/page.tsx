@@ -11,6 +11,7 @@ import { useBetfairStream } from "@/hooks/useBetfairStream";
 import { validateAndExecute, type ActionName, type TradeActionParams } from "@/lib/tradeActions";
 import ClassicLadder from "@/components/classic/ClassicLadder";
 import ClassicPositionPanel from "@/components/classic/ClassicPositionPanel";
+import ClassicTrustPanel from "@/components/classic/ClassicTrustPanel";
 import ClassicAIPanel from "@/components/classic/ClassicAIPanel";
 import { calculateLiabilityReduction } from "@/components/classic/ClassicLiabilityTools";
 import RealTradeConfirmModal from "@/components/RealTradeConfirmModal";
@@ -973,8 +974,6 @@ function ClassicTradingPage() {
   /* ─── Build props for position panel ─── */
   const positionPanel = (
     <ClassicPositionPanel
-      openPositions={openPositions}
-      unmatchedOrders={unmatchedDisplayOrders}
       player1Agg={p1Agg}
       player2Agg={p2Agg}
       player1Name={displayPlayers.player1.name}
@@ -985,12 +984,6 @@ function ClassicTradingPage() {
       player2PositionState={p2PositionState}
       outcomePnl={outcomePnl}
       onGreenUp={handleGreenUp}
-      onCancelOrder={async (betId) => {
-        if (marketId) await cancelOrder({ marketId, betId });
-      }}
-      onCancelAll={async () => {
-        if (marketId) await cancelOrder({ marketId });
-      }}
       tradeLoading={tradeLoading}
       closedTrades={tradeHistory}
       sessionPnl={sessionPnl}
@@ -1001,6 +994,25 @@ function ClassicTradingPage() {
       p2LayPrice={p2LayPrice}
       marketSuspended={marketBook?.status === "SUSPENDED"}
       onReduceLiability={handleReduceLiability}
+    />
+  );
+
+  const trustPanel = (
+    <ClassicTrustPanel
+      matchedPositions={openPositions}
+      unmatchedOrders={unmatchedDisplayOrders}
+      player1Agg={p1Agg}
+      player2Agg={p2Agg}
+      player1Name={displayPlayers.player1.name}
+      player2Name={displayPlayers.player2.name}
+      outcomePnl={outcomePnl}
+      onCancelOrder={async (betId) => {
+        if (marketId) await cancelOrder({ marketId, betId });
+      }}
+      onCancelAll={async () => {
+        if (marketId) await cancelOrder({ marketId });
+      }}
+      tradeLoading={tradeLoading}
     />
   );
 
@@ -1414,9 +1426,10 @@ function ClassicTradingPage() {
             />
           </div>
 
-          {/* Positions Panel — narrow sidebar */}
-          <div className="w-[260px] 2xl:w-[280px] shrink-0 min-w-0 overflow-hidden self-start">
+          {/* Positions + Trust Panel — narrow sidebar */}
+          <div className="w-[260px] 2xl:w-[280px] shrink-0 min-w-0 overflow-hidden self-start space-y-3">
             {positionPanel}
+            {trustPanel}
           </div>
         </div>
       </div>
@@ -1464,10 +1477,11 @@ function ClassicTradingPage() {
             recenterTrigger={recenterTrigger}
           />
         </div>
-        {/* AI + Positions row below ladders */}
-        <div className="grid grid-cols-2 gap-3 mx-auto mt-4">
+        {/* AI + Positions + Trust row below ladders */}
+        <div className="grid grid-cols-3 gap-3 mx-auto mt-4">
           <div>{aiPanel}</div>
           <div>{positionPanel}</div>
+          <div>{trustPanel}</div>
         </div>
       </div>
 
@@ -1538,7 +1552,7 @@ function ClassicTradingPage() {
               </div>
             </div>
           )}
-          {activeTab === "positions" && <div className="max-w-[600px] mx-auto">{positionPanel}</div>}
+          {activeTab === "positions" && <div className="max-w-[600px] mx-auto space-y-3">{positionPanel}{trustPanel}</div>}
           {activeTab === "ai" && <div className="max-w-[600px] mx-auto">{aiPanel}</div>}
         </div>
       </div>
