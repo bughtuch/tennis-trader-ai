@@ -155,8 +155,9 @@ function ClassicTradingPage() {
   } | null>(null);
 
   const activeStake = customStakeInput
-    ? Math.max(2, Number(customStakeInput) || 0)
+    ? (Number(customStakeInput) || 0)
     : selectedStake ?? 25;
+  const stakeBelowMin = activeStake > 0 && activeStake < 2;
 
   /* ─── Session timer ─── */
   const [sessionStart] = useState(() => Date.now());
@@ -1203,9 +1204,18 @@ function ClassicTradingPage() {
               placeholder="Custom"
               value={customStakeInput}
               onChange={(e) => { setCustomStakeInput(e.target.value); setSelectedStake(null); }}
-              className="w-16 sm:w-20 px-2 py-1 sm:py-1.5 rounded border border-gray-300 text-[11px] sm:text-xs font-mono text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+              className={`w-16 sm:w-20 px-2 py-1 sm:py-1.5 rounded border text-[11px] sm:text-xs font-mono text-gray-700 bg-white focus:outline-none focus:ring-1 ${
+                stakeBelowMin && customStakeInput
+                  ? "border-amber-400 focus:ring-amber-400"
+                  : "border-gray-300 focus:ring-blue-400"
+              }`}
             />
           </div>
+          {stakeBelowMin && customStakeInput && (
+            <span className="text-[10px] text-amber-600 font-medium">
+              Below Betfair £2 min
+            </span>
+          )}
           <button
             onClick={() => {
               if (tradingMode === "safe") {
