@@ -3,17 +3,17 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAppStore, type PriceSize } from "@/lib/store";
-import { calculateGreenUp, calculateLiability, moveByTicks, roundToTick } from "@/lib/tradingMaths";
+import { useAppStore } from "@/lib/store";
 import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
-import { validateAndExecute, type ActionName, type TradeActionParams } from "@/lib/tradeActions";
+import { validateAndExecute, type TradeActionParams } from "@/lib/tradeActions";
 import ClassicLadder from "@/components/classic/ClassicLadder";
 import ClassicPositionPanel from "@/components/classic/ClassicPositionPanel";
 import ClassicTrustPanel from "@/components/classic/ClassicTrustPanel";
 import ClassicAIPanel from "@/components/classic/ClassicAIPanel";
 import { calculateLiabilityReduction } from "@/components/classic/ClassicLiabilityTools";
+import { calculateMarketHedge } from "@/components/classic/ClassicMarketHedge";
 import RealTradeConfirmModal from "@/components/RealTradeConfirmModal";
 import { inferSurface, formatSetsToString, formatMatchStateForPrompt, type ScoreConfidence, type MatchStateForAI } from "@/lib/tennisContext";
 
@@ -52,27 +52,6 @@ interface UnmatchedDisplayOrder {
   sizeMatched: number;
   placedDate: string;
   isPartial: boolean;
-}
-
-/* ─── Position State Classification ─── */
-
-type PositionState = "open" | "free_bet" | "locked_green" | "locked_red";
-
-function classifyPositionState(
-  outcomePnl: { ifPlayer1Wins: number; ifPlayer2Wins: number } | null,
-  runner: "player1" | "player2",
-): PositionState {
-  if (!outcomePnl) return "open";
-  const ifThisWins = runner === "player1" ? outcomePnl.ifPlayer1Wins : outcomePnl.ifPlayer2Wins;
-  const ifThisLoses = runner === "player1" ? outcomePnl.ifPlayer2Wins : outcomePnl.ifPlayer1Wins;
-
-  // Both outcomes profitable → locked green
-  if (ifThisWins >= 0 && ifThisLoses >= 0) return "locked_green";
-  // One side zero/near-zero loss, other side profit → effective free bet
-  // Threshold: £0.50 — below this, effectively risk-free
-  if ((ifThisWins > 0 && ifThisLoses >= -0.50) || (ifThisLoses > 0 && ifThisWins >= -0.50))
-    return "free_bet";
-  return "open";
 }
 
 const STAKES = [5, 10, 25, 50, 100];
@@ -543,22 +522,10 @@ function ClassicTradingPage() {
   const p1Agg = getAggregatedPositionForRunner(runner0?.selectionId);
   const p2Agg = getAggregatedPositionForRunner(runner1?.selectionId);
 
-  /* ─── Green-up calculations ─── */
-  function getGreenUpForRunner(agg: ReturnType<typeof getAggregatedPositionForRunner>, currentLayPrice: number) {
-    if (!agg || agg.netSide === "FLAT" || agg.avgEntry <= 0) return null;
-    return calculateGreenUp(
-      agg.avgEntry, agg.netStake, agg.netSide as "BACK" | "LAY",
-      currentLayPrice > 0 ? currentLayPrice : agg.avgEntry,
-    );
-  }
-
   const p1LayPrice = runner0?.ex?.availableToLay?.[0]?.price ?? 0;
   const p1BackPrice = runner0?.ex?.availableToBack?.[0]?.price ?? 0;
   const p2LayPrice = runner1?.ex?.availableToLay?.[0]?.price ?? 0;
   const p2BackPrice = runner1?.ex?.availableToBack?.[0]?.price ?? 0;
-
-  const p1GreenUp = getGreenUpForRunner(p1Agg, p1LayPrice);
-  const p2GreenUp = getGreenUpForRunner(p2Agg, p2LayPrice);
 
   /* ─── Pressure per runner ─── */
   const p1Pressure = useMemo(() => calcPressure(runner0), [runner0]);
@@ -621,10 +588,6 @@ function ClassicTradingPage() {
       ifPlayer2Wins: Math.round(ifP2Wins * 100) / 100,
     };
   }, [openPositions, runner0, runner1]);
-
-  /* ─── Position state per runner ─── */
-  const p1PositionState = classifyPositionState(outcomePnl, "player1");
-  const p2PositionState = classifyPositionState(outcomePnl, "player2");
 
   /* ─── Add live position ─── */
   function addLivePosition(params: { marketId: string; selectionId: number; side: "BACK" | "LAY"; price: number; size: number; betId?: string }) {
@@ -690,26 +653,9 @@ function ClassicTradingPage() {
     }
   }
 
-  /* ─── Green-up handlers ─── */
-  async function handleGreenUp(runner: "player1" | "player2") {
-    if (!marketId) return;
-    const selId = runner === "player1" ? runner0?.selectionId : runner1?.selectionId;
-    const greenUp = runner === "player1" ? p1GreenUp : p2GreenUp;
-    const layPrice = runner === "player1" ? p1LayPrice : p2LayPrice;
-    const backPrice = runner === "player1" ? p1BackPrice : p2BackPrice;
-    if (!selId || !greenUp) return;
-
-    const gPrice = greenUp.greenUpSide === "LAY" ? layPrice : backPrice;
-    const result = await execAction({
-      actionName: "GREEN_UP", marketId, selectionId: selId,
-      side: greenUp.greenUpSide, price: gPrice, size: greenUp.greenUpStake,
-    });
-    if (result.success) {
-      const runnerPositions = openPositions.filter((p) => p.selection_id === String(selId));
-      for (const pos of runnerPositions) {
-        await closeTradeAsGreenUp(pos.id, gPrice, greenUp.equalProfit);
-      }
-    }
+  /* ─── Market hedge handler ─── */
+  async function handleMarketHedge(runner: "player1" | "player2", side: "BACK" | "LAY", price: number, stake: number) {
+    await handleReduceLiability(runner, side, price, stake);
   }
 
   /* ─── Liability reduction handler ─── */
@@ -853,10 +799,10 @@ function ClassicTradingPage() {
   stateRef.current = {
     activeStake, lastClickedRunner, isLive, marketId, runner0, runner1,
     placeTrade, isConnected, displayPlayers, setToast, setSelectedStake,
-    setCustomStakeInput, p1GreenUp, p2GreenUp, p1BackPrice, p1LayPrice,
+    setCustomStakeInput, p1BackPrice, p1LayPrice,
     p2BackPrice, p2LayPrice, openPositions, cancelOrder, unmatchedOrders,
-    marketBook, addPendingOrder, addLivePosition, execAction, closeTradeAsGreenUp,
-    tradingMode, setPendingRealTrade,
+    marketBook, addPendingOrder, addLivePosition, execAction,
+    tradingMode, setPendingRealTrade, outcomePnl, handleMarketHedge,
   };
 
   useEffect(() => {
@@ -918,26 +864,11 @@ function ClassicTradingPage() {
           }
           break;
         case "g": {
-          // Green up on last-clicked runner
-          const greenUp = s.lastClickedRunner === "player1" ? s.p1GreenUp : s.p2GreenUp;
-          const runner = s.lastClickedRunner === "player1" ? s.runner0 : s.runner1;
-          const layPrice = s.lastClickedRunner === "player1" ? s.p1LayPrice : s.p2LayPrice;
-          const backPrice = s.lastClickedRunner === "player1" ? s.p1BackPrice : s.p2BackPrice;
-          if (greenUp && s.marketId && runner && s.isLive) {
-            const gPrice = greenUp.greenUpSide === "LAY" ? layPrice : backPrice;
-            s.execAction({
-              actionName: "KEYBOARD_GREEN_UP", marketId: s.marketId, selectionId: runner.selectionId,
-              side: greenUp.greenUpSide, price: gPrice, size: greenUp.greenUpStake,
-            }).then((result: { success: boolean; betId?: string }) => {
-              if (result.success) {
-                const runnerPositions = s.openPositions.filter(
-                  (p: SupabaseTrade) => p.selection_id === String(runner.selectionId)
-                );
-                for (const pos of runnerPositions) {
-                  s.closeTradeAsGreenUp(pos.id, gPrice, greenUp.equalProfit);
-                }
-              }
-            });
+          // Market-level green-up
+          if (!s.outcomePnl || !s.isLive) break;
+          const mh = calculateMarketHedge(s.outcomePnl, s.p1LayPrice, s.p1BackPrice, s.p2LayPrice, s.p2BackPrice);
+          if (mh && mh.hedgeStake >= 2) {
+            s.handleMarketHedge(mh.hedgeRunner, mh.hedgeSide, mh.hedgePrice, mh.hedgeStake);
           }
           break;
         }
@@ -978,12 +909,8 @@ function ClassicTradingPage() {
       player2Agg={p2Agg}
       player1Name={displayPlayers.player1.name}
       player2Name={displayPlayers.player2.name}
-      player1GreenUp={p1GreenUp}
-      player2GreenUp={p2GreenUp}
-      player1PositionState={p1PositionState}
-      player2PositionState={p2PositionState}
       outcomePnl={outcomePnl}
-      onGreenUp={handleGreenUp}
+      onMarketHedge={handleMarketHedge}
       tradeLoading={tradeLoading}
       closedTrades={tradeHistory}
       sessionPnl={sessionPnl}
@@ -1052,133 +979,66 @@ function ClassicTradingPage() {
         )}
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        {/* GREEN P1 */}
+        {/* MARKET GREEN */}
         {(() => {
-          const hasPos = p1Agg && p1Agg.netSide !== "FLAT";
-          if (!hasPos) {
+          if (!hasAnyPosition || !outcomePnl) {
             return (
               <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
-                GREEN P1
+                MARKET GREEN
               </button>
             );
           }
-          if (p1PositionState === "locked_green") {
-            const locked = outcomePnl ? Math.min(outcomePnl.ifPlayer1Wins, outcomePnl.ifPlayer2Wins) : 0;
-            return (
-              <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                LOCKED +£{locked.toFixed(2)}
-              </span>
-            );
-          }
-          if (p1PositionState === "free_bet") {
-            if (p1GreenUp && p1GreenUp.equalProfit >= 0) {
-              return (
-                <button
-                  onClick={() => handleGreenUp("player1")}
-                  disabled={tradeLoading || isSuspended}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  LOCK {displayPlayers.player1.short} +£{p1GreenUp.equalProfit.toFixed(2)}
-                </button>
-              );
-            }
-            return (
-              <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                FREE BET · Upside running
-              </span>
-            );
-          }
-          // Min-stake check for open positions
-          if (p1GreenUp && p1GreenUp.greenUpStake < 2) {
-            return (
-              <span className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-200">
-                HEDGE &lt; £2 MIN
-              </span>
-            );
-          }
-          if (p1GreenUp) {
-            return (
-              <button
-                onClick={() => handleGreenUp("player1")}
-                disabled={tradeLoading || isSuspended}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
-                  p1GreenUp.equalProfit >= 0
-                    ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-200"
-                    : "bg-red-500 hover:bg-red-600 text-white"
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                GREEN {displayPlayers.player1.short} {p1GreenUp.equalProfit >= 0 ? "+" : ""}£{p1GreenUp.equalProfit.toFixed(2)}
-              </button>
-            );
-          }
-          return (
-            <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
-              GREEN P1
-            </button>
+          const mh = calculateMarketHedge(outcomePnl, p1LayPrice, p1BackPrice, p2LayPrice, p2BackPrice);
+          const diff = Math.abs(outcomePnl.ifPlayer1Wins - outcomePnl.ifPlayer2Wins);
+          const isGreened = diff < 0.02;
+          const isFreeBet = !isGreened && (
+            (outcomePnl.ifPlayer1Wins > 0.50 && outcomePnl.ifPlayer2Wins >= -0.50) ||
+            (outcomePnl.ifPlayer2Wins > 0.50 && outcomePnl.ifPlayer1Wins >= -0.50)
           );
-        })()}
-        {/* GREEN P2 */}
-        {(() => {
-          const hasPos = p2Agg && p2Agg.netSide !== "FLAT";
-          if (!hasPos) {
-            return (
-              <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
-                GREEN P2
-              </button>
-            );
-          }
-          if (p2PositionState === "locked_green") {
-            const locked = outcomePnl ? Math.min(outcomePnl.ifPlayer1Wins, outcomePnl.ifPlayer2Wins) : 0;
+
+          if (isGreened) {
             return (
               <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                LOCKED +£{locked.toFixed(2)}
+                GREENED +£{outcomePnl.ifPlayer1Wins.toFixed(2)}
               </span>
             );
           }
-          if (p2PositionState === "free_bet") {
-            if (p2GreenUp && p2GreenUp.equalProfit >= 0) {
-              return (
-                <button
-                  onClick={() => handleGreenUp("player2")}
-                  disabled={tradeLoading || isSuspended}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  LOCK {displayPlayers.player2.short} +£{p2GreenUp.equalProfit.toFixed(2)}
-                </button>
-              );
-            }
+          if (!mh) {
             return (
-              <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                FREE BET · Upside running
+              <span className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                HEDGE N/A
               </span>
             );
           }
-          // Min-stake check for open positions
-          if (p2GreenUp && p2GreenUp.greenUpStake < 2) {
+          if (mh.hedgeStake < 2) {
             return (
               <span className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-200">
                 HEDGE &lt; £2 MIN
               </span>
             );
           }
-          if (p2GreenUp) {
+          if (isFreeBet) {
             return (
               <button
-                onClick={() => handleGreenUp("player2")}
+                onClick={() => handleMarketHedge(mh.hedgeRunner, mh.hedgeSide, mh.hedgePrice, mh.hedgeStake)}
                 disabled={tradeLoading || isSuspended}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
-                  p2GreenUp.equalProfit >= 0
-                    ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-200"
-                    : "bg-red-500 hover:bg-red-600 text-white"
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                GREEN {displayPlayers.player2.short} {p2GreenUp.equalProfit >= 0 ? "+" : ""}£{p2GreenUp.equalProfit.toFixed(2)}
+                LOCK +£{mh.equalized.toFixed(2)}
               </button>
             );
           }
           return (
-            <button disabled className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-400 border border-emerald-200 cursor-not-allowed">
-              GREEN P2
+            <button
+              onClick={() => handleMarketHedge(mh.hedgeRunner, mh.hedgeSide, mh.hedgePrice, mh.hedgeStake)}
+              disabled={tradeLoading || isSuspended}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                mh.equalized >= 0
+                  ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-200"
+                  : "bg-red-500 hover:bg-red-600 text-white"
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {mh.equalized >= 0 ? "GREEN UP" : "HEDGE"} {mh.equalized >= 0 ? "+" : ""}£{mh.equalized.toFixed(2)}
             </button>
           );
         })()}
