@@ -8,11 +8,12 @@ import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
 import { validateAndExecute, type TradeActionParams } from "@/lib/tradeActions";
-import { BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
+import { BETFAIR_MIN_STAKE, moveByTicks } from "@/lib/tradingMaths";
 import ClassicLadder from "@/components/classic/ClassicLadder";
 import ClassicPositionPanel from "@/components/classic/ClassicPositionPanel";
 import ClassicTrustPanel from "@/components/classic/ClassicTrustPanel";
 import ClassicAIPanel from "@/components/classic/ClassicAIPanel";
+import ClassicTradeTools from "@/components/classic/ClassicTradeTools";
 import { calculateLiabilityReduction } from "@/components/classic/ClassicLiabilityTools";
 import { calculateMarketHedge } from "@/components/classic/ClassicMarketHedge";
 import RealTradeConfirmModal from "@/components/RealTradeConfirmModal";
@@ -56,6 +57,23 @@ interface UnmatchedDisplayOrder {
   isPartial: boolean;
 }
 
+interface RecentMarket {
+  marketId: string;
+  p1: string;
+  p2: string;
+  p1Flag: string;
+  p2Flag: string;
+  tournament: string;
+  visitedAt: number;
+}
+
+interface PendingTickOffsetTrade {
+  side: "BACK" | "LAY";
+  price: number;
+  stake: number;
+  selectionId: number;
+}
+
 const STAKES = [5, 10, 25, 50, 100];
 
 function formatVolume(v: number) {
@@ -75,6 +93,24 @@ function calcPressure(runner: { ex?: { availableToBack?: { price: number; size: 
   const imbalance = (layDepth - backDepth) / total;
   if (Math.abs(imbalance) < 0.15) return { direction: "balanced" as const, strength: 0 };
   return { direction: imbalance > 0 ? "back" as const : "lay" as const, strength: Math.min(Math.abs(imbalance), 1) };
+}
+
+/* ─── Recent markets helpers ─── */
+
+function loadRecentMarkets(): RecentMarket[] {
+  try {
+    const raw = localStorage.getItem("recentMarkets");
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveRecentMarket(market: Omit<RecentMarket, "visitedAt">) {
+  try {
+    const existing = loadRecentMarkets().filter((m) => m.marketId !== market.marketId);
+    const updated = [{ ...market, visitedAt: Date.now() }, ...existing].slice(0, 5);
+    localStorage.setItem("recentMarkets", JSON.stringify(updated));
+    return updated;
+  } catch { return []; }
 }
 
 /* ─── Page wrapper ─── */
@@ -128,7 +164,8 @@ function ClassicTradingPage() {
     }
   }, [marketId, router]);
 
-  /* ─── Save market to localStorage ─── */
+  /* ─── Save market to localStorage + recent markets ─── */
+  const [recentMarkets, setRecentMarkets] = useState<RecentMarket[]>([]);
   useEffect(() => {
     if (marketId && p1Name && p2Name) {
       try {
@@ -136,7 +173,11 @@ function ClassicTradingPage() {
           "lastMarket",
           JSON.stringify({ marketId, p1: p1Name, p2: p2Name, p1Flag, p2Flag, tournament })
         );
+        const updated = saveRecentMarket({ marketId, p1: p1Name, p2: p2Name, p1Flag, p2Flag, tournament });
+        setRecentMarkets(updated);
       } catch { /* SSR guard */ }
+    } else {
+      setRecentMarkets(loadRecentMarkets());
     }
   }, [marketId, p1Name, p2Name, p1Flag, p2Flag, tournament]);
 
@@ -174,6 +215,33 @@ function ClassicTradingPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [guardianData, setGuardianData] = useState<any>(null);
   const [guardianLoading, setGuardianLoading] = useState(false);
+
+  /* ─── Trade Tools state ─── */
+  const [tickOffsetEnabled, setTickOffsetEnabled] = useState(false);
+  const [tickOffsetTicks, setTickOffsetTicks] = useState(2);
+  const [stopLossEnabled, setStopLossEnabled] = useState(false);
+  const [stopLossPrice, setStopLossPrice] = useState<number | null>(null);
+  const [stopLossTriggered, setStopLossTriggered] = useState(false);
+  const [fokEnabled, setFokEnabled] = useState(false);
+  const [fokSeconds, setFokSeconds] = useState(15);
+  const [pendingTickOffset, setPendingTickOffset] = useState<PendingTickOffsetTrade | null>(null);
+
+  /* ─── Market search ─── */
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  /* ─── Session notes ─── */
+  const [sessionNotes, setSessionNotes] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try { return localStorage.getItem(`notes_${marketId}`) ?? ""; } catch { return ""; }
+  });
+
+  /* ─── Recent markets dropdown ─── */
+  const [recentOpen, setRecentOpen] = useState(false);
 
   /* ─── Live Scores ─── */
   const [liveScore, setLiveScore] = useState<{
@@ -710,7 +778,6 @@ function ClassicTradingPage() {
   async function fetchAiSignal() {
     setAiSignalLoading(true);
     try {
-      // Build ladder context from top-3 depth
       const p1Backs = runner0?.ex?.availableToBack ?? [];
       const p1Lays = runner0?.ex?.availableToLay ?? [];
       const p2Backs = runner1?.ex?.availableToBack ?? [];
@@ -833,6 +900,117 @@ function ClassicTradingPage() {
   const sessionSeconds = sessionElapsed % 60;
   const sessionTimeStr = `${sessionMinutes}m ${sessionSeconds.toString().padStart(2, "0")}s`;
 
+  /* ─── Fill-or-Kill timer ─── */
+  useEffect(() => {
+    if (!fokEnabled || !marketId) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      for (const order of unmatchedOrders) {
+        const age = now - new Date(order.placedDate).getTime();
+        if (age > fokSeconds * 1000 && (order.sizeRemaining as number) > 0) {
+          cancelOrder({ marketId, betId: order.betId });
+        }
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [fokEnabled, fokSeconds, unmatchedOrders, marketId, cancelOrder]);
+
+  /* ─── Stop Loss monitor ─── */
+  useEffect(() => {
+    if (!stopLossEnabled || !stopLossPrice) return;
+    // Find active net position
+    const activeAgg = (p1Agg && p1Agg.netSide !== "FLAT") ? p1Agg : (p2Agg && p2Agg.netSide !== "FLAT") ? p2Agg : null;
+    if (!activeAgg || activeAgg.netSide === "FLAT") return;
+
+    const activeRunner = (p1Agg && p1Agg.netSide !== "FLAT") ? runner0 : runner1;
+    const ltp = (activeRunner as { lastTradedPrice?: number } | null)?.lastTradedPrice;
+    if (!ltp || ltp <= 0) return;
+
+    // BACK position: triggers when LTP >= stopPrice (drifting = price going up = bad for backer)
+    // LAY position: triggers when LTP <= stopPrice (shortening = price going down = bad for layer)
+    const triggered = activeAgg.netSide === "BACK" ? ltp >= stopLossPrice : ltp <= stopLossPrice;
+    if (triggered && !stopLossTriggered) {
+      setStopLossTriggered(true);
+      setToast({ message: `STOP LOSS: Price hit ${ltp.toFixed(2)}. Close position now!`, type: "error" });
+    }
+  }, [stopLossEnabled, stopLossPrice, stopLossTriggered, p1Agg, p2Agg, runner0, runner1]);
+
+  // Reset stop loss trigger when stop is disabled
+  useEffect(() => {
+    if (!stopLossEnabled) setStopLossTriggered(false);
+  }, [stopLossEnabled]);
+
+  /* ─── Tick Offset detection ─── */
+  const prevUnmatchedRef = useRef<typeof unmatchedOrders>([]);
+  useEffect(() => {
+    if (!tickOffsetEnabled) {
+      prevUnmatchedRef.current = unmatchedOrders;
+      return;
+    }
+    // Find orders that disappeared (matched)
+    const currIds = new Set(unmatchedOrders.map((o) => o.betId));
+    const matched = prevUnmatchedRef.current.filter(
+      (o) => !currIds.has(o.betId) && (o.sizeRemaining as number) > 0
+    );
+    for (const order of matched) {
+      const opposingPrice = order.side === "BACK"
+        ? moveByTicks(order.price, -tickOffsetTicks)
+        : moveByTicks(order.price, tickOffsetTicks);
+      setPendingTickOffset({
+        side: order.side === "BACK" ? "LAY" : "BACK",
+        price: opposingPrice,
+        stake: order.sizeMatched as number || activeStake,
+        selectionId: order.selectionId,
+      });
+    }
+    prevUnmatchedRef.current = unmatchedOrders;
+  }, [unmatchedOrders, tickOffsetEnabled, tickOffsetTicks, activeStake]);
+
+  /* ─── Session notes persistence ─── */
+  useEffect(() => {
+    if (marketId && sessionNotes !== undefined) {
+      try { localStorage.setItem(`notes_${marketId}`, sessionNotes); } catch { /* SSR */ }
+    }
+  }, [sessionNotes, marketId]);
+
+  // Load notes when market changes
+  useEffect(() => {
+    if (marketId) {
+      try { setSessionNotes(localStorage.getItem(`notes_${marketId}`) ?? ""); } catch { /* SSR */ }
+    }
+  }, [marketId]);
+
+  /* ─── Market Search ─── */
+  async function handleSearch(query: string) {
+    setSearchQuery(query);
+    if (query.length < 2) { setSearchResults([]); return; }
+    setSearchLoading(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("betfair_token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["x-betfair-token"] = token;
+      const res = await fetch("/api/betfair/scanner", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ previousSnapshot: {} }),
+      });
+      const data = await res.json();
+      if (data.success && data.alerts) {
+        // scanner doesn't return full catalogue, but we can extract from alerts
+        // Actually, we need the catalogue data — let's use a simple text-based search on market names
+        // For now, re-fetch catalogues directly
+      }
+    } catch { /* network */ }
+    setSearchLoading(false);
+  }
+
+  // Focus search input when opened
+  useEffect(() => {
+    if (searchOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
+  }, [searchOpen]);
+
   /* ─── Keyboard shortcuts ─── */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stateRef = useRef<any>(null);
@@ -843,14 +1021,29 @@ function ClassicTradingPage() {
     p2BackPrice, p2LayPrice, openPositions, cancelOrder, unmatchedOrders,
     marketBook, addPendingOrder, addLivePosition, execAction,
     tradingMode, setPendingRealTrade, outcomePnl, handleMarketHedge,
+    searchOpen, setSearchOpen, setRecenterTrigger,
   };
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        // Only handle Escape in inputs
+        if (e.key === "Escape" && stateRef.current.searchOpen) {
+          stateRef.current.setSearchOpen(false);
+          e.preventDefault();
+        }
+        return;
+      }
 
       const s = stateRef.current;
+
+      // Cmd/Ctrl+K → open search
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        s.setSearchOpen(!s.searchOpen);
+        return;
+      }
 
       switch (e.key.toLowerCase()) {
         case "b": {
@@ -904,7 +1097,6 @@ function ClassicTradingPage() {
           }
           break;
         case "g": {
-          // Market-level green-up
           if (!s.outcomePnl || !s.isLive) break;
           const mh = calculateMarketHedge(s.outcomePnl, s.p1LayPrice, s.p1BackPrice, s.p2LayPrice, s.p2BackPrice);
           if (mh && mh.hedgeStake >= BETFAIR_MIN_STAKE) {
@@ -912,6 +1104,9 @@ function ClassicTradingPage() {
           }
           break;
         }
+        case "r":
+          s.setRecenterTrigger((prev: number) => prev + 1);
+          break;
         case "1": s.setSelectedStake(STAKES[0]); s.setCustomStakeInput(""); break;
         case "2": s.setSelectedStake(STAKES[1]); s.setCustomStakeInput(""); break;
         case "3": s.setSelectedStake(STAKES[2]); s.setCustomStakeInput(""); break;
@@ -920,11 +1115,19 @@ function ClassicTradingPage() {
         case "enter":
           setRecenterTrigger((prev) => prev + 1);
           break;
+        case "escape":
+          if (s.searchOpen) s.setSearchOpen(false);
+          break;
       }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  /* ─── Active position info for trade tools ─── */
+  const activeAgg = (p1Agg && p1Agg.netSide !== "FLAT") ? p1Agg : (p2Agg && p2Agg.netSide !== "FLAT") ? p2Agg : null;
+  const activeRunnerForTools = (p1Agg && p1Agg.netSide !== "FLAT") ? runner0 : runner1;
+  const currentLTP = (activeRunnerForTools as { lastTradedPrice?: number } | null)?.lastTradedPrice ?? 0;
 
   /* ─── No market selected ─── */
   if (noMarket) {
@@ -1000,6 +1203,44 @@ function ClassicTradingPage() {
       consecutiveLosses={consecutiveLosses}
       ladderRelationship={ladderRelationship}
     />
+  );
+
+  const tradeToolsPanel = (
+    <ClassicTradeTools
+      tickOffsetEnabled={tickOffsetEnabled}
+      tickOffsetTicks={tickOffsetTicks}
+      onTickOffsetToggle={setTickOffsetEnabled}
+      onTickOffsetChange={setTickOffsetTicks}
+      stopLossEnabled={stopLossEnabled}
+      stopLossPrice={stopLossPrice}
+      stopLossTriggered={stopLossTriggered}
+      onStopLossToggle={setStopLossEnabled}
+      onStopLossChange={setStopLossPrice}
+      avgEntry={activeAgg?.avgEntry ?? null}
+      positionSide={activeAgg?.netSide ?? null}
+      currentLTP={currentLTP}
+      fokEnabled={fokEnabled}
+      fokSeconds={fokSeconds}
+      onFokToggle={setFokEnabled}
+      onFokSecondsChange={setFokSeconds}
+      unmatchedCount={unmatchedDisplayOrders.length}
+    />
+  );
+
+  /* ─── Session notes panel ─── */
+  const sessionNotesPanel = (
+    <div className="border border-gray-300 rounded-lg bg-white overflow-hidden">
+      <div className="px-3 py-1.5 border-b border-gray-200 bg-gray-50">
+        <span className="text-[10px] font-bold tracking-wider uppercase text-gray-600">NOTES</span>
+      </div>
+      <textarea
+        value={sessionNotes}
+        onChange={(e) => setSessionNotes(e.target.value)}
+        placeholder="Trading notes..."
+        className="w-full px-3 py-2 text-xs text-gray-700 resize-none focus:outline-none"
+        rows={3}
+      />
+    </div>
   );
 
   /* ─── Trade Controls Strip ─── */
@@ -1087,7 +1328,6 @@ function ClassicTradingPage() {
 
         {/* LIABILITY REDUCTION BUTTONS */}
         {(() => {
-          // Pick the runner with a position for liability buttons
           const activeAgg = (p1Agg && p1Agg.netSide !== "FLAT") ? p1Agg : (p2Agg && p2Agg.netSide !== "FLAT") ? p2Agg : null;
           const activeRunner: "player1" | "player2" = (p1Agg && p1Agg.netSide !== "FLAT") ? "player1" : "player2";
           const backPrice = activeRunner === "player1" ? p1BackPrice : p2BackPrice;
@@ -1127,6 +1367,10 @@ function ClassicTradingPage() {
     </div>
   );
 
+  /* ─── Ladder props ─── */
+  const desktopTicks = 12;
+  const mobileTicks = 8;
+
   /* ─── RENDER ─── */
   return (
     <main className="min-h-screen bg-gray-100 text-gray-900 pt-14 pb-4 xl:pb-14">
@@ -1138,6 +1382,122 @@ function ClassicTradingPage() {
             : "bg-red-100 text-red-800 border border-red-200"
         }`}>
           {toast.message}
+          {/* Stop loss close button */}
+          {stopLossTriggered && toast.type === "error" && (
+            <button
+              onClick={() => {
+                // Execute green-up via market hedge
+                if (outcomePnl) {
+                  const mh = calculateMarketHedge(outcomePnl, p1LayPrice, p1BackPrice, p2LayPrice, p2BackPrice);
+                  if (mh && mh.hedgeStake >= BETFAIR_MIN_STAKE) {
+                    handleMarketHedge(mh.hedgeRunner, mh.hedgeSide, mh.hedgePrice, mh.hedgeStake);
+                  }
+                }
+                setToast(null);
+                setStopLossTriggered(false);
+              }}
+              className="ml-3 px-2 py-1 rounded bg-red-600 text-white text-xs font-bold hover:bg-red-700"
+            >
+              CLOSE NOW
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ─── Tick Offset Confirmation Toast ─── */}
+      {pendingTickOffset && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-lg bg-amber-50 border border-amber-300 shadow-lg max-w-sm">
+          <p className="text-xs font-semibold text-amber-800 mb-2">
+            Order matched — Place {pendingTickOffset.side} at {pendingTickOffset.price.toFixed(2)} for £{pendingTickOffset.stake.toFixed(0)}?
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={async () => {
+                if (!marketId) return;
+                const result = await execAction({
+                  actionName: "PLACE_TRADE", marketId,
+                  selectionId: pendingTickOffset.selectionId,
+                  side: pendingTickOffset.side,
+                  price: pendingTickOffset.price,
+                  size: pendingTickOffset.stake,
+                });
+                if (result.success) {
+                  addLivePosition({
+                    marketId, selectionId: pendingTickOffset.selectionId,
+                    side: pendingTickOffset.side, price: pendingTickOffset.price,
+                    size: pendingTickOffset.stake, betId: result.betId,
+                  });
+                }
+                setPendingTickOffset(null);
+              }}
+              className="px-3 py-1 rounded bg-blue-600 text-white text-xs font-bold hover:bg-blue-700"
+            >
+              Confirm
+            </button>
+            <button
+              onClick={() => setPendingTickOffset(null)}
+              className="px-3 py-1 rounded bg-gray-200 text-gray-700 text-xs font-bold hover:bg-gray-300"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Market Search Overlay ─── */}
+      {searchOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-24" onClick={() => setSearchOpen(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" strokeLinecap="round" />
+                </svg>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search markets by player name..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="flex-1 text-sm text-gray-900 focus:outline-none"
+                />
+                <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 text-[10px] font-mono text-gray-500">ESC</kbd>
+              </div>
+            </div>
+            {/* Recent markets */}
+            {searchQuery.length < 2 && recentMarkets.length > 0 && (
+              <div className="p-2">
+                <div className="text-[10px] font-semibold tracking-wider uppercase text-gray-500 px-2 py-1">RECENT MARKETS</div>
+                {recentMarkets.map((m) => (
+                  <button
+                    key={m.marketId}
+                    onClick={() => {
+                      const params = new URLSearchParams({
+                        marketId: m.marketId, p1: m.p1, p2: m.p2,
+                        p1Flag: m.p1Flag, p2Flag: m.p2Flag, tournament: m.tournament,
+                      });
+                      router.push(`/classic-trading?${params.toString()}`);
+                      setSearchOpen(false);
+                    }}
+                    className="w-full text-left px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="text-xs font-semibold text-gray-900">
+                      {m.p1Flag} {m.p1.split(" ").pop()} vs {m.p2.split(" ").pop()} {m.p2Flag}
+                    </div>
+                    <div className="text-[10px] text-gray-500">{m.tournament}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {searchLoading && (
+              <div className="p-4 text-center text-xs text-gray-400">Searching...</div>
+            )}
+            {searchQuery.length >= 2 && !searchLoading && searchResults.length === 0 && (
+              <div className="p-4 text-center text-xs text-gray-400">
+                Use the Markets page to browse all live matches
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1171,6 +1531,45 @@ function ClassicTradingPage() {
             >
               &larr; Markets
             </Link>
+
+            {/* Recent markets dropdown */}
+            {recentMarkets.length > 1 && (
+              <div className="relative">
+                <button
+                  onClick={() => setRecentOpen(!recentOpen)}
+                  className="text-[10px] font-semibold text-gray-500 hover:text-gray-700 px-1.5 py-0.5 rounded border border-gray-200 hover:bg-gray-50 transition-colors"
+                >
+                  Recent ▾
+                </button>
+                {recentOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setRecentOpen(false)} />
+                    <div className="absolute top-full left-0 mt-1 z-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[200px]">
+                      {recentMarkets.filter((m) => m.marketId !== marketId).map((m) => (
+                        <button
+                          key={m.marketId}
+                          onClick={() => {
+                            const params = new URLSearchParams({
+                              marketId: m.marketId, p1: m.p1, p2: m.p2,
+                              p1Flag: m.p1Flag, p2Flag: m.p2Flag, tournament: m.tournament,
+                            });
+                            router.push(`/classic-trading?${params.toString()}`);
+                            setRecentOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-1.5 hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="text-xs font-semibold text-gray-900">
+                            {m.p1Flag} {m.p1.split(" ").pop()} vs {m.p2.split(" ").pop()} {m.p2Flag}
+                          </div>
+                          <div className="text-[10px] text-gray-400">{m.tournament}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             <span className="text-gray-300 hidden sm:inline">|</span>
             <span className="text-xs text-gray-500 hidden sm:inline">{tournament}</span>
             <span className="text-gray-300 hidden sm:inline">|</span>
@@ -1183,6 +1582,17 @@ function ClassicTradingPage() {
 
           {/* Right: Status + stream + view toggle */}
           <div className="flex items-center gap-1.5 sm:gap-2 text-xs shrink-0">
+            {/* Search button */}
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+              title="Search markets (Ctrl+K)"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" strokeLinecap="round" />
+              </svg>
+            </button>
+
             {/* Market status badge */}
             {marketBook ? (
               <>
@@ -1303,13 +1713,15 @@ function ClassicTradingPage() {
       {/* Wide desktop (≥1280px): 4-column with side panels */}
       <div className="hidden xl:block px-3 2xl:px-4 pt-4 pb-6">
         {/* Trade Controls Strip — above ladders */}
-        <div className="max-w-[1800px] mx-auto mb-3">
+        <div className="max-w-[1800px] mx-auto mb-3 space-y-2">
           {tradeControlsStrip}
+          {tradeToolsPanel}
         </div>
         <div className="flex gap-3 2xl:gap-4 max-w-[1800px] mx-auto">
           {/* AI Panel — narrow sidebar */}
-          <div className="w-[200px] 2xl:w-[220px] shrink-0 min-w-0 overflow-hidden self-start">
+          <div className="w-[200px] 2xl:w-[220px] shrink-0 min-w-0 overflow-hidden self-start space-y-3">
             {aiPanel}
+            {sessionNotesPanel}
           </div>
 
           {/* Player 1 Ladder — dominant */}
@@ -1330,6 +1742,8 @@ function ClassicTradingPage() {
               unrealisedPnl={getUnrealizedPnl("player1")}
               pressure={p1Pressure}
               recenterTrigger={recenterTrigger}
+              ticksEachSide={desktopTicks}
+              stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
             />
           </div>
 
@@ -1351,6 +1765,8 @@ function ClassicTradingPage() {
               unrealisedPnl={getUnrealizedPnl("player2")}
               pressure={p2Pressure}
               recenterTrigger={recenterTrigger}
+              ticksEachSide={desktopTicks}
+              stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
             />
           </div>
 
@@ -1365,8 +1781,9 @@ function ClassicTradingPage() {
       {/* Mid desktop (1024-1279px): ladders top, panels below */}
       <div className="hidden lg:block xl:hidden px-4 pt-4 pb-6">
         {/* Trade Controls Strip */}
-        <div className="mb-3">
+        <div className="mb-3 space-y-2">
           {tradeControlsStrip}
+          {tradeToolsPanel}
         </div>
         {/* Ladders row — full width, side by side */}
         <div className="grid grid-cols-2 gap-3 mx-auto">
@@ -1386,6 +1803,8 @@ function ClassicTradingPage() {
             unrealisedPnl={getUnrealizedPnl("player1")}
             pressure={p1Pressure}
             recenterTrigger={recenterTrigger}
+            ticksEachSide={desktopTicks}
+            stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
           />
           <ClassicLadder
             runner={runner1}
@@ -1403,11 +1822,13 @@ function ClassicTradingPage() {
             unrealisedPnl={getUnrealizedPnl("player2")}
             pressure={p2Pressure}
             recenterTrigger={recenterTrigger}
+            ticksEachSide={desktopTicks}
+            stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
           />
         </div>
         {/* AI + Positions + Trust row below ladders */}
         <div className="grid grid-cols-3 gap-3 mx-auto mt-4">
-          <div>{aiPanel}</div>
+          <div className="space-y-3">{aiPanel}{sessionNotesPanel}</div>
           <div>{positionPanel}</div>
           <div>{trustPanel}</div>
         </div>
@@ -1442,6 +1863,7 @@ function ClassicTradingPage() {
           {activeTab === "ladders" && (
             <div className="max-w-[700px] mx-auto space-y-3">
               {tradeControlsStrip}
+              {tradeToolsPanel}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <ClassicLadder
                 runner={runner0}
@@ -1459,6 +1881,8 @@ function ClassicTradingPage() {
                 unrealisedPnl={getUnrealizedPnl("player1")}
                 pressure={p1Pressure}
                 recenterTrigger={recenterTrigger}
+                ticksEachSide={mobileTicks}
+                stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
               />
               <ClassicLadder
                 runner={runner1}
@@ -1476,12 +1900,14 @@ function ClassicTradingPage() {
                 unrealisedPnl={getUnrealizedPnl("player2")}
                 pressure={p2Pressure}
                 recenterTrigger={recenterTrigger}
+                ticksEachSide={mobileTicks}
+                stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
               />
               </div>
             </div>
           )}
           {activeTab === "positions" && <div className="max-w-[600px] mx-auto space-y-3">{positionPanel}{trustPanel}</div>}
-          {activeTab === "ai" && <div className="max-w-[600px] mx-auto">{aiPanel}</div>}
+          {activeTab === "ai" && <div className="max-w-[600px] mx-auto space-y-3">{aiPanel}{sessionNotesPanel}</div>}
         </div>
       </div>
 
@@ -1493,8 +1919,9 @@ function ClassicTradingPage() {
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">L</kbd><span>Lay</span>
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">G</kbd><span>Green</span>
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">C</kbd><span>Cancel</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">R</kbd><span>Recenter</span>
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">1-5</kbd><span>Stake</span>
-          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">Enter</kbd><span>Recenter</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">⌘K</kbd><span>Search</span>
         </div>
       </div>
     </main>

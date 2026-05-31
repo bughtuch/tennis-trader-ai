@@ -1,9 +1,18 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { type PriceSize } from "@/lib/store";
 import { type BetfairRunner } from "@/lib/store";
 import { roundToTick, moveByTicks } from "@/lib/tradingMaths";
+
+/* ─── Helpers ─── */
+
+function formatTradedVolume(v: number): string {
+  if (v >= 1_000_000) return `£${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `£${Math.round(v / 1_000)}K`;
+  if (v > 0) return `£${Math.round(v)}`;
+  return "";
+}
 
 /* ─── Types ─── */
 
@@ -14,6 +23,8 @@ interface LadderRow {
   isLastTraded: boolean;
   isBestBack: boolean;
   isBestLay: boolean;
+  tradedVolume: number;
+  pnl: number | null; // null = FLAT / no position
 }
 
 interface ClassicLadderProps {
@@ -30,6 +41,9 @@ interface ClassicLadderProps {
   unrealisedPnl?: number | null;
   pressure?: { direction: "back" | "lay" | "balanced"; strength: number };
   recenterTrigger?: number;
+  ticksEachSide?: number;
+  stopLossPrice?: number | null;
+  autoCenter?: boolean;
 }
 
 /* ─── Component ─── */
@@ -48,14 +62,45 @@ export default function ClassicLadder({
   unrealisedPnl,
   pressure,
   recenterTrigger,
+  ticksEachSide = 8,
+  stopLossPrice,
+  autoCenter = true,
 }: ClassicLadderProps) {
   /* ─── Recenter state ─── */
   const [manualCenter, setManualCenter] = useState<number | null>(null);
   const recenterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /* ─── Price flash state ─── */
+  const [flashDir, setFlashDir] = useState<"up" | "down" | null>(null);
+  const prevLTPRef = useRef<number>(0);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const currentLTP = (runner as { lastTradedPrice?: number } | null)?.lastTradedPrice ?? 0;
+
   useEffect(() => {
-    if (!recenterTrigger || recenterTrigger === 0) return;
-    const ltp = (runner as { lastTradedPrice?: number } | null)?.lastTradedPrice;
+    if (currentLTP <= 0 || prevLTPRef.current <= 0) {
+      prevLTPRef.current = currentLTP;
+      return;
+    }
+    if (currentLTP !== prevLTPRef.current) {
+      const dir = currentLTP < prevLTPRef.current ? "up" : "down"; // shortening = price drops = green
+      setFlashDir(dir);
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = setTimeout(() => setFlashDir(null), 600);
+      prevLTPRef.current = currentLTP;
+    }
+  }, [currentLTP]);
+
+  /* ─── Auto-center: continuously track LTP ─── */
+  useEffect(() => {
+    if (!autoCenter) return;
+    // When autoCenter is on, clear manual center so ladder tracks LTP naturally
+    setManualCenter(null);
+  }, [autoCenter, currentLTP]);
+
+  /* ─── Manual recenter ─── */
+  const handleRecenter = useCallback(() => {
+    const ltp = currentLTP;
     const backs = runner?.ex?.availableToBack ?? [];
     const lays = runner?.ex?.availableToLay ?? [];
     const bestBack = backs[0]?.price ?? 0;
@@ -70,20 +115,43 @@ export default function ClassicLadder({
       if (recenterTimeoutRef.current) clearTimeout(recenterTimeoutRef.current);
       recenterTimeoutRef.current = setTimeout(() => setManualCenter(null), 5000);
     }
+  }, [currentLTP, runner]);
+
+  useEffect(() => {
+    if (!recenterTrigger || recenterTrigger === 0) return;
+    handleRecenter();
     return () => {
       if (recenterTimeoutRef.current) clearTimeout(recenterTimeoutRef.current);
     };
-  }, [recenterTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [recenterTrigger, handleRecenter]);
+
+  /* ─── Build traded volume map ─── */
+  const tvMap = useMemo(() => {
+    const map = new Map<number, number>();
+    const tv = runner?.ex?.tradedVolume;
+    if (!tv) return map;
+    for (const ps of tv) {
+      map.set(ps.price, (map.get(ps.price) ?? 0) + ps.size);
+    }
+    return map;
+  }, [runner?.ex?.tradedVolume]);
 
   /* Build ladder rows from runner exchange data */
   const ladderRows = useMemo((): LadderRow[] => {
+    const calcPnl = (price: number): number | null => {
+      if (!netPosition || netPosition.side === "FLAT" || netPosition.stake <= 0 || netPosition.avgEntry <= 0) return null;
+      if (netPosition.side === "BACK") {
+        return netPosition.stake * (netPosition.avgEntry / price - 1);
+      } else {
+        return netPosition.stake * (1 - netPosition.avgEntry / price);
+      }
+    };
+
     if (!runner?.ex) {
-      // Fallback: build from playerOdds if available
       if (!playerOdds || playerOdds <= 1.01) return [];
       const center = roundToTick(playerOdds);
-      const TICKS = 8;
-      const low = moveByTicks(center, -TICKS);
-      const high = moveByTicks(center, TICKS);
+      const low = moveByTicks(center, -ticksEachSide);
+      const high = moveByTicks(center, ticksEachSide);
       const rows: LadderRow[] = [];
       let tick = roundToTick(low);
       while (tick <= high) {
@@ -94,6 +162,8 @@ export default function ClassicLadder({
           isLastTraded: tick === center,
           isBestBack: false,
           isBestLay: false,
+          tradedVolume: 0,
+          pnl: calcPnl(tick),
         });
         const next = moveByTicks(tick, 1);
         if (next <= tick) break;
@@ -119,14 +189,15 @@ export default function ClassicLadder({
     const lastTradedPrice = (runner as { lastTradedPrice?: number }).lastTradedPrice ?? 0;
 
     const centerPrice = manualCenter ?? roundToTick(
-      bestBackPrice && bestLayPrice
-        ? (bestBackPrice + bestLayPrice) / 2
-        : bestBackPrice || bestLayPrice || 2.0,
+      lastTradedPrice > 0
+        ? lastTradedPrice
+        : bestBackPrice && bestLayPrice
+          ? (bestBackPrice + bestLayPrice) / 2
+          : bestBackPrice || bestLayPrice || 2.0,
     );
 
-    const TICKS_EACH_SIDE = 8;
-    const ladderLow = moveByTicks(centerPrice, -TICKS_EACH_SIDE);
-    const ladderHigh = moveByTicks(centerPrice, TICKS_EACH_SIDE);
+    const ladderLow = moveByTicks(centerPrice, -ticksEachSide);
+    const ladderHigh = moveByTicks(centerPrice, ticksEachSide);
 
     const rows: LadderRow[] = [];
     let tick = roundToTick(ladderLow);
@@ -140,13 +211,15 @@ export default function ClassicLadder({
           : tick === bestBackPrice,
         isBestBack: tick === bestBackPrice,
         isBestLay: tick === bestLayPrice,
+        tradedVolume: tvMap.get(tick) ?? 0,
+        pnl: calcPnl(tick),
       });
       const next = moveByTicks(tick, 1);
       if (next <= tick) break;
       tick = next;
     }
     return rows;
-  }, [runner, playerOdds, manualCenter]);
+  }, [runner, playerOdds, manualCenter, ticksEachSide, netPosition, tvMap]);
 
   const maxSize = ladderRows.length > 0
     ? Math.max(...ladderRows.map((r) => Math.max(r.backSize, r.laySize)), 1)
@@ -155,7 +228,7 @@ export default function ClassicLadder({
   return (
     <div className="border border-gray-300 rounded-lg overflow-hidden bg-white">
       {/* Header */}
-      <div className="px-3 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+      <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-bold text-gray-900 truncate max-w-[100px] sm:max-w-[160px]">
             {playerName}
@@ -186,7 +259,7 @@ export default function ClassicLadder({
 
       {/* Pressure indicator */}
       {pressure && (
-        <div className="text-[10px] font-medium tracking-[0.15em] uppercase text-center py-1 border-b border-gray-100">
+        <div className="text-[10px] font-medium tracking-[0.15em] uppercase text-center py-0.5 border-b border-gray-100">
           {pressure.direction === "back" ? (
             <span className="text-blue-500/60">&uarr; BACK PRESSURE</span>
           ) : pressure.direction === "lay" ? (
@@ -198,10 +271,11 @@ export default function ClassicLadder({
       )}
 
       {/* Column headers */}
-      <div className="grid grid-cols-3 text-center text-[11px] font-semibold tracking-[0.12em] uppercase border-b border-gray-200 bg-gray-50">
-        <div className="py-1.5 text-blue-600">BACK</div>
-        <div className="py-1.5 text-gray-500">PRICE</div>
-        <div className="py-1.5 text-pink-600">LAY</div>
+      <div className="grid grid-cols-[1fr_auto_auto_1fr] text-center text-[10px] font-semibold tracking-[0.12em] uppercase border-b border-gray-200 bg-gray-50">
+        <div className="py-1 text-blue-600">BACK</div>
+        <div className="py-1 text-gray-500 w-[60px] sm:w-[68px]">PRICE</div>
+        <div className="py-1 text-gray-500 w-[32px] hidden sm:block">P&L</div>
+        <div className="py-1 text-pink-600">LAY</div>
       </div>
 
       {/* Ladder rows */}
@@ -215,18 +289,27 @@ export default function ClassicLadder({
             const unmatchedAtPrice = unmatchedByPrice.get(row.price);
             const hasUnmatchedBack = (unmatchedAtPrice?.backSize ?? 0) > 0;
             const hasUnmatchedLay = (unmatchedAtPrice?.laySize ?? 0) > 0;
+            const isStopLoss = stopLossPrice != null && row.price === roundToTick(stopLossPrice);
+
+            // Flash: only on LTP row
+            const isFlashRow = row.isLastTraded && flashDir != null;
+            const flashBg = isFlashRow
+              ? flashDir === "up" ? "bg-green-100" : "bg-red-100"
+              : "";
 
             return (
               <div
                 key={row.price}
-                className="grid grid-cols-3 items-center border-b border-gray-100 last:border-b-0"
-                style={{ height: "36px" }}
+                className={`grid grid-cols-[1fr_auto_auto_1fr] items-center border-b border-gray-100 last:border-b-0 transition-colors duration-300 ${flashBg} ${
+                  isStopLoss ? "ring-1 ring-inset ring-red-400 ring-dashed" : ""
+                }`}
+                style={{ height: "30px" }}
               >
                 {/* BACK cell */}
                 <button
                   onClick={() => onTrade(row.price, "BACK")}
                   disabled={tradeLoading || !isConnected}
-                  className={`h-full relative text-right pr-3 font-mono [font-variant-numeric:tabular-nums] text-sm transition-colors ${
+                  className={`h-full relative text-right pr-2 font-mono [font-variant-numeric:tabular-nums] text-xs transition-colors ${
                     row.isBestBack
                       ? "bg-blue-200 hover:bg-blue-300 font-semibold text-blue-900"
                       : row.backSize > 0
@@ -244,28 +327,43 @@ export default function ClassicLadder({
                   <span className="relative z-10">
                     {row.backSize > 0 ? `£${row.backSize}` : ""}
                   </span>
-                  {/* Unmatched indicator */}
                   {hasUnmatchedBack && (
-                    <span className="absolute top-1 left-1 w-1.5 h-1.5 rounded-full bg-amber-500 z-10" />
+                    <span className="absolute top-0.5 left-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 z-10" />
                   )}
                 </button>
 
-                {/* PRICE cell */}
+                {/* PRICE + VOLUME cell */}
                 <div
-                  className={`h-full flex items-center justify-center font-mono [font-variant-numeric:tabular-nums] text-sm font-bold ${
+                  className={`h-full flex flex-col items-center justify-center font-mono [font-variant-numeric:tabular-nums] w-[60px] sm:w-[68px] ${
                     row.isLastTraded
                       ? "bg-green-50 text-green-700 ring-1 ring-inset ring-green-200"
                       : "bg-gray-50 text-gray-700"
                   }`}
                 >
-                  {row.price.toFixed(2)}
+                  <span className="text-xs font-bold leading-tight">{row.price.toFixed(2)}</span>
+                  {row.tradedVolume > 0 && (
+                    <span className="text-[9px] text-gray-400 font-mono leading-none">
+                      {formatTradedVolume(row.tradedVolume)}
+                    </span>
+                  )}
+                </div>
+
+                {/* P&L cell (hidden on mobile) */}
+                <div className="h-full w-[32px] hidden sm:flex items-center justify-center bg-gray-50/50">
+                  {row.pnl != null && (
+                    <span className={`text-[9px] font-mono font-semibold ${
+                      row.pnl >= 0 ? "text-green-600" : "text-red-600"
+                    }`}>
+                      {row.pnl >= 0 ? "+" : ""}{row.pnl.toFixed(0)}
+                    </span>
+                  )}
                 </div>
 
                 {/* LAY cell */}
                 <button
                   onClick={() => onTrade(row.price, "LAY")}
                   disabled={tradeLoading || !isConnected}
-                  className={`h-full relative text-left pl-3 font-mono [font-variant-numeric:tabular-nums] text-sm transition-colors ${
+                  className={`h-full relative text-left pl-2 font-mono [font-variant-numeric:tabular-nums] text-xs transition-colors ${
                     row.isBestLay
                       ? "bg-pink-200 hover:bg-pink-300 font-semibold text-pink-900"
                       : row.laySize > 0
@@ -283,7 +381,7 @@ export default function ClassicLadder({
                     {row.laySize > 0 ? `£${row.laySize}` : ""}
                   </span>
                   {hasUnmatchedLay && (
-                    <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500 z-10" />
+                    <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 z-10" />
                   )}
                 </button>
               </div>
@@ -292,8 +390,8 @@ export default function ClassicLadder({
         )}
       </div>
 
-      {/* Footer: status */}
-      <div className="px-3 py-2 border-t border-gray-200 bg-gray-50 flex items-center justify-between text-[11px] text-gray-500">
+      {/* Footer: status + recenter */}
+      <div className="px-2 py-1.5 border-t border-gray-200 bg-gray-50 flex items-center justify-between text-[10px] text-gray-500">
         <span>
           {isInPlay ? (
             <span className="text-green-600 font-semibold">IN-PLAY</span>
@@ -301,7 +399,23 @@ export default function ClassicLadder({
             <span className="text-blue-600">PRE-MATCH</span>
           )}
         </span>
-        <span className="font-mono">Stake: £{activeStake}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono">£{activeStake}</span>
+          <button
+            onClick={handleRecenter}
+            className="p-0.5 rounded hover:bg-gray-200 transition-colors text-gray-500 hover:text-gray-700"
+            title="Recenter ladder (Enter)"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="3" />
+              <line x1="12" y1="2" x2="12" y2="6" />
+              <line x1="12" y1="18" x2="12" y2="22" />
+              <line x1="2" y1="12" x2="6" y2="12" />
+              <line x1="18" y1="12" x2="22" y2="12" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );

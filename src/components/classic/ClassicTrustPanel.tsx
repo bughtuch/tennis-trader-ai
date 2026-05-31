@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { calculateLiability } from "@/lib/tradingMaths";
 
 /* ─── Types ─── */
@@ -65,6 +66,17 @@ function r2(v: number): number {
   return Math.round(v * 100) / 100;
 }
 
+function formatAge(ms: number): { text: string; color: string } {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) {
+    const color = seconds > 45 ? "text-amber-600" : "text-gray-400";
+    return { text: `${seconds}s`, color };
+  }
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return { text: `${minutes}m ${secs.toString().padStart(2, "0")}s`, color: "text-red-500" };
+}
+
 /* ─── Component ─── */
 
 export default function ClassicTrustPanel({
@@ -81,6 +93,25 @@ export default function ClassicTrustPanel({
 }: ClassicTrustPanelProps) {
   const p1Short = player1Name.split(" ").pop() ?? "P1";
   const p2Short = player2Name.split(" ").pop() ?? "P2";
+
+  /* ─── Order age timer: force re-render every 1s ─── */
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (unmatchedOrders.length === 0) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [unmatchedOrders.length]);
+
+  /* ─── Cancel by side ─── */
+  const backOrders = unmatchedOrders.filter((o) => o.side === "BACK");
+  const layOrders = unmatchedOrders.filter((o) => o.side === "LAY");
+
+  async function cancelBySide(side: "BACK" | "LAY") {
+    const orders = side === "BACK" ? backOrders : layOrders;
+    for (const o of orders) {
+      await onCancelOrder(o.betId);
+    }
+  }
 
   /* ─── Unmatched liability held ─── */
   const unmatchedLiabilityHeld = unmatchedOrders.reduce((sum, o) => {
@@ -155,13 +186,33 @@ export default function ClassicTrustPanel({
               UNMATCHED ({unmatchedOrders.length})
             </div>
             {unmatchedOrders.length > 0 && (
-              <button
-                onClick={onCancelAll}
-                disabled={tradeLoading}
-                className="text-[10px] font-semibold text-red-500 hover:text-red-600 disabled:opacity-50"
-              >
-                CANCEL ALL
-              </button>
+              <div className="flex items-center gap-1.5">
+                {backOrders.length > 0 && (
+                  <button
+                    onClick={() => cancelBySide("BACK")}
+                    disabled={tradeLoading}
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                  >
+                    CANCEL BACKS
+                  </button>
+                )}
+                {layOrders.length > 0 && (
+                  <button
+                    onClick={() => cancelBySide("LAY")}
+                    disabled={tradeLoading}
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-pink-50 text-pink-600 border border-pink-200 hover:bg-pink-100 disabled:opacity-50 transition-colors"
+                  >
+                    CANCEL LAYS
+                  </button>
+                )}
+                <button
+                  onClick={onCancelAll}
+                  disabled={tradeLoading}
+                  className="text-[10px] font-semibold text-red-500 hover:text-red-600 disabled:opacity-50"
+                >
+                  CANCEL ALL
+                </button>
+              </div>
             )}
           </div>
           {unmatchedOrders.length === 0 ? (
@@ -170,6 +221,8 @@ export default function ClassicTrustPanel({
             <div className="space-y-1">
               {unmatchedOrders.map((order) => {
                 const liability = calculateLiability(order.price, order.sizeRemaining, order.side);
+                const age = Date.now() - new Date(order.placedDate).getTime();
+                const { text: ageText, color: ageColor } = formatAge(age);
                 return (
                   <div key={order.displayId} className="flex items-center justify-between text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -188,6 +241,9 @@ export default function ClassicTrustPanel({
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={`font-mono text-[10px] font-semibold ${ageColor}`}>
+                        {ageText}
+                      </span>
                       <span className="font-mono text-amber-600 text-[10px]">
                         L:£{liability.toFixed(2)}
                       </span>
