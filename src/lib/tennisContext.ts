@@ -111,6 +111,95 @@ export function formatMatchStateForPrompt(state: MatchStateForAI): string {
   return lines.join(" ");
 }
 
+/* ─── MatchContext — reusable across UI + AI ─── */
+
+export interface MatchContext {
+  player1: string;
+  player2: string;
+  sets?: number[][];
+  gameScore?: string[];
+  server?: 1 | 2;
+  serverName?: string;
+  breakPoint: boolean;
+  setPoint: boolean;
+  matchPoint: boolean;
+  tiebreak: boolean;
+  finalSet: boolean;
+  scoreConfidence: ScoreConfidence;
+  isScoreStale: boolean;
+  marketStatus: "pre_match" | "in_play" | "suspended";
+  player1Odds?: number;
+  player2Odds?: number;
+  surface?: string;
+  formattedScore?: string;
+}
+
+export function buildMatchContext(params: {
+  player1: string;
+  player2: string;
+  liveScore: {
+    available: boolean;
+    sets?: number[][];
+    gameScore?: string[];
+    server?: 1 | 2;
+    breakPoint?: boolean;
+    setPoint?: boolean;
+    matchPoint?: boolean;
+    tiebreak?: boolean;
+    tiebreakScore?: string[];
+    scoreConfidence?: ScoreConfidence;
+  } | null;
+  marketStatus: "pre_match" | "in_play" | "suspended";
+  isScoreStale: boolean;
+  player1Odds?: number;
+  player2Odds?: number;
+  surface?: string;
+}): MatchContext {
+  const { player1, player2, liveScore, marketStatus, isScoreStale, player1Odds, player2Odds, surface } = params;
+
+  const sets = liveScore?.sets;
+  const breakPoint = liveScore?.breakPoint ?? false;
+  const setPoint = liveScore?.setPoint ?? false;
+  const matchPoint = liveScore?.matchPoint ?? false;
+  const tiebreak = liveScore?.tiebreak ?? false;
+  const scoreConfidence = liveScore?.scoreConfidence ?? "unavailable";
+
+  // Final set detection — auto-detects BO3/BO5
+  const completedSets = (sets ?? []).slice(0, -1);
+  const setsWonP1 = completedSets.filter(s => s[0] > s[1]).length;
+  const setsWonP2 = completedSets.filter(s => s[1] > s[0]).length;
+  const finalSet = setsWonP1 > 0 && setsWonP2 > 0 && setsWonP1 === setsWonP2;
+
+  const serverName = liveScore?.server === 1
+    ? player1.split(" ").pop()
+    : liveScore?.server === 2
+      ? player2.split(" ").pop()
+      : undefined;
+
+  const formattedScore = formatSetsToString(sets, liveScore?.gameScore, tiebreak, liveScore?.tiebreakScore);
+
+  return {
+    player1,
+    player2,
+    sets,
+    gameScore: liveScore?.gameScore,
+    server: liveScore?.server,
+    serverName,
+    breakPoint,
+    setPoint,
+    matchPoint,
+    tiebreak,
+    finalSet,
+    scoreConfidence,
+    isScoreStale,
+    marketStatus,
+    player1Odds,
+    player2Odds,
+    surface,
+    formattedScore,
+  };
+}
+
 /**
  * Format sets array into human-readable score string.
  * e.g. [[6,4],[3,2]] → "6-4, 3-2"

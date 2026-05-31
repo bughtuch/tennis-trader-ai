@@ -16,6 +16,7 @@ import ClassicAIPanel from "@/components/classic/ClassicAIPanel";
 import { calculateLiabilityReduction } from "@/components/classic/ClassicLiabilityTools";
 import { calculateMarketHedge } from "@/components/classic/ClassicMarketHedge";
 import RealTradeConfirmModal from "@/components/RealTradeConfirmModal";
+import ClassicMatchState from "@/components/classic/ClassicMatchState";
 import { inferSurface, formatSetsToString, formatMatchStateForPrompt, type ScoreConfidence, type MatchStateForAI } from "@/lib/tennisContext";
 
 /* ─── Types ─── */
@@ -200,6 +201,20 @@ function ClassicTradingPage() {
     return () => clearInterval(id);
   }, [p1Name, p2Name]);
 
+  /* ─── Stale score detection ─── */
+  const [isScoreStale, setIsScoreStale] = useState(false);
+  const lastScoreUpdateRef = useRef(Date.now());
+  const lastScoreJsonRef = useRef("");
+
+  useEffect(() => {
+    const json = JSON.stringify(liveScore);
+    if (json !== lastScoreJsonRef.current) {
+      lastScoreJsonRef.current = json;
+      lastScoreUpdateRef.current = Date.now();
+      setIsScoreStale(false);
+    }
+  }, [liveScore]);
+
   /* ─── Live positions ─── */
   const [livePositions, setLivePositions] = useState<SupabaseTrade[]>([]);
 
@@ -284,6 +299,16 @@ function ClassicTradingPage() {
     subscriptionLoaded,
     fetchSubscriptionStatus,
   } = useAppStore();
+
+  /* ─── Stale score interval (needs marketBook) ─── */
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (marketBook?.inplay && Date.now() - lastScoreUpdateRef.current > 45_000) {
+        setIsScoreStale(true);
+      }
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [marketBook?.inplay]);
 
   /* ─── Unified trade-action executor ─── */
   const execAction = useCallback(
@@ -1183,7 +1208,26 @@ function ClassicTradingPage() {
           </div>
         </div>
 
-        {/* Row 2: Stake controls */}
+        {/* Row 2: Match state */}
+        <ClassicMatchState
+          player1Name={displayPlayers.player1.name}
+          player2Name={displayPlayers.player2.name}
+          sets={liveScore?.sets}
+          gameScore={liveScore?.gameScore}
+          server={liveScore?.server}
+          tiebreak={liveScore?.tiebreak}
+          tiebreakScore={liveScore?.tiebreakScore}
+          breakPoint={liveScore?.breakPoint}
+          setPoint={liveScore?.setPoint}
+          matchPoint={liveScore?.matchPoint}
+          isInPlay={!!marketBook?.inplay}
+          isSuspended={marketBook?.status === "SUSPENDED"}
+          scoreConfidence={liveScore?.scoreConfidence ?? "unavailable"}
+          isScoreStale={isScoreStale}
+          scoreAvailable={!!liveScore?.available}
+        />
+
+        {/* Row 3: Stake controls */}
         <div className="px-3 sm:px-4 py-1.5 border-t border-gray-100 flex items-center gap-2 sm:gap-3 flex-wrap">
           <span className="text-[10px] font-semibold tracking-wider uppercase text-gray-500">STAKE</span>
           <div className="flex items-center gap-1">
