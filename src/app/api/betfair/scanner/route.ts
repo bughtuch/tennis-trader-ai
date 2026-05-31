@@ -74,12 +74,22 @@ export async function POST(req: NextRequest) {
     const catData = await catRes.json();
     const catalogues: any[] = catData.result ?? [];
 
+    // Build lightweight market list for search
+    const markets = catalogues.map((cat: any) => ({
+      marketId: cat.marketId,
+      players: (cat.runners ?? []).map((r: any) => r.runnerName).join(" vs "),
+      event: cat.event?.name ?? "",
+      runner1: cat.runners?.[0]?.runnerName ?? "",
+      runner2: cat.runners?.[1]?.runnerName ?? "",
+    }));
+
     if (catalogues.length === 0) {
       return NextResponse.json({
         success: true,
         alerts: [],
         snapshot: {},
         marketCount: 0,
+        markets: [],
       });
     }
 
@@ -197,6 +207,7 @@ export async function POST(req: NextRequest) {
       alerts,
       snapshot: currentSnapshot,
       marketCount: catalogues.length,
+      markets,
     });
   } catch (error) {
     return NextResponse.json(

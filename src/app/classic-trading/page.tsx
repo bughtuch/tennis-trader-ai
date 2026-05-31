@@ -981,26 +981,36 @@ function ClassicTradingPage() {
   }, [marketId]);
 
   /* ─── Market Search ─── */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const searchCacheRef = useRef<{ markets: any[]; fetchedAt: number } | null>(null);
+
   async function handleSearch(query: string) {
     setSearchQuery(query);
     if (query.length < 2) { setSearchResults([]); return; }
     setSearchLoading(true);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("betfair_token") : null;
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["x-betfair-token"] = token;
-      const res = await fetch("/api/betfair/scanner", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ previousSnapshot: {} }),
-      });
-      const data = await res.json();
-      if (data.success && data.alerts) {
-        // scanner doesn't return full catalogue, but we can extract from alerts
-        // Actually, we need the catalogue data — let's use a simple text-based search on market names
-        // For now, re-fetch catalogues directly
+      // Use cached markets if fetched within last 30s
+      let markets: any[] = searchCacheRef.current?.markets ?? []; // eslint-disable-line @typescript-eslint/no-explicit-any
+      if (markets.length === 0 || Date.now() - (searchCacheRef.current?.fetchedAt ?? 0) > 30_000) {
+        const token = typeof window !== "undefined" ? localStorage.getItem("betfair_token") : null;
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["x-betfair-token"] = token;
+        const res = await fetch("/api/betfair/scanner", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ previousSnapshot: {} }),
+        });
+        const data = await res.json();
+        markets = data.markets ?? [];
+        searchCacheRef.current = { markets, fetchedAt: Date.now() };
       }
-    } catch { /* network */ }
+      // Filter by player name
+      const q = query.toLowerCase();
+      const filtered = markets.filter((m: { players: string; event: string }) =>
+        m.players.toLowerCase().includes(q) || m.event.toLowerCase().includes(q)
+      );
+      setSearchResults(filtered);
+    } catch { setSearchResults([]); }
     setSearchLoading(false);
   }
 
@@ -1492,9 +1502,35 @@ function ClassicTradingPage() {
             {searchLoading && (
               <div className="p-4 text-center text-xs text-gray-400">Searching...</div>
             )}
+            {searchQuery.length >= 2 && !searchLoading && searchResults.length > 0 && (
+              <div className="p-2 max-h-64 overflow-y-auto">
+                {searchResults.map((m: { marketId: string; runner1: string; runner2: string; event: string }) => (
+                  <button
+                    key={m.marketId}
+                    onClick={() => {
+                      const params = new URLSearchParams({
+                        marketId: m.marketId,
+                        p1: m.runner1,
+                        p2: m.runner2,
+                        tournament: m.event,
+                      });
+                      router.push(`/classic-trading?${params.toString()}`);
+                      setSearchOpen(false);
+                      setSearchQuery("");
+                    }}
+                    className="w-full text-left px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="text-xs font-semibold text-gray-900">
+                      {m.runner1.split(" ").pop()} vs {m.runner2.split(" ").pop()}
+                    </div>
+                    <div className="text-[10px] text-gray-500">{m.event}</div>
+                  </button>
+                ))}
+              </div>
+            )}
             {searchQuery.length >= 2 && !searchLoading && searchResults.length === 0 && (
               <div className="p-4 text-center text-xs text-gray-400">
-                Use the Markets page to browse all live matches
+                No live markets found — try the Markets page
               </div>
             )}
           </div>
