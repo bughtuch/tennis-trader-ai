@@ -60,8 +60,111 @@ STRICT RULES — violating these makes the output useless to the trader:
 - NEVER mention "team news", "squad", "lineup", "formation", or any team-sport concept. Tennis is an individual sport with two players.
 - NEVER use generic financial jargon like "market volatility", "portfolio diversification", "risk-reward ratio", "bull/bear", "P/E ratio". You are a Betfair exchange trader, not a stockbroker.
 - NEVER reference a surface that doesn't match the tournament. If the tournament is French Open or Roland Garros, the surface is CLAY — never reference hard-court records.
+- NEVER use vague momentum or sentiment language: "follow the momentum", "positive momentum", "bullish", "bearish", "strong trend", "good opportunity", "attractive opportunity", "looks promising", "market likes", "market loves", "market hates". These are meaningless to a trader. Reference specific scoreboard events that explain price movement.
 - Use tennis exchange trading language: hold of serve, break of serve, second serve pressure, return games, tiebreak pressure, clay-court rallies, hard-court serve dominance, grass-court short points, momentum after break, price shortening, price drifting, favourite, underdog, exchange pressure, weight of money, ladder depth.
 - Think in terms of individual player form, serve/return stats, surface-specific patterns, and scoreboard pressure — not team dynamics.`.trim();
+
+/* ─── Banned Phrases (post-processing defense-in-depth) ─── */
+
+export const BANNED_PHRASES = [
+  "follow the momentum", "positive momentum", "bullish", "bearish",
+  "strong trend", "good opportunity", "attractive opportunity",
+  "looks promising", "market likes", "market loves", "market hates",
+];
+
+/* ─── Structured AI Signal Types ─── */
+
+export type ConfidenceLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export interface StructuredAISignal {
+  matchState: string;
+  marketState: string;
+  reason: string;
+  traderFocus: string;
+  confidence: ConfidenceLevel;
+  confidenceReason: string;
+  edgeSize: "none" | "mild" | "moderate" | "strong";
+  tradeSignal?: {
+    entry: string;
+    reason: string;
+    risk: string;
+    invalidation: string;
+  };
+}
+
+/* ─── Mandatory Output Format for AI ─── */
+
+export const MANDATORY_OUTPUT_FORMAT = `
+You MUST respond with valid JSON matching this exact structure:
+{
+  "matchState": "<exact score and server from context — never invent data>",
+  "marketState": "<current prices and movement using ONLY provided odds — never invent prices>",
+  "reason": "<specific tennis event explaining the price movement — reference scoreboard>",
+  "traderFocus": "<what the trader should watch next — specific game/point situation>",
+  "confidence": "<LOW | MEDIUM | HIGH>",
+  "confidenceReason": "<why this confidence level — reference data quality/situation>",
+  "edgeSize": "<none | mild | moderate | strong>",
+  "tradeSignal": {
+    "entry": "<specific price and direction>",
+    "reason": "<why enter here — reference scoreboard event>",
+    "risk": "<what could go wrong — specific tennis scenario>",
+    "invalidation": "<price level or event that cancels this trade>"
+  }
+}
+
+RULES:
+- matchState MUST use the exact score and server provided in context. If no score provided, state "Pre-match" or "Score unavailable".
+- marketState MUST use ONLY the prices provided. Never invent or assume prices.
+- reason MUST reference a specific tennis event (break of serve, hold, tiebreak point, etc).
+- If any required data is missing, set ALL text fields to "Insufficient live data for analysis" and confidence to "LOW".
+- tradeSignal is optional — only include if there is a genuine edge. Omit the field entirely if no edge exists.
+- Be concise. No section should exceed 2 sentences.
+- Do NOT wrap the JSON in markdown code fences. Return raw JSON only.
+`.trim();
+
+/* ─── Format Match Context for Prompt ─── */
+
+/**
+ * Rich match context formatter that includes ALL Sprint 4 fields.
+ * Used in system/user prompts for maximum AI grounding.
+ */
+export function formatMatchContextForPrompt(ctx: MatchContext): string {
+  const lines: string[] = [];
+
+  lines.push(`Market status: ${ctx.marketStatus.replace("_", "-")}.`);
+
+  if (ctx.isScoreStale) {
+    lines.push("WARNING: Score data may be STALE (not updated recently). Treat with caution.");
+  }
+
+  if (ctx.scoreConfidence === "unavailable" || !ctx.formattedScore) {
+    lines.push("Live score data is UNAVAILABLE. Base your read on price action and ladder context only. Do not guess or invent a scoreline.");
+    return lines.join(" ");
+  }
+
+  if (ctx.scoreConfidence === "estimated") {
+    lines.push(`Score (ESTIMATED — may not be accurate): ${ctx.formattedScore}.`);
+    lines.push("This score is estimated from price movement and may be wrong. Caveat any scoreboard-based analysis.");
+  } else {
+    lines.push(`Score: ${ctx.formattedScore}.`);
+  }
+
+  if (ctx.serverName) lines.push(`Server: ${ctx.serverName}.`);
+
+  const situational: string[] = [];
+  if (ctx.matchPoint) situational.push("MATCH POINT");
+  else if (ctx.setPoint) situational.push("SET POINT");
+  if (ctx.breakPoint) situational.push("BREAK POINT");
+  if (ctx.tiebreak) situational.push("TIEBREAK");
+  if (ctx.finalSet) situational.push("FINAL SET");
+  if (situational.length > 0) lines.push(`Situation: ${situational.join(", ")}.`);
+
+  if (ctx.player1Odds && ctx.player2Odds) {
+    lines.push(`Odds: ${ctx.player1} ${ctx.player1Odds.toFixed(2)} / ${ctx.player2} ${ctx.player2Odds.toFixed(2)}.`);
+  }
+
+  return lines.join(" ");
+}
 
 /* ─── Match State for AI Context ─── */
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { StructuredAISignal } from "@/lib/tennisContext";
 
 /* ─── Types ─── */
 
@@ -11,6 +12,7 @@ interface AISignal {
   analysis: string;
   model: string;
   timestamp: string;
+  structured?: StructuredAISignal;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,6 +33,87 @@ interface ClassicAIPanelProps {
   sessionPnl: number;
   consecutiveLosses: number;
   ladderRelationship?: string | null;
+}
+
+/* ─── Confidence Badge ─── */
+
+function ConfidenceBadge({ signal }: { signal: AISignal }) {
+  if (signal.structured) {
+    const level = signal.structured.confidence;
+    const colorClass = level === "HIGH"
+      ? "bg-green-100 text-green-700"
+      : level === "MEDIUM"
+        ? "bg-amber-100 text-amber-700"
+        : "bg-red-100 text-red-700";
+    return (
+      <div>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${colorClass}`}>
+          {level} confidence
+        </span>
+        {signal.structured.confidenceReason && (
+          <p className="text-[9px] italic text-gray-500 mt-0.5">{signal.structured.confidenceReason}</p>
+        )}
+      </div>
+    );
+  }
+
+  // Fallback numeric display
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+      signal.confidence >= 70
+        ? "bg-green-100 text-green-700"
+        : signal.confidence >= 40
+          ? "bg-amber-100 text-amber-700"
+          : "bg-red-100 text-red-700"
+    }`}>
+      {signal.confidence}% confidence
+    </span>
+  );
+}
+
+/* ─── Structured Signal Display ─── */
+
+function StructuredSignalDisplay({ structured }: { structured: StructuredAISignal }) {
+  return (
+    <div className="space-y-2">
+      {/* 4-section display */}
+      <div className="space-y-1.5">
+        <div>
+          <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">MATCH STATE</div>
+          <p className="text-[11px] text-gray-700 leading-snug">{structured.matchState}</p>
+        </div>
+        <div>
+          <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">MARKET STATE</div>
+          <p className="text-[11px] text-gray-700 leading-snug">{structured.marketState}</p>
+        </div>
+        <div>
+          <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">REASON</div>
+          <p className="text-[11px] text-gray-700 leading-snug">{structured.reason}</p>
+        </div>
+        <div>
+          <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">TRADER FOCUS</div>
+          <p className="text-[11px] text-gray-700 leading-snug">{structured.traderFocus}</p>
+        </div>
+      </div>
+
+      {/* Trade Signal card */}
+      {structured.tradeSignal && (
+        <div className="rounded border border-blue-200 bg-blue-50 p-2 space-y-1">
+          <div className="text-[9px] font-bold tracking-wider uppercase text-blue-600">TRADE SIGNAL</div>
+          <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[10px]">
+            <span className="font-semibold text-gray-600">Entry:</span>
+            <span className="text-gray-700">{structured.tradeSignal.entry}</span>
+            <span className="font-semibold text-gray-600">Reason:</span>
+            <span className="text-gray-700">{structured.tradeSignal.reason}</span>
+            <span className="font-semibold text-gray-600">Risk:</span>
+            <span className="text-gray-700">{structured.tradeSignal.risk}</span>
+            <span className="font-semibold text-gray-600">Invalidation:</span>
+            <span className="text-gray-700">{structured.tradeSignal.invalidation}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ─── Component ─── */
@@ -99,32 +182,30 @@ export default function ClassicAIPanel({
 
               {aiSignal && (
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-2 space-y-1.5">
-                  {/* Confidence badge */}
+                  {/* Confidence & Edge badges */}
                   <div className="flex items-center justify-between">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-                      aiSignal.confidence >= 70
-                        ? "bg-green-100 text-green-700"
-                        : aiSignal.confidence >= 40
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-red-100 text-red-700"
-                    }`}>
-                      {aiSignal.confidence}% confidence
-                    </span>
+                    <ConfidenceBadge signal={aiSignal} />
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                      aiSignal.edgeSize === "large"
+                      aiSignal.edgeSize === "strong"
                         ? "bg-green-100 text-green-700"
-                        : aiSignal.edgeSize === "medium"
+                        : aiSignal.edgeSize === "moderate"
                           ? "bg-blue-100 text-blue-700"
-                          : "bg-gray-100 text-gray-600"
+                          : aiSignal.edgeSize === "mild"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-gray-100 text-gray-600"
                     }`}>
                       {aiSignal.edgeSize} edge
                     </span>
                   </div>
 
-                  {/* Analysis */}
-                  <p className="text-[11px] text-gray-700 leading-relaxed">
-                    {aiSignal.analysis}
-                  </p>
+                  {/* Structured or fallback analysis */}
+                  {aiSignal.structured ? (
+                    <StructuredSignalDisplay structured={aiSignal.structured} />
+                  ) : (
+                    <p className="text-[11px] text-gray-700 leading-relaxed whitespace-pre-line">
+                      {aiSignal.analysis}
+                    </p>
+                  )}
 
                   <div className="text-[9px] text-gray-400">
                     {new Date(aiSignal.timestamp).toLocaleTimeString()}

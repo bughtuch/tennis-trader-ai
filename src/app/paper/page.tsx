@@ -18,7 +18,7 @@ import AutomationRules from "@/components/AutomationRules";
 import LiveScoreBar from "@/components/LiveScoreBar";
 import ScaleOutButtons from "@/components/ScaleOutButtons";
 import { getOpenPaperTrades, getClosedPaperTrades, closePaperTrade as closePaperTradeLocal, getPaperStats } from "@/lib/paperTrades";
-import { inferSurface, formatSetsToString, formatMatchStateForPrompt, type MatchStateForAI } from "@/lib/tennisContext";
+import { inferSurface, buildMatchContext, formatMatchContextForPrompt, type StructuredAISignal } from "@/lib/tennisContext";
 
 
 interface SupabaseTrade {
@@ -483,6 +483,7 @@ function PaperTradingPage() {
     analysis: string;
     model: string;
     timestamp: string;
+    structured?: StructuredAISignal;
   } | null>(null);
   const [aiSignalLoading, setAiSignalLoading] = useState(false);
   const [aiSignalHistory, setAiSignalHistory] = useState<
@@ -1079,45 +1080,35 @@ function PaperTradingPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marketId, p1Name, p2Name]);
 
-  /* ─── Build match state for AI ─── */
-  function buildMatchState(): MatchStateForAI {
-    const isSusp = marketBook?.status === "SUSPENDED";
-    const inPlay = !!marketBook?.inplay;
-    const marketStatus: MatchStateForAI["marketStatus"] = isSusp ? "suspended" : inPlay ? "in_play" : "pre_match";
-
-    if (!liveScore) {
-      return { scoreConfidence: "unavailable", marketStatus };
-    }
-    const scoreStr = formatSetsToString(liveScore.sets, liveScore.gameScore, liveScore.tiebreak, liveScore.tiebreakScore);
-    const p1Short = displayPlayers.player1.short;
-    const p2Short = displayPlayers.player2.short;
-    const serverName = liveScore.server === 1 ? p1Short : liveScore.server === 2 ? p2Short : undefined;
-    return {
-      score: scoreStr,
-      server: serverName,
-      breakPoint: liveScore.breakPoint,
-      setPoint: liveScore.setPoint,
-      matchPoint: liveScore.matchPoint,
-      tiebreak: liveScore.tiebreak,
-      scoreConfidence: (liveScore as { scoreConfidence?: "reliable" | "estimated" | "unavailable" }).scoreConfidence ?? "reliable",
-      marketStatus,
-    };
-  }
-
   const resolvedSurface = inferSurface(tournament, undefined);
 
   /* ─── AI Signals fetch ─── */
   async function fetchAiSignal() {
     setAiSignalLoading(true);
     try {
-      const matchState = buildMatchState();
-      const matchStateContext = formatMatchStateForPrompt(matchState);
+      const isSusp = marketBook?.status === "SUSPENDED";
+      const inPlay = !!marketBook?.inplay;
+      const marketStatus = isSusp ? "suspended" as const : inPlay ? "in_play" as const : "pre_match" as const;
+
+      const matchCtx = buildMatchContext({
+        player1: activeDisplayPlayers.player1.name,
+        player2: activeDisplayPlayers.player2.name,
+        liveScore: liveScore ?? null,
+        marketStatus,
+        isScoreStale: !!(liveScore && (liveScore as { isScoreStale?: boolean }).isScoreStale),
+        player1Odds: activeDisplayPlayers.player1.odds,
+        player2Odds: activeDisplayPlayers.player2.odds,
+        surface: resolvedSurface,
+      });
+
+      const matchStateContext = formatMatchContextForPrompt(matchCtx);
+      const resolvedSignalType = marketBook?.inplay ? "in_play" : "pre_match";
 
       const res = await fetch("/api/ai-signals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          signalType,
+          signalType: resolvedSignalType,
           matchContext: {
             player1: activeDisplayPlayers.player1.name,
             player2: activeDisplayPlayers.player2.name,
@@ -1125,10 +1116,16 @@ function PaperTradingPage() {
             odds2: activeDisplayPlayers.player2.odds,
             tournament,
             surface: resolvedSurface,
-            score: matchState.score,
-            server: matchState.server,
-            scoreConfidence: matchState.scoreConfidence,
+            score: matchCtx.formattedScore,
+            server: matchCtx.serverName,
+            scoreConfidence: matchCtx.scoreConfidence,
             matchStateContext,
+            breakPoint: matchCtx.breakPoint,
+            setPoint: matchCtx.setPoint,
+            matchPoint: matchCtx.matchPoint,
+            tiebreak: matchCtx.tiebreak,
+            finalSet: matchCtx.finalSet,
+            isScoreStale: matchCtx.isScoreStale,
           },
         }),
       });
@@ -1139,7 +1136,7 @@ function PaperTradingPage() {
       } else if (!data.success) {
         console.error("[AI Signal] API error:", data.error);
         setAiSignal({
-          type: signalType,
+          type: resolvedSignalType,
           confidence: 0,
           edgeSize: "none" as const,
           analysis: `Error: ${data.error || "Unknown error"}`,
@@ -1150,7 +1147,7 @@ function PaperTradingPage() {
     } catch (err) {
       console.error("[AI Signal] Network error:", err);
       setAiSignal({
-        type: signalType,
+        type: "in_play",
         confidence: 0,
         edgeSize: "none" as const,
         analysis: "Network error — check console for details.",
@@ -1172,7 +1169,21 @@ function PaperTradingPage() {
           ? selectedRunner.ex.availableToLay[0].price
           : bestBack + 0.02;
 
-      const matchState = buildMatchState();
+      const isSusp = marketBook?.status === "SUSPENDED";
+      const inPlay = !!marketBook?.inplay;
+      const marketStatus = isSusp ? "suspended" as const : inPlay ? "in_play" as const : "pre_match" as const;
+
+      const matchCtx = buildMatchContext({
+        player1: displayPlayers.player1.name,
+        player2: displayPlayers.player2.name,
+        liveScore: liveScore ?? null,
+        marketStatus,
+        isScoreStale: !!(liveScore && (liveScore as { isScoreStale?: boolean }).isScoreStale),
+        player1Odds: displayPlayers.player1.odds,
+        player2Odds: displayPlayers.player2.odds,
+        surface: resolvedSurface,
+      });
+
       const res = await fetch("/api/ai-guardian", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1186,9 +1197,9 @@ function PaperTradingPage() {
           matchContext: {
             player: displayPlayers[selectedPlayer].name,
             surface: resolvedSurface,
-            score: matchState.score,
-            server: matchState.server,
-            scoreConfidence: matchState.scoreConfidence,
+            score: matchCtx.formattedScore,
+            server: matchCtx.serverName,
+            scoreConfidence: matchCtx.scoreConfidence,
           },
         }),
       });
@@ -1869,14 +1880,59 @@ function PaperTradingPage() {
                 {aiSignal.model.split("-").slice(1, 3).join(" ")}
               </span>
             </div>
-            <p className="text-xs text-gray-300 leading-relaxed">{aiSignal.analysis}</p>
+
+            {/* Structured 4-section display */}
+            {aiSignal.structured ? (
+              <div className="space-y-2">
+                <div className="space-y-1.5">
+                  <div>
+                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">MATCH STATE</div>
+                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.matchState}</p>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">MARKET STATE</div>
+                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.marketState}</p>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">REASON</div>
+                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.reason}</p>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">TRADER FOCUS</div>
+                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.traderFocus}</p>
+                  </div>
+                </div>
+                {aiSignal.structured.tradeSignal && (
+                  <div className="rounded border border-blue-500/30 bg-blue-500/5 p-2 space-y-1">
+                    <div className="text-[9px] font-bold tracking-wider uppercase text-blue-400">TRADE SIGNAL</div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[10px]">
+                      <span className="font-semibold text-gray-500">Entry:</span>
+                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.entry}</span>
+                      <span className="font-semibold text-gray-500">Reason:</span>
+                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.reason}</span>
+                      <span className="font-semibold text-gray-500">Risk:</span>
+                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.risk}</span>
+                      <span className="font-semibold text-gray-500">Invalidation:</span>
+                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.invalidation}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line">{aiSignal.analysis}</p>
+            )}
+
+            {/* Confidence */}
             <div>
               <div className="flex items-center justify-between text-xs mb-1.5">
                 <span className="text-gray-500">Confidence</span>
                 <span className="text-green-400 font-mono font-medium">
-                  {aiSignal.confidence}%
+                  {aiSignal.structured ? aiSignal.structured.confidence : `${aiSignal.confidence}%`}
                 </span>
               </div>
+              {aiSignal.structured?.confidenceReason && (
+                <p className="text-[9px] italic text-gray-500 mb-1">{aiSignal.structured.confidenceReason}</p>
+              )}
               <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-blue-500 to-green-400 transition-all duration-500"

@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { inferSurface, getSurfaceContext, TENNIS_PROMPT_GUARDRAILS } from "@/lib/tennisContext";
+import {
+  inferSurface,
+  getSurfaceContext,
+  TENNIS_PROMPT_GUARDRAILS,
+  MANDATORY_OUTPUT_FORMAT,
+  BANNED_PHRASES,
+  type StructuredAISignal,
+  type ConfidenceLevel,
+} from "@/lib/tennisContext";
 
 export const runtime = "edge";
 
@@ -21,6 +29,12 @@ interface MatchContext {
   ladderContext?: string;
   scoreConfidence?: "reliable" | "estimated" | "unavailable";
   matchStateContext?: string;
+  breakPoint?: boolean;
+  setPoint?: boolean;
+  matchPoint?: boolean;
+  tiebreak?: boolean;
+  finalSet?: boolean;
+  isScoreStale?: boolean;
 }
 
 /* ─── Signal Configs ─── */
@@ -32,15 +46,16 @@ function getConfig(signalType: SignalType, surface: string) {
     case "pre_match":
       return {
         model: "claude-haiku-4-5-20251001",
-        maxTokens: 400,
+        maxTokens: 500,
         system: [
           "You are a professional Betfair tennis exchange trader preparing a pre-match read.",
           "Speak like a trader reviewing the card — not a commentator, pundit, or financial analyst.",
           `Surface context: ${surfaceCtx}`,
           "Reference likely price movements, key levels, and where value might sit.",
-          "Use language like: 'Expect the favourite to shorten if holds early service games', 'Value on the lay if opener goes with serve', 'Break pressure could see price drift past X.XX'.",
-          "Structure: surface-adjusted form read, serve/return matchup, key price levels, one actionable edge rating (none/mild/moderate/strong).",
-          "Keep under 150 words.",
+          "",
+          MANDATORY_OUTPUT_FORMAT,
+          "",
+          "For pre-match signals: matchState should be \"Pre-match\". Do not invent a scoreline. Focus reason on expected dynamics based on player form and surface.",
           "",
           TENNIS_PROMPT_GUARDRAILS,
         ].join("\n"),
@@ -48,14 +63,15 @@ function getConfig(signalType: SignalType, surface: string) {
     case "in_play":
       return {
         model: "claude-haiku-4-5-20251001",
-        maxTokens: 150,
+        maxTokens: 500,
         system: [
-          "You are a professional Betfair tennis exchange trader giving real-time ladder reads.",
+          "You are a professional Betfair tennis exchange trader giving real-time structured reads.",
           "Speak like a trader on the desk, not a commentator or analyst.",
           `Surface: ${surface}.`,
-          "Use language like: 'Favourite being backed after hold of serve', 'Move lacks follow-through on the lay side', 'Sustained buying pressure supporting this drift', 'Outer ladder thinning as price shortens', 'Break of serve — expect sharp shortening', 'Second serve pressure building on the return game'.",
-          "Reference price action, order flow, and serve-game context — not abstract statistics.",
-          "Max 40 words. One sentence preferred.",
+          "",
+          MANDATORY_OUTPUT_FORMAT,
+          "",
+          "Be concise. No section should exceed 2 sentences.",
           "",
           TENNIS_PROMPT_GUARDRAILS,
         ].join("\n"),
@@ -63,14 +79,16 @@ function getConfig(signalType: SignalType, surface: string) {
     case "edge_alert":
       return {
         model: "claude-haiku-4-5-20251001",
-        maxTokens: 200,
+        maxTokens: 500,
         system: [
           "You are a professional Betfair tennis exchange trader who spotted a pricing inefficiency.",
           "Explain it like you'd tell another trader on the desk.",
           `Surface: ${surface}.`,
-          "Reference the ladder: which side has weight, where the price should be based on scoreboard and serve-game context, and what's driving the mispricing.",
-          "Consider whether the move is supported by serve pressure, break momentum, or just panic money.",
-          "Max 60 words.",
+          "",
+          MANDATORY_OUTPUT_FORMAT,
+          "",
+          "For edge alerts: you MUST include the tradeSignal object with entry, reason, risk, and invalidation.",
+          "Be concise. No section should exceed 2 sentences.",
           "",
           TENNIS_PROMPT_GUARDRAILS,
         ].join("\n"),
@@ -86,6 +104,16 @@ function buildUserPrompt(
   const p1 = ctx.player1 ?? "Player 1";
   const p2 = ctx.player2 ?? "Player 2";
 
+  // Build situational flags
+  const situational: string[] = [];
+  if (ctx.matchPoint) situational.push("MATCH POINT");
+  else if (ctx.setPoint) situational.push("SET POINT");
+  if (ctx.breakPoint) situational.push("BREAK POINT");
+  if (ctx.tiebreak) situational.push("TIEBREAK");
+  if (ctx.finalSet) situational.push("FINAL SET");
+  if (ctx.isScoreStale) situational.push("SCORE DATA MAY BE STALE");
+  const situationalLine = situational.length > 0 ? `Situation: ${situational.join(", ")}` : "";
+
   switch (signalType) {
     case "pre_match":
       return [
@@ -94,24 +122,24 @@ function buildUserPrompt(
         `Surface: ${surface}`,
         `Current odds: ${p1} ${ctx.odds1 ?? "?"} / ${p2} ${ctx.odds2 ?? "?"}`,
         "",
-        "Give your pre-match trading read: surface-adjusted form, serve/return matchup, key price levels, and edge rating (none/mild/moderate/strong).",
+        "Give your pre-match trading read as structured JSON. matchState = \"Pre-match\". Focus on surface-adjusted form, serve/return matchup, key price levels.",
       ].join("\n");
 
     case "in_play": {
-      // Use structured match state context if available
       const matchState = ctx.matchStateContext ?? (ctx.score ? `Score: ${ctx.score}. Server: ${ctx.server ?? "Unknown"}.` : "Score unavailable — read price action only.");
       return [
         `Match: ${p1} vs ${p2} (${surface})`,
         matchState,
+        situationalLine,
         `Current odds: ${p1} ${ctx.odds1 ?? "?"} / ${p2} ${ctx.odds2 ?? "?"}`,
         ctx.recentAction ? `Recent: ${ctx.recentAction}` : "",
         ctx.ladderContext ? `Ladder: ${ctx.ladderContext}` : "",
         "",
         ctx.scoreConfidence === "unavailable"
-          ? "Score data unavailable. Give a ladder/price-action read only — do not guess the score."
+          ? "Score data unavailable. Give a price-action read only — do not guess the score. Respond with structured JSON."
           : ctx.scoreConfidence === "estimated"
-            ? "Score is estimated and may be inaccurate. Caveat any scoreboard-based analysis. What's the actionable play?"
-            : "What's the actionable play right now? Reference serve-game context and ladder.",
+            ? "Score is estimated and may be inaccurate. Caveat any scoreboard-based analysis. Respond with structured JSON."
+            : "Respond with structured JSON. Reference serve-game context and ladder.",
       ]
         .filter(Boolean)
         .join("\n");
@@ -122,20 +150,96 @@ function buildUserPrompt(
       return [
         `Match: ${p1} vs ${p2} (${surface})`,
         scoreInfo,
+        situationalLine,
         `Current odds: ${p1} ${ctx.odds1 ?? "?"} / ${p2} ${ctx.odds2 ?? "?"}`,
+        ctx.ladderContext ? `Ladder: ${ctx.ladderContext}` : "",
         "",
         ctx.scoreConfidence === "unavailable"
-          ? "Score unavailable. Is there a pricing edge based on price action and ladder weight alone?"
-          : "Is there a pricing edge? State direction, where the price should be, and what serve/scoreboard context supports it.",
-      ].join("\n");
+          ? "Score unavailable. Is there a pricing edge based on price action and ladder weight alone? Respond with structured JSON including tradeSignal."
+          : "Is there a pricing edge? Respond with structured JSON including tradeSignal with direction, price level, and supporting context.",
+      ]
+        .filter(Boolean)
+        .join("\n");
     }
   }
 }
 
-/* ─── Parse Confidence & Edge Size ─── */
+/* ─── Structured Response Parsing ─── */
+
+function stripBannedPhrases(text: string): string {
+  let result = text;
+  for (const phrase of BANNED_PHRASES) {
+    const regex = new RegExp(phrase, "gi");
+    result = result.replace(regex, "");
+  }
+  // Clean up double spaces left behind
+  return result.replace(/\s{2,}/g, " ").trim();
+}
+
+function parseStructuredResponse(rawText: string): StructuredAISignal | null {
+  try {
+    // Strip markdown code fences if present
+    let jsonStr = rawText.trim();
+    if (jsonStr.startsWith("```")) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
+    }
+
+    const parsed = JSON.parse(jsonStr);
+
+    // Validate required fields
+    if (!parsed.matchState || !parsed.marketState || !parsed.reason || !parsed.traderFocus || !parsed.confidence) {
+      return null;
+    }
+
+    // Validate confidence level
+    const validConfidence: ConfidenceLevel[] = ["LOW", "MEDIUM", "HIGH"];
+    const confidence = (parsed.confidence as string).toUpperCase() as ConfidenceLevel;
+    if (!validConfidence.includes(confidence)) {
+      return null;
+    }
+
+    // Validate edge size
+    const validEdge: EdgeSize[] = ["none", "mild", "moderate", "strong"];
+    const edgeSize = (parsed.edgeSize ?? "none").toLowerCase() as EdgeSize;
+
+    // Strip banned phrases from all text fields
+    const structured: StructuredAISignal = {
+      matchState: stripBannedPhrases(parsed.matchState),
+      marketState: stripBannedPhrases(parsed.marketState),
+      reason: stripBannedPhrases(parsed.reason),
+      traderFocus: stripBannedPhrases(parsed.traderFocus),
+      confidence,
+      confidenceReason: stripBannedPhrases(parsed.confidenceReason ?? ""),
+      edgeSize: validEdge.includes(edgeSize) ? edgeSize : "none",
+    };
+
+    // Include trade signal if present and valid
+    if (parsed.tradeSignal && parsed.tradeSignal.entry && parsed.tradeSignal.reason) {
+      structured.tradeSignal = {
+        entry: stripBannedPhrases(parsed.tradeSignal.entry),
+        reason: stripBannedPhrases(parsed.tradeSignal.reason),
+        risk: stripBannedPhrases(parsed.tradeSignal.risk ?? ""),
+        invalidation: stripBannedPhrases(parsed.tradeSignal.invalidation ?? ""),
+      };
+    }
+
+    return structured;
+  } catch {
+    return null;
+  }
+}
+
+function confidenceToNumber(level: ConfidenceLevel): number {
+  switch (level) {
+    case "LOW": return 30;
+    case "MEDIUM": return 60;
+    case "HIGH": return 85;
+  }
+}
+
+/* ─── Legacy Fallback Parsing ─── */
 
 function parseConfidence(text: string): number {
-  // Match patterns like "confidence: 72%", "Confidence 85%", "72% confidence"
   const match =
     text.match(/confidence[:\s]*(\d+)\s*%/i) ??
     text.match(/(\d+)\s*%\s*confidence/i) ??
@@ -144,7 +248,7 @@ function parseConfidence(text: string): number {
     const val = parseInt(match[1], 10);
     if (val >= 0 && val <= 100) return val;
   }
-  return 50; // default if not parseable
+  return 50;
 }
 
 function parseEdgeSize(text: string): EdgeSize {
@@ -153,7 +257,41 @@ function parseEdgeSize(text: string): EdgeSize {
   if (/\bmoderate\b/.test(lower)) return "moderate";
   if (/\bmild\b/.test(lower) || /\bslight\b/.test(lower)) return "mild";
   if (/\bnone\b/.test(lower) || /\bno edge\b/.test(lower)) return "none";
-  return "mild"; // default
+  return "mild";
+}
+
+/* ─── Insufficient Data Response ─── */
+
+function buildInsufficientDataResponse(signalType: SignalType) {
+  const structured: StructuredAISignal = {
+    matchState: "Insufficient live data for analysis",
+    marketState: "Insufficient live data for analysis",
+    reason: "Insufficient live data for analysis",
+    traderFocus: "Insufficient live data for analysis",
+    confidence: "LOW",
+    confidenceReason: "Missing required player and match data",
+    edgeSize: "none",
+  };
+
+  const readableAnalysis = [
+    `MATCH STATE: ${structured.matchState}`,
+    `MARKET STATE: ${structured.marketState}`,
+    `REASON: ${structured.reason}`,
+    `TRADER FOCUS: ${structured.traderFocus}`,
+  ].join("\n\n");
+
+  return NextResponse.json({
+    success: true,
+    signal: {
+      type: signalType,
+      confidence: 30,
+      edgeSize: "none" as EdgeSize,
+      analysis: readableAnalysis,
+      model: "validation",
+      timestamp: new Date().toISOString(),
+      structured,
+    },
+  });
 }
 
 /* ─── Route Handler ─── */
@@ -203,6 +341,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Pre-call fact-checking: if in-play/edge_alert and players missing, return insufficient data
+    if (signalType !== "pre_match" && (!matchContext.player1 || !matchContext.player2)) {
+      return buildInsufficientDataResponse(signalType);
+    }
+
     const surface = inferSurface(matchContext.tournament, matchContext.surface);
     const config = getConfig(signalType, surface);
     const userPrompt = buildUserPrompt(signalType, matchContext, surface);
@@ -231,18 +374,47 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await res.json();
-    const analysis =
+    const rawAnalysis =
       data.content?.[0]?.type === "text" ? data.content[0].text : "";
 
-    if (!analysis) {
+    if (!rawAnalysis) {
       return NextResponse.json(
         { success: false, error: "Empty response from AI model" },
         { status: 502 }
       );
     }
 
-    const confidence = parseConfidence(analysis);
-    const edgeSize = parseEdgeSize(analysis);
+    // Try structured JSON parsing first
+    const structured = parseStructuredResponse(rawAnalysis);
+
+    let confidence: number;
+    let edgeSize: EdgeSize;
+    let analysis: string;
+
+    if (structured) {
+      // Successful structured parse
+      confidence = confidenceToNumber(structured.confidence);
+      edgeSize = structured.edgeSize;
+
+      // Build readable analysis (backward compat for Pro/Paper views)
+      const sections = [
+        `MATCH STATE: ${structured.matchState}`,
+        `MARKET STATE: ${structured.marketState}`,
+        `REASON: ${structured.reason}`,
+        `TRADER FOCUS: ${structured.traderFocus}`,
+      ];
+      if (structured.tradeSignal) {
+        sections.push(
+          `TRADE SIGNAL: Entry: ${structured.tradeSignal.entry} | Reason: ${structured.tradeSignal.reason} | Risk: ${structured.tradeSignal.risk} | Invalidation: ${structured.tradeSignal.invalidation}`
+        );
+      }
+      analysis = sections.join("\n\n");
+    } else {
+      // Fallback: legacy regex parsing + banned phrase strip
+      analysis = stripBannedPhrases(rawAnalysis);
+      confidence = parseConfidence(analysis);
+      edgeSize = parseEdgeSize(analysis);
+    }
 
     return NextResponse.json({
       success: true,
@@ -253,6 +425,7 @@ export async function POST(req: NextRequest) {
         analysis,
         model: config.model,
         timestamp: new Date().toISOString(),
+        ...(structured ? { structured } : {}),
       },
     });
   } catch (error) {
