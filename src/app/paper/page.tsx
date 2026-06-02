@@ -1504,8 +1504,27 @@ function PaperTradingPage() {
         <div className="text-[11px] tracking-[0.15em] uppercase text-blue-400 font-medium pl-3">
           BACK
         </div>
-        <div className="text-[11px] tracking-[0.15em] uppercase text-gray-400 font-medium text-center">
+        <div className="text-[11px] tracking-[0.15em] uppercase text-gray-400 font-medium text-center flex items-center justify-center gap-1">
           PRICE
+          <button
+            onClick={() => {
+              const el = document.getElementById("ladder-scroll");
+              if (el) {
+                const rows = el.querySelectorAll("[data-last-traded]");
+                if (rows.length > 0) {
+                  rows[0].scrollIntoView({ block: "center", behavior: "smooth" });
+                } else {
+                  el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+                }
+              }
+            }}
+            className="ml-1 text-[9px] px-1 py-0.5 rounded bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
+            title="Recenter ladder"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18m0 0l-3-3m3 3l3-3M12 3L9 6m3-3l3 3" />
+            </svg>
+          </button>
         </div>
         <div className="text-[11px] tracking-[0.15em] uppercase text-pink-400 font-medium text-right pr-3">
           LAY
@@ -1519,6 +1538,7 @@ function PaperTradingPage() {
             return (
             <div
               key={row.price}
+              {...(row.isLastTraded ? { "data-last-traded": "true" } : {})}
               className={`grid grid-cols-3 items-center border-b border-gray-800/20 min-h-[48px] md:min-h-0 transition-colors hover:brightness-125 ${
                 row.isLastTraded ? "bg-green-400/10 border-l-2 border-l-green-400" : ""
               }`}
@@ -1908,39 +1928,28 @@ function PaperTradingPage() {
               </span>
             </div>
 
-            {/* Structured 4-section display */}
+            {/* Concise 3-line display: Situation / Reason / Watch */}
             {aiSignal.structured ? (
-              <div className="space-y-2">
-                <div className="space-y-1.5">
-                  <div>
-                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">MATCH STATE</div>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.matchState}</p>
-                  </div>
-                  <div>
-                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">MARKET STATE</div>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.marketState}</p>
-                  </div>
-                  <div>
-                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">REASON</div>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.reason}</p>
-                  </div>
-                  <div>
-                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">TRADER FOCUS</div>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.traderFocus}</p>
-                  </div>
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-16 pt-0.5">Situation</span>
+                  <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.matchState} {aiSignal.structured.marketState}</p>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-16 pt-0.5">Reason</span>
+                  <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.reason}</p>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-16 pt-0.5">Watch</span>
+                  <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.traderFocus}</p>
                 </div>
                 {aiSignal.structured.tradeSignal && (
-                  <div className="rounded border border-blue-500/30 bg-blue-500/5 p-2 space-y-1">
-                    <div className="text-[9px] font-bold tracking-wider uppercase text-blue-400">TRADE SIGNAL</div>
-                    <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[10px]">
-                      <span className="font-semibold text-gray-500">Entry:</span>
-                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.entry}</span>
-                      <span className="font-semibold text-gray-500">Reason:</span>
-                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.reason}</span>
-                      <span className="font-semibold text-gray-500">Risk:</span>
-                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.risk}</span>
-                      <span className="font-semibold text-gray-500">Invalidation:</span>
-                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.invalidation}</span>
+                  <div className="rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1.5 mt-1">
+                    <div className="text-[10px] text-blue-400 font-semibold">
+                      {aiSignal.structured.tradeSignal.entry} — {aiSignal.structured.tradeSignal.reason}
+                    </div>
+                    <div className="text-[9px] text-gray-500 mt-0.5">
+                      Risk: {aiSignal.structured.tradeSignal.risk} | Out: {aiSignal.structured.tradeSignal.invalidation}
                     </div>
                   </div>
                 )}
