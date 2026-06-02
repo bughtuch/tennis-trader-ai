@@ -1771,41 +1771,67 @@ function TradingPage() {
       </div>
 
       {/* Position Summary (aggregated) */}
-      <div className="px-3 md:px-4 py-2.5 border-t border-gray-800/50 bg-gray-900/30 space-y-1">
-        <div className="flex items-center justify-between text-xs">
-          <div>
-            <span className="text-gray-500">Position: </span>
+      <div className="px-3 md:px-4 py-3 border-t border-gray-800/50 bg-gray-900/30 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-500 uppercase tracking-wide">Pos</span>
             {aggregatedPos && aggregatedPos.netSide !== "FLAT" ? (
-              <span className={`font-semibold ${aggregatedPos.netSide === "BACK" ? "text-blue-400" : "text-pink-400"}`}>
-                Net {aggregatedPos.netSide} £{aggregatedPos.netStake.toFixed(2)} @ {aggregatedPos.avgEntry.toFixed(2)}
-                {aggregatedPos.count > 1 && (
-                  <span className="text-gray-500 font-normal"> ({aggregatedPos.count} entries)</span>
-                )}
+              <span className={`text-sm font-bold font-mono px-2 py-0.5 rounded ${
+                aggregatedPos.netSide === "BACK"
+                  ? "bg-blue-500/15 text-blue-400"
+                  : "bg-pink-500/15 text-pink-400"
+              }`}>
+                {aggregatedPos.netSide} £{aggregatedPos.netStake.toFixed(1)} @ {aggregatedPos.avgEntry.toFixed(2)}
               </span>
             ) : (
-              <span className="text-gray-600">No position</span>
+              <span className="text-sm font-bold font-mono text-gray-500 px-2 py-0.5 rounded bg-gray-800/50">£0</span>
             )}
           </div>
-          <div>
+          <div className="text-xs">
             <span className="text-gray-500">Open: </span>
             <span className="text-gray-300 font-mono font-semibold">
               {selectedRunnerPositions.length}
             </span>
           </div>
         </div>
-        {/* P&L per runner outcome */}
-        {outcomePnl && (
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="text-gray-500">If</span>
-            <span className={`font-mono font-semibold ${outcomePnl.ifPlayer1Wins >= 0 ? "text-green-400" : "text-red-400"}`}>
-              {displayPlayers.player1.short} wins: {outcomePnl.ifPlayer1Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer1Wins.toFixed(2)}
-            </span>
-            <span className="text-gray-600">|</span>
-            <span className={`font-mono font-semibold ${outcomePnl.ifPlayer2Wins >= 0 ? "text-green-400" : "text-red-400"}`}>
-              {displayPlayers.player2.short} wins: {outcomePnl.ifPlayer2Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer2Wins.toFixed(2)}
-            </span>
-          </div>
-        )}
+        {/* P&L per runner outcome — always visible */}
+        <div className="flex items-center gap-3">
+          {outcomePnl ? (
+            <>
+              <div className={`flex-1 rounded-lg px-2.5 py-1.5 text-center ${
+                outcomePnl.ifPlayer1Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer1Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
+              }`}>
+                <div className="text-[10px] text-gray-500">{displayPlayers.player1.short} wins</div>
+                <div className={`text-sm font-bold font-mono ${
+                  outcomePnl.ifPlayer1Wins > 0 ? "text-green-400" : outcomePnl.ifPlayer1Wins < 0 ? "text-red-400" : "text-gray-400"
+                }`}>
+                  {outcomePnl.ifPlayer1Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer1Wins.toFixed(2)}
+                </div>
+              </div>
+              <div className={`flex-1 rounded-lg px-2.5 py-1.5 text-center ${
+                outcomePnl.ifPlayer2Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer2Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
+              }`}>
+                <div className="text-[10px] text-gray-500">{displayPlayers.player2.short} wins</div>
+                <div className={`text-sm font-bold font-mono ${
+                  outcomePnl.ifPlayer2Wins > 0 ? "text-green-400" : outcomePnl.ifPlayer2Wins < 0 ? "text-red-400" : "text-gray-400"
+                }`}>
+                  {outcomePnl.ifPlayer2Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer2Wins.toFixed(2)}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex-1 rounded-lg px-2.5 py-1.5 text-center bg-gray-800/40">
+                <div className="text-[10px] text-gray-500">{displayPlayers.player1.short} wins</div>
+                <div className="text-sm font-bold font-mono text-gray-500">£0.00</div>
+              </div>
+              <div className="flex-1 rounded-lg px-2.5 py-1.5 text-center bg-gray-800/40">
+                <div className="text-[10px] text-gray-500">{displayPlayers.player2.short} wins</div>
+                <div className="text-sm font-bold font-mono text-gray-500">£0.00</div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Unmatched Orders List */}
@@ -3239,14 +3265,18 @@ function TradingPage() {
               )}
               {/* Outcome P&L */}
               <div className="flex gap-4 pt-1">
-                <div>
-                  <span className="text-xs text-gray-500">If {displayPlayers.player1.name} wins: </span>
+                <div className={`flex-1 rounded-lg px-3 py-2 ${
+                  outcomePnl.ifPlayer1Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer1Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
+                }`}>
+                  <div className="text-xs text-gray-500">If {displayPlayers.player1.name} wins</div>
                   <span className={`text-lg font-bold font-mono ${outcomePnl.ifPlayer1Wins >= 0 ? "text-green-400" : "text-red-400"}`}>
                     {outcomePnl.ifPlayer1Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer1Wins.toFixed(2)}
                   </span>
                 </div>
-                <div>
-                  <span className="text-xs text-gray-500">If {displayPlayers.player2.name} wins: </span>
+                <div className={`flex-1 rounded-lg px-3 py-2 ${
+                  outcomePnl.ifPlayer2Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer2Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
+                }`}>
+                  <div className="text-xs text-gray-500">If {displayPlayers.player2.name} wins</div>
                   <span className={`text-lg font-bold font-mono ${outcomePnl.ifPlayer2Wins >= 0 ? "text-green-400" : "text-red-400"}`}>
                     {outcomePnl.ifPlayer2Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer2Wins.toFixed(2)}
                   </span>
