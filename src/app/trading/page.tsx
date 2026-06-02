@@ -256,6 +256,14 @@ function TradingPage() {
   const [sessionElapsed, setSessionElapsed] = useState(0);
   const [shortcutsExpanded, setShortcutsExpanded] = useState(false);
 
+  /* ─── Market Search state ─── */
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{ marketId: string; runner1: string; runner2: string; event: string; competition: string; inPlay: boolean }>>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchCacheRef = useRef<{ markets: typeof searchResults; fetchedAt: number } | null>(null);
+
   /* AI Signals state */
   const [aiSignal, setAiSignal] = useState<{
     type: string;
@@ -796,8 +804,8 @@ function TradingPage() {
           : bestBackPrice || bestLayPrice || 2.0,
       );
 
-      // Generate a continuous tick range: 8 ticks below center, center, 8 ticks above = 17 rows
-      const TICKS_EACH_SIDE = 8;
+      // Generate a continuous tick range: 15 ticks each side of center = 31 rows
+      const TICKS_EACH_SIDE = 15;
       const ladderLow = moveByTicks(centerPrice, -TICKS_EACH_SIDE);
       const ladderHigh = moveByTicks(centerPrice, TICKS_EACH_SIDE);
 
@@ -1359,6 +1367,52 @@ function TradingPage() {
     return () => clearInterval(id);
   }, [sessionStart]);
 
+  /* ─── Market Search ─── */
+  const handleSearch = useCallback(async (query: string) => {
+    setSearchQuery(query);
+    if (query.length < 2) { setSearchResults([]); return; }
+    setSearchLoading(true);
+    try {
+      let markets = searchCacheRef.current?.markets ?? [];
+      if (markets.length === 0 || Date.now() - (searchCacheRef.current?.fetchedAt ?? 0) > 30_000) {
+        const token = typeof window !== "undefined" ? localStorage.getItem("betfair_token") : null;
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["x-betfair-token"] = token;
+        const res = await fetch("/api/betfair/scanner", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ previousSnapshot: {} }),
+        });
+        const data = await res.json();
+        markets = data.markets ?? [];
+        searchCacheRef.current = { markets, fetchedAt: Date.now() };
+      }
+      const q = query.toLowerCase();
+      const filtered = markets.filter((m) =>
+        m.runner1.toLowerCase().includes(q) || m.runner2.toLowerCase().includes(q) || m.event.toLowerCase().includes(q) || m.competition.toLowerCase().includes(q)
+      );
+      setSearchResults(filtered);
+    } catch { setSearchResults([]); }
+    setSearchLoading(false);
+  }, []);
+
+  // Cmd/Ctrl+K to open search
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      }
+      if (e.key === "Escape" && searchOpen) {
+        setSearchOpen(false);
+        setSearchQuery("");
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [searchOpen]);
+
   /* ─── Computed: best back/lay prices ─── */
   const currentBackPrice =
     isLive && selectedRunner?.ex?.availableToBack?.[0]?.price
@@ -1646,8 +1700,27 @@ function TradingPage() {
         <div className="text-[11px] tracking-[0.15em] uppercase text-blue-400 font-medium pl-3">
           BACK
         </div>
-        <div className="text-[11px] tracking-[0.15em] uppercase text-gray-400 font-medium text-center">
+        <div className="text-[11px] tracking-[0.15em] uppercase text-gray-400 font-medium text-center flex items-center justify-center gap-1">
           PRICE
+          <button
+            onClick={() => {
+              const el = document.getElementById("ladder-scroll");
+              if (el) {
+                const rows = el.querySelectorAll("[data-last-traded]");
+                if (rows.length > 0) {
+                  rows[0].scrollIntoView({ block: "center", behavior: "smooth" });
+                } else {
+                  el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+                }
+              }
+            }}
+            className="ml-1 text-[9px] px-1 py-0.5 rounded bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors"
+            title="Recenter ladder"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18m0 0l-3-3m3 3l3-3M12 3L9 6m3-3l3 3" />
+            </svg>
+          </button>
         </div>
         <div className="text-[11px] tracking-[0.15em] uppercase text-pink-400 font-medium text-right pr-3">
           LAY
@@ -1655,13 +1728,14 @@ function TradingPage() {
       </div>
 
       {/* Ladder Body */}
-      <div className="max-h-[640px] overflow-y-auto">
+      <div className="max-h-[calc(100vh-280px)] min-h-[400px] overflow-y-auto" id="ladder-scroll">
         {activeLadderData && activeLadderData.length > 0 ? (
           activeLadderData.map((row) => {
             const unmatched = unmatchedByPrice.get(row.price);
             return (
             <div
               key={row.price}
+              {...(row.isLastTraded ? { "data-last-traded": "true" } : {})}
               className={`grid grid-cols-3 items-center border-b border-gray-800/20 min-h-[48px] md:min-h-0 transition-colors hover:brightness-125 ${
                 row.isLastTraded ? "bg-green-400/10 border-l-2 border-l-green-400" : ""
               }`}
@@ -2117,39 +2191,28 @@ function TradingPage() {
               </span>
             </div>
 
-            {/* Structured 4-section display */}
+            {/* Concise 3-line display: Situation / Reason / Watch */}
             {aiSignal.structured ? (
-              <div className="space-y-2">
-                <div className="space-y-1.5">
-                  <div>
-                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">MATCH STATE</div>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.matchState}</p>
-                  </div>
-                  <div>
-                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">MARKET STATE</div>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.marketState}</p>
-                  </div>
-                  <div>
-                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">REASON</div>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.reason}</p>
-                  </div>
-                  <div>
-                    <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">TRADER FOCUS</div>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.traderFocus}</p>
-                  </div>
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-16 pt-0.5">Situation</span>
+                  <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.matchState} {aiSignal.structured.marketState}</p>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-16 pt-0.5">Reason</span>
+                  <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.reason}</p>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-16 pt-0.5">Watch</span>
+                  <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.traderFocus}</p>
                 </div>
                 {aiSignal.structured.tradeSignal && (
-                  <div className="rounded border border-blue-500/30 bg-blue-500/5 p-2 space-y-1">
-                    <div className="text-[9px] font-bold tracking-wider uppercase text-blue-400">TRADE SIGNAL</div>
-                    <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[10px]">
-                      <span className="font-semibold text-gray-500">Entry:</span>
-                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.entry}</span>
-                      <span className="font-semibold text-gray-500">Reason:</span>
-                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.reason}</span>
-                      <span className="font-semibold text-gray-500">Risk:</span>
-                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.risk}</span>
-                      <span className="font-semibold text-gray-500">Invalidation:</span>
-                      <span className="text-gray-300">{aiSignal.structured.tradeSignal.invalidation}</span>
+                  <div className="rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1.5 mt-1">
+                    <div className="text-[10px] text-blue-400 font-semibold">
+                      {aiSignal.structured.tradeSignal.entry} — {aiSignal.structured.tradeSignal.reason}
+                    </div>
+                    <div className="text-[9px] text-gray-500 mt-0.5">
+                      Risk: {aiSignal.structured.tradeSignal.risk} | Out: {aiSignal.structured.tradeSignal.invalidation}
                     </div>
                   </div>
                 )}
@@ -2844,7 +2907,7 @@ function TradingPage() {
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-sm font-medium shadow-lg transition-all ${
+          className={`fixed top-16 left-1/2 -translate-x-1/2 z-[55] px-4 py-2 rounded-xl text-sm font-medium shadow-lg transition-all ${
             toast.type === "success" ? "bg-green-500/90 text-white" : "bg-red-500/90 text-white"
           }`}
         >
@@ -2961,6 +3024,16 @@ function TradingPage() {
       {/* ─── Market Status Bar ─── */}
       <div className="border-b border-gray-800/50 bg-gray-900/30">
         <div className="px-2 md:px-4 py-2 flex items-center justify-center gap-2 md:gap-3 flex-wrap text-xs">
+          <button
+            onClick={() => { setSearchOpen(true); setTimeout(() => searchInputRef.current?.focus(), 50); }}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-800/50 hover:bg-gray-800 text-gray-500 hover:text-gray-300 transition-colors text-[10px]"
+            title="Search markets (Cmd+K)"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" strokeLinecap="round" />
+            </svg>
+            <span className="hidden md:inline">Search</span>
+          </button>
           <span className="text-gray-400 font-medium">{tournament}</span>
           <span className="text-gray-700">|</span>
           {isLive && marketBook ? (
@@ -3395,6 +3468,87 @@ function TradingPage() {
           </div>
         </div>
       </div>
+
+      {/* ─── Market Search Overlay ─── */}
+      {searchOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-start justify-center pt-20" onClick={() => { setSearchOpen(false); setSearchQuery(""); }}>
+          <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="p-3 border-b border-gray-800">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" strokeLinecap="round" />
+                </svg>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search by player or tournament..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="flex-1 text-sm text-white bg-transparent focus:outline-none placeholder-gray-600"
+                  autoFocus
+                />
+                <kbd className="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-[10px] font-mono text-gray-500">ESC</kbd>
+              </div>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {searchLoading && (
+                <div className="p-4 text-center text-xs text-gray-500">Searching...</div>
+              )}
+              {searchQuery.length >= 2 && !searchLoading && searchResults.length === 0 && (
+                <div className="p-4 text-center text-xs text-gray-600">No markets found</div>
+              )}
+              {searchQuery.length >= 2 && !searchLoading && searchResults.length > 0 && (() => {
+                // Group by competition/event
+                const grouped = new Map<string, typeof searchResults>();
+                for (const m of searchResults) {
+                  const key = m.competition || m.event || "Other";
+                  if (!grouped.has(key)) grouped.set(key, []);
+                  grouped.get(key)!.push(m);
+                }
+                return Array.from(grouped.entries()).map(([tournament, matches]) => (
+                  <div key={tournament}>
+                    <div className="px-3 py-1.5 text-[10px] tracking-[0.15em] uppercase text-gray-500 font-medium bg-gray-800/50 sticky top-0">
+                      {tournament}
+                    </div>
+                    {matches.map((m) => (
+                      <button
+                        key={m.marketId}
+                        onClick={() => {
+                          const params = new URLSearchParams({
+                            marketId: m.marketId,
+                            p1: m.runner1,
+                            p2: m.runner2,
+                            tournament: m.competition || m.event,
+                          });
+                          router.push(`/trading?${params.toString()}`);
+                          setSearchOpen(false);
+                          setSearchQuery("");
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-gray-800/50 transition-colors flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="text-xs font-semibold text-white">
+                            {m.runner1.split(" ").pop()} vs {m.runner2.split(" ").pop()}
+                          </div>
+                          <div className="text-[10px] text-gray-500">{m.event}</div>
+                        </div>
+                        {m.inPlay ? (
+                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-green-500/15 text-green-400">LIVE</span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-gray-700/50 text-gray-500">PRE</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ));
+              })()}
+              {searchQuery.length < 2 && (
+                <div className="p-4 text-center text-xs text-gray-600">Type a player name to search</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Keyboard Shortcuts Tooltip ─── */}
       <div

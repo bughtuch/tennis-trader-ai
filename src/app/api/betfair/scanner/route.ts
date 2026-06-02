@@ -79,8 +79,10 @@ export async function POST(req: NextRequest) {
       marketId: cat.marketId,
       players: (cat.runners ?? []).map((r: any) => r.runnerName).join(" vs "),
       event: cat.event?.name ?? "",
+      competition: cat.competition?.name ?? "",
       runner1: cat.runners?.[0]?.runnerName ?? "",
       runner2: cat.runners?.[1]?.runnerName ?? "",
+      inPlay: cat.marketStartTime ? new Date(cat.marketStartTime) <= new Date() : false,
     }));
 
     if (catalogues.length === 0) {

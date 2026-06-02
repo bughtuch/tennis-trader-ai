@@ -784,8 +784,8 @@ function PaperTradingPage() {
           : bestBackPrice || bestLayPrice || 2.0,
       );
 
-      // Generate a continuous tick range: 8 ticks below center, center, 8 ticks above = 17 rows
-      const TICKS_EACH_SIDE = 8;
+      // Generate a continuous tick range: 15 ticks each side of center = 31 rows
+      const TICKS_EACH_SIDE = 15;
       const ladderLow = moveByTicks(centerPrice, -TICKS_EACH_SIDE);
       const ladderHigh = moveByTicks(centerPrice, TICKS_EACH_SIDE);
 
@@ -1513,7 +1513,7 @@ function PaperTradingPage() {
       </div>
 
       {/* Ladder Body */}
-      <div className="max-h-[640px] overflow-y-auto">
+      <div className="max-h-[calc(100vh-280px)] min-h-[400px] overflow-y-auto" id="ladder-scroll">
         {activeLadderData && activeLadderData.length > 0 ? (
           activeLadderData.map((row) => {
             return (
@@ -2516,7 +2516,7 @@ function PaperTradingPage() {
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-sm font-medium shadow-lg transition-all ${
+          className={`fixed top-16 left-1/2 -translate-x-1/2 z-[55] px-4 py-2 rounded-xl text-sm font-medium shadow-lg transition-all ${
             toast.type === "success" ? "bg-green-500/90 text-white" : "bg-red-500/90 text-white"
           }`}
         >

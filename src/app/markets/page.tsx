@@ -41,6 +41,26 @@ function timeUntil(date: string) {
   return `Starts in ${mins}m`;
 }
 
+function tournamentTier(name: string): number {
+  const n = name.toLowerCase();
+  // Grand Slams
+  if (/grand slam|australian open|french open|roland garros|wimbledon|us open/i.test(n)) return 0;
+  // ATP Tour (Masters 1000, 500, 250)
+  if (/atp|masters|1000(?!\s*wta)/i.test(n) && !/doubles/i.test(n)) return 1;
+  if (/500/i.test(n) && !/wta/i.test(n) && !/doubles/i.test(n)) return 1;
+  if (/250/i.test(n) && !/wta/i.test(n) && !/doubles/i.test(n)) return 1;
+  // WTA Tour
+  if (/wta/i.test(n) && !/doubles/i.test(n)) return 2;
+  // Challenger singles
+  if (/challenger/i.test(n) && !/doubles/i.test(n)) return 3;
+  // ITF singles
+  if (/itf/i.test(n) && !/doubles/i.test(n)) return 4;
+  // Doubles (any level)
+  if (/doubles/i.test(n)) return 5;
+  // Unknown/other — above doubles but below named tiers
+  return 4;
+}
+
 function tournamentColor(name: string) {
   const n = name.toLowerCase();
   if (/wta.*1000|wta.*premier/i.test(n)) return "bg-pink-500/15 text-pink-400";
@@ -256,10 +276,13 @@ export default function MarketsPage() {
         .map((cat: { marketId: string }) => mapBetfairToMarket(cat, bookMap.get(cat.marketId)))
         .filter((m: Market | null): m is Market => m !== null);
 
-      // Sort: live first, then by countdown
+      // Sort: live first, then by tournament tier, then by name
       mapped.sort((a: Market, b: Market) => {
         if (a.isLive && !b.isLive) return -1;
         if (!a.isLive && b.isLive) return 1;
+        const tierA = tournamentTier(a.tournament);
+        const tierB = tournamentTier(b.tournament);
+        if (tierA !== tierB) return tierA - tierB;
         return 0;
       });
 
