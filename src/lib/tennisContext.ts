@@ -137,17 +137,12 @@ export function formatMatchContextForPrompt(ctx: MatchContext): string {
     lines.push("WARNING: Score data may be STALE (not updated recently). Treat with caution.");
   }
 
-  if (ctx.scoreConfidence === "unavailable" || !ctx.formattedScore) {
+  if (ctx.scoreConfidence !== "reliable" || !ctx.formattedScore) {
     lines.push("Live score data is UNAVAILABLE. Base your read on price action and ladder context only. Do not guess or invent a scoreline.");
     return lines.join(" ");
   }
 
-  if (ctx.scoreConfidence === "estimated") {
-    lines.push(`Score (ESTIMATED — may not be accurate): ${ctx.formattedScore}.`);
-    lines.push("This score is estimated from price movement and may be wrong. Caveat any scoreboard-based analysis.");
-  } else {
-    lines.push(`Score: ${ctx.formattedScore}.`);
-  }
+  lines.push(`Score: ${ctx.formattedScore}.`);
 
   if (ctx.serverName) lines.push(`Server: ${ctx.serverName}.`);
 
@@ -190,17 +185,12 @@ export function formatMatchStateForPrompt(state: MatchStateForAI): string {
 
   lines.push(`Market status: ${state.marketStatus.replace("_", "-")}.`);
 
-  if (state.scoreConfidence === "unavailable" || !state.score) {
+  if (state.scoreConfidence !== "reliable" || !state.score) {
     lines.push("Live score data is UNAVAILABLE. Base your read on price action and ladder context only. Do not guess or invent a scoreline.");
     return lines.join(" ");
   }
 
-  if (state.scoreConfidence === "estimated") {
-    lines.push(`Score (ESTIMATED — may not be accurate): ${state.score}.`);
-    lines.push("This score is estimated from price movement and may be wrong. Caveat any scoreboard-based analysis.");
-  } else {
-    lines.push(`Score: ${state.score}.`);
-  }
+  lines.push(`Score: ${state.score}.`);
 
   if (state.server) lines.push(`Server: ${state.server}.`);
 

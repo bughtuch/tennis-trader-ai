@@ -62,6 +62,7 @@ interface LiveScore {
   matchPoint?: boolean;
   tiebreak?: boolean;
   tiebreakScore?: string[];
+  scoreConfidence?: "reliable" | "estimated" | "unavailable";
 }
 
 /* ─── Inline Market List for no-market state ─── */
@@ -2917,7 +2918,7 @@ function PaperTradingPage() {
                 player1Odds={displayPlayers.player1.odds}
                 player2Odds={displayPlayers.player2.odds}
                 isInPlay={!!marketBook?.inplay}
-                score={liveScore?.available ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+                score={liveScore?.available && liveScore.scoreConfidence === "reliable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
               />
               {ladderPanel}
               <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
@@ -2967,7 +2968,7 @@ function PaperTradingPage() {
                   player1Odds={displayPlayers.player1.odds}
                   player2Odds={displayPlayers.player2.odds}
                   isInPlay={!!marketBook?.inplay}
-                  score={liveScore?.available ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+                  score={liveScore?.available && liveScore.scoreConfidence === "reliable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
                 />
                 {ladderPanel}
                 <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />

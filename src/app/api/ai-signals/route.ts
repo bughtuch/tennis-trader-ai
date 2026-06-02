@@ -135,11 +135,9 @@ function buildUserPrompt(
         ctx.recentAction ? `Recent: ${ctx.recentAction}` : "",
         ctx.ladderContext ? `Ladder: ${ctx.ladderContext}` : "",
         "",
-        ctx.scoreConfidence === "unavailable"
+        ctx.scoreConfidence !== "reliable"
           ? "Score data unavailable. Give a price-action read only — do not guess the score. Respond with structured JSON."
-          : ctx.scoreConfidence === "estimated"
-            ? "Score is estimated and may be inaccurate. Caveat any scoreboard-based analysis. Respond with structured JSON."
-            : "Respond with structured JSON. Reference serve-game context and ladder.",
+          : "Respond with structured JSON. Reference serve-game context and ladder.",
       ]
         .filter(Boolean)
         .join("\n");

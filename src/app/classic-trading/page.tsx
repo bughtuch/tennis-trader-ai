@@ -371,7 +371,7 @@ function ClassicTradingPage() {
   /* ─── Stale score interval (needs marketBook) ─── */
   useEffect(() => {
     const id = setInterval(() => {
-      if (marketBook?.inplay && Date.now() - lastScoreUpdateRef.current > 45_000) {
+      if (marketBook?.inplay && Date.now() - lastScoreUpdateRef.current > 20_000) {
         setIsScoreStale(true);
       }
     }, 5_000);

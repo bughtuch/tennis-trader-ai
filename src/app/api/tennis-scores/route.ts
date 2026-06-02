@@ -116,32 +116,59 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ available: false } as ScoreResponse);
     }
 
-    // Find match by player name substring match
+    // Find match by player name — strict then last-name fallback
     const p1Lower = player1.toLowerCase();
     const p2Lower = player2.toLowerCase();
 
+    function playersMatchStrict(home: string, away: string): boolean {
+      return (
+        (home.includes(p1Lower) && away.includes(p2Lower)) ||
+        (home.includes(p2Lower) && away.includes(p1Lower))
+      );
+    }
+
+    function playersMatchLastName(home: string, away: string): boolean {
+      const homeLast = home.split(" ").pop() || "";
+      const awayLast = away.split(" ").pop() || "";
+      const p1Last = p1Lower.split(" ").pop() || "";
+      const p2Last = p2Lower.split(" ").pop() || "";
+      if (p1Last.length < 3 || p2Last.length < 3) return false;
+      return (
+        (homeLast.includes(p1Last) && awayLast.includes(p2Last)) ||
+        (homeLast.includes(p2Last) && awayLast.includes(p1Last))
+      );
+    }
+
+    // Step 1: Try strict full-name matching
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const match = data.result.find((m: any) => {
+    let matches = data.result.filter((m: any) => {
       const home = (m.event_home_player || "").toLowerCase();
       const away = (m.event_away_player || "").toLowerCase();
-      return (
-        (home.includes(p1Lower) || p1Lower.includes(home.split(" ").pop() || "")) &&
-        (away.includes(p2Lower) || p2Lower.includes(away.split(" ").pop() || ""))
-      ) || (
-        (home.includes(p2Lower) || p2Lower.includes(home.split(" ").pop() || "")) &&
-        (away.includes(p1Lower) || p1Lower.includes(away.split(" ").pop() || ""))
-      );
+      return playersMatchStrict(home, away);
     });
 
-    if (!match) {
+    // Step 2: Fall back to last-name if no strict match
+    if (matches.length === 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      matches = data.result.filter((m: any) => {
+        const home = (m.event_home_player || "").toLowerCase();
+        const away = (m.event_away_player || "").toLowerCase();
+        return playersMatchLastName(home, away);
+      });
+    }
+
+    // Step 3: Require exactly 1 match — ambiguous = unavailable
+    if (matches.length !== 1) {
       return NextResponse.json({ available: false } as ScoreResponse);
     }
+
+    const match = matches[0];
 
     // Determine player order: does p1 match home or away?
     const homeLower = (match.event_home_player || "").toLowerCase();
     const p1IsHome =
       homeLower.includes(p1Lower) ||
-      p1Lower.includes((homeLower.split(" ").pop() || ""));
+      (p1Lower.split(" ").pop()!.length >= 3 && (homeLower.split(" ").pop() || "").includes(p1Lower.split(" ").pop()!));
 
     // Parse set scores
     const sets: number[][] = [];
@@ -236,15 +263,19 @@ export async function POST(req: NextRequest) {
       if (p2GamePt && p2WouldWinMatch) matchPoint = true;
     }
 
-    // ─── Validate scores before returning ───
+    // ─── Validate scores before returning — reject bad data ───
     const maxSets = inferMaxSets();
     const validated = validateAndClampSets(sets, maxSets);
     const validatedGame = validateGameScore(gameScore);
 
-    let scoreConfidence: ScoreConfidence = validated.confidence;
-    if (!validatedGame.valid && validatedGame.gameScore.some(g => g !== "")) {
-      scoreConfidence = "estimated";
+    if (validated.confidence !== "reliable") {
+      return NextResponse.json({ available: false } as ScoreResponse);
     }
+    if (!validatedGame.valid && validatedGame.gameScore.some(g => g !== "")) {
+      return NextResponse.json({ available: false } as ScoreResponse);
+    }
+
+    const scoreConfidence: ScoreConfidence = "reliable";
 
     const result: ScoreResponse = {
       available: true,
