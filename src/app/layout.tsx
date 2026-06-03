@@ -45,6 +45,24 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        {process.env.NEXT_PUBLIC_REWARDFUL_API_KEY && (
+          <>
+            <script
+              nonce={nonce}
+              dangerouslySetInnerHTML={{
+                __html: `(function(w,r){w._rwq=r;w[r]=w[r]||function(){(w[r].q=w[r].q||[]).push(arguments)}})(window,'rewardful');`,
+              }}
+            />
+            <script
+              nonce={nonce}
+              async
+              src="https://r.wdfl.co/rw.js"
+              data-rewardful={process.env.NEXT_PUBLIC_REWARDFUL_API_KEY}
+            />
+          </>
+        )}
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable} ${plusJakarta.variable} ${dmSans.variable} antialiased bg-[#030712] text-gray-100`}
         nonce={nonce}

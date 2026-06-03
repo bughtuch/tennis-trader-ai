@@ -28,8 +28,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Accept optional priceId from request body
+    // Accept optional priceId and referral from request body
     let selectedPriceId = process.env.STRIPE_PRICE_ID!;
+    let referral: string | undefined;
     try {
       const body = await req.json();
       if (body?.priceId === "annual") {
@@ -41,6 +42,9 @@ export async function POST(req: NextRequest) {
           );
         }
         selectedPriceId = annualPriceId;
+      }
+      if (body?.referral && typeof body.referral === "string") {
+        referral = body.referral;
       }
     } catch {
       // No body or invalid JSON — use default monthly price
@@ -60,6 +64,7 @@ export async function POST(req: NextRequest) {
       success_url: `${appUrl}/settings?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/settings`,
       customer_email: user.email,
+      ...(referral ? { client_reference_id: referral } : {}),
       metadata: {
         userId: user.id,
         tier: "founding_member",

@@ -422,10 +422,15 @@ function SettingsPage() {
       setCheckoutLoading(true);
     }
     try {
+      const referral = typeof window !== "undefined" ? window.Rewardful?.referral : null;
+
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(priceId ? { priceId } : {}),
+        body: JSON.stringify({
+          ...(priceId ? { priceId } : {}),
+          ...(referral ? { referral } : {}),
+        }),
       });
       const data = await res.json();
       if (data.url) {
