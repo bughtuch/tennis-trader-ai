@@ -5,6 +5,17 @@
  * Falls back to provided surface, then "hard" as default.
  */
 export function inferSurface(tournament: string | undefined, providedSurface: string | undefined): string {
+  return inferSurfaceWithConfidence(tournament, providedSurface).surface;
+}
+
+/**
+ * Infer surface with confidence tracking.
+ * Returns whether the surface was confidently determined from a known tournament.
+ */
+export function inferSurfaceWithConfidence(
+  tournament: string | undefined,
+  providedSurface: string | undefined,
+): { surface: string; verified: boolean; source: string } {
   const t = (tournament ?? "").toLowerCase();
 
   // Clay tournaments
@@ -15,25 +26,26 @@ export function inferSurface(tournament: string | undefined, providedSurface: st
     t.includes("buenos aires") || t.includes("rio") || t.includes("estoril") ||
     t.includes("lyon") || t.includes("bastad") || t.includes("gstaad") ||
     t.includes("umag") || t.includes("kitzbuhel") || t.includes("kitzbühel")
-  ) return "clay";
+  ) return { surface: "clay", verified: true, source: "Known clay tournament" };
 
   // Grass tournaments
   if (
     t.includes("wimbledon") ||
     t.includes("queen") || t.includes("halle") ||
     t.includes("eastbourne") || t.includes("s-hertogenbosch") ||
-    t.includes("mallorca") || t.includes("stuttgart") && t.includes("grass")
-  ) return "grass";
+    t.includes("mallorca") || (t.includes("stuttgart") && t.includes("grass"))
+  ) return { surface: "grass", verified: true, source: "Known grass tournament" };
 
   // Known hard-court grand slams
-  if (t.includes("australian open") || t.includes("us open")) return "hard";
+  if (t.includes("australian open") || t.includes("us open"))
+    return { surface: "hard", verified: true, source: "Known hard-court slam" };
 
-  // Use provided surface if available
+  // Use provided surface if available — but mark as unverified
   if (providedSurface && providedSurface.toLowerCase() !== "unknown") {
-    return providedSurface.toLowerCase();
+    return { surface: providedSurface.toLowerCase(), verified: false, source: "Provided but unverified" };
   }
 
-  return "hard";
+  return { surface: "hard", verified: false, source: "Default fallback — not confirmed" };
 }
 
 /**
@@ -56,13 +68,18 @@ export function getSurfaceContext(surface: string): string {
  * and surface mismatches.
  */
 export const TENNIS_PROMPT_GUARDRAILS = `
-STRICT RULES — violating these makes the output useless to the trader:
-- NEVER mention "team news", "squad", "lineup", "formation", or any team-sport concept. Tennis is an individual sport with two players.
-- NEVER use generic financial jargon like "market volatility", "portfolio diversification", "risk-reward ratio", "bull/bear", "P/E ratio". You are a Betfair exchange trader, not a stockbroker.
-- NEVER reference a surface that doesn't match the tournament. If the tournament is French Open or Roland Garros, the surface is CLAY — never reference hard-court records.
-- NEVER use vague momentum or sentiment language: "follow the momentum", "positive momentum", "bullish", "bearish", "strong trend", "good opportunity", "attractive opportunity", "looks promising", "market likes", "market loves", "market hates". These are meaningless to a trader. Reference specific scoreboard events that explain price movement.
-- Use tennis exchange trading language: hold of serve, break of serve, second serve pressure, return games, tiebreak pressure, clay-court rallies, hard-court serve dominance, grass-court short points, momentum after break, price shortening, price drifting, favourite, underdog, exchange pressure, weight of money, ladder depth.
-- Think in terms of individual player form, serve/return stats, surface-specific patterns, and scoreboard pressure — not team dynamics.`.trim();
+STRICT RULES — violating these destroys trader trust:
+- NEVER mention "team news", "squad", "lineup", "formation", or any team-sport concept. Tennis is individual.
+- NEVER use financial jargon: "market volatility", "portfolio diversification", "risk-reward ratio", "bull/bear", "P/E ratio", "alpha", "liquidity cascade", "volatility expansion". You are a Betfair trader, not a stockbroker.
+- NEVER use these banned phrases: "perfect equilibrium", "compressed favourite", "favourite heavily compressed", "market compression", "first strike environment", "first-strike environment", "surface tempo", "post-break entry", "momentum continuation", "inefficient pricing", "volatility expansion".
+- NEVER use vague sentiment: "follow the momentum", "positive momentum", "bullish", "bearish", "strong trend", "good opportunity", "attractive opportunity", "looks promising", "market likes", "market loves", "market hates".
+- ONLY reference data explicitly provided in the DATA CONTRACT above. If a field is marked [UNVERIFIED] or [UNAVAILABLE], do NOT treat it as fact.
+- NEVER invent player statistics (serve %, return %, break conversion, H2H). If no stats are provided, say so.
+- NEVER predict set-end prices or project future specific prices.
+- NEVER reference opening odds unless explicitly provided and marked [verified].
+- Use plain tennis trader language: favourite, underdog, shorter price, drifting price, hold of serve, break of serve, better server, weaker second serve, return pressure, price moved too far, no clear edge, wait for next service game, wait for confirmed break, trade only if price improves.
+- Every claim must be traceable to a verified data field. If you cannot prove it from the data contract, do not state it.
+- Be concise. Max 2-3 sentences per section.`.trim();
 
 /* ─── Banned Phrases (post-processing defense-in-depth) ─── */
 
@@ -70,6 +87,12 @@ export const BANNED_PHRASES = [
   "follow the momentum", "positive momentum", "bullish", "bearish",
   "strong trend", "good opportunity", "attractive opportunity",
   "looks promising", "market likes", "market loves", "market hates",
+  "perfect equilibrium", "compressed favourite", "favourite heavily compressed",
+  "heavily compressed", "market compression", "first strike environment",
+  "first-strike environment", "surface tempo", "post-break entry",
+  "momentum continuation", "liquidity cascade", "inefficient pricing",
+  "volatility expansion", "volatility contraction", "risk-reward ratio",
+  "risk reward ratio", "portfolio diversification", "market sentiment",
 ];
 
 /* ─── Structured AI Signal Types ─── */
@@ -77,10 +100,18 @@ export const BANNED_PHRASES = [
 export type ConfidenceLevel = "LOW" | "MEDIUM" | "HIGH";
 
 export interface StructuredAISignal {
-  matchState: string;
-  marketState: string;
-  reason: string;
-  traderFocus: string;
+  // Pre-match format
+  whatWeKnow?: string;
+  whatWeDontKnow?: string;
+  tradingView?: string;
+  whatToWatch?: string;
+
+  // In-play format
+  situation?: string;
+  reason?: string;
+  watch?: string;
+
+  // Common
   confidence: ConfidenceLevel;
   confidenceReason: string;
   edgeSize: "none" | "mild" | "moderate" | "strong";
@@ -94,33 +125,57 @@ export interface StructuredAISignal {
 
 /* ─── Mandatory Output Format for AI ─── */
 
-export const MANDATORY_OUTPUT_FORMAT = `
+export const PRE_MATCH_OUTPUT_FORMAT = `
 You MUST respond with valid JSON matching this exact structure:
 {
-  "matchState": "<exact score and server from context — never invent data>",
-  "marketState": "<current prices and movement using ONLY provided odds — never invent prices>",
-  "reason": "<specific tennis event explaining the price movement — reference scoreboard>",
-  "traderFocus": "<what the trader should watch next — specific game/point situation>",
-  "confidence": "<LOW | MEDIUM | HIGH>",
-  "confidenceReason": "<why this confidence level — reference data quality/situation>",
-  "edgeSize": "<none | mild | moderate | strong>",
+  "whatWeKnow": "<state ONLY verified facts from the DATA CONTRACT — current odds, verified surface, tournament. Max 2-3 sentences.>",
+  "whatWeDontKnow": "<explicitly list what data is missing or unverified — opening odds, player stats, H2H, etc. Be honest.>",
+  "tradingView": "<your trading read based ONLY on verified data. If data confidence is LOW, say 'Insufficient verified data for trade suggestion.' Max 2-3 sentences.>",
+  "whatToWatch": "<specific things the trader should watch for — first service games, early break, price reaction. Max 2 sentences.>",
+  "confidence": "<LOW | MEDIUM | HIGH — must match the DATA CONFIDENCE level provided>",
+  "confidenceReason": "<why this confidence — reference which data is verified vs missing>",
+  "edgeSize": "<none | mild | moderate | strong — 'none' if data confidence is LOW>"
+}
+
+RULES:
+- ONLY reference facts from the DATA CONTRACT. If a field is [UNVERIFIED] or [UNAVAILABLE], do not use it as fact.
+- whatWeKnow must cite ONLY verified data fields. Never invent prices, stats, or surface info.
+- whatWeDontKnow must be honest about gaps. Missing data is acceptable. Wrong data is unacceptable.
+- Do NOT predict set-end prices or project specific future prices.
+- Do NOT claim player statistics unless explicitly provided.
+- tradeSignal is NOT included for pre-match. Omit it entirely.
+- Be concise. Plain trader language. No jargon.
+- Do NOT wrap in markdown code fences. Return raw JSON only.
+`.trim();
+
+export const IN_PLAY_OUTPUT_FORMAT = `
+You MUST respond with valid JSON matching this exact structure:
+{
+  "situation": "<what is happening right now — use ONLY verified score and odds from DATA CONTRACT. If score unavailable, say so.>",
+  "reason": "<why the price is where it is — reference specific verified data. If score unavailable, read price action only.>",
+  "watch": "<what the trader should watch next — be specific. If data is limited, say what would need to happen before acting.>",
+  "confidence": "<LOW | MEDIUM | HIGH — must match the DATA CONFIDENCE level provided>",
+  "confidenceReason": "<why this confidence — reference data quality>",
+  "edgeSize": "<none | mild | moderate | strong — 'none' if data confidence is LOW>",
   "tradeSignal": {
     "entry": "<specific price and direction>",
-    "reason": "<why enter here — reference scoreboard event>",
-    "risk": "<what could go wrong — specific tennis scenario>",
-    "invalidation": "<price level or event that cancels this trade>"
+    "reason": "<why enter — reference verified data>",
+    "risk": "<what could go wrong>",
+    "invalidation": "<price or event that cancels>"
   }
 }
 
 RULES:
-- matchState MUST use the exact score and server provided in context. If no score provided, state "Pre-match" or "Score unavailable".
-- marketState MUST use ONLY the prices provided. Never invent or assume prices.
-- reason MUST reference a specific tennis event (break of serve, hold, tiebreak point, etc).
-- If any required data is missing, set ALL text fields to "Insufficient live data for analysis" and confidence to "LOW".
-- tradeSignal is optional — only include if there is a genuine edge. Omit the field entirely if no edge exists.
-- Be concise. No section should exceed 2 sentences.
-- Do NOT wrap the JSON in markdown code fences. Return raw JSON only.
+- situation MUST use the exact score and server from DATA CONTRACT. If score is unavailable, state that clearly.
+- reason MUST reference verified data only. Do not guess what happened on court if score is unavailable.
+- tradeSignal is optional — only include if there is a genuine edge AND data confidence is HIGH or MEDIUM. Omit entirely otherwise.
+- Do NOT predict set-end prices or project specific future prices.
+- Be concise. Max 2-3 sentences per field. Plain trader language.
+- Do NOT wrap in markdown code fences. Return raw JSON only.
 `.trim();
+
+// Keep for backward compat — routes now use PRE_MATCH_OUTPUT_FORMAT / IN_PLAY_OUTPUT_FORMAT
+export const MANDATORY_OUTPUT_FORMAT = PRE_MATCH_OUTPUT_FORMAT;
 
 /* ─── Format Match Context for Prompt ─── */
 

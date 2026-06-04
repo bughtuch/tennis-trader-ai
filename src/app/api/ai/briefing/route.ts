@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
-import { inferSurface, getSurfaceContext, TENNIS_PROMPT_GUARDRAILS } from "@/lib/tennisContext";
+import {
+  inferSurfaceWithConfidence,
+  getSurfaceContext,
+  TENNIS_PROMPT_GUARDRAILS,
+} from "@/lib/tennisContext";
+import {
+  buildDataContract,
+  buildPromptRestrictions,
+  buildGuardrailPromptBlock,
+  buildDataContextForPrompt,
+  selfCheckOutput,
+} from "@/lib/aiDataContract";
 
 export const runtime = "edge";
 
@@ -19,18 +30,24 @@ interface BriefingRequest {
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as BriefingRequest;
-    const { market_id, player1, player2, tournament, surface, odds1, odds2 } = body;
+    const { market_id, player1, player2, tournament, surface, odds1, odds2 } =
+      body;
 
     if (!market_id || !player1 || !player2) {
       return NextResponse.json(
-        { success: false, error: "market_id, player1, and player2 are required" },
-        { status: 400 }
+        {
+          success: false,
+          error: "market_id, player1, and player2 are required",
+        },
+        { status: 400 },
       );
     }
 
     // Check Supabase for cached briefing
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (user) {
       const { data: cached } = await supabase
@@ -59,14 +76,33 @@ export async function POST(req: NextRequest) {
     if (!apiKey) {
       return NextResponse.json(
         { success: false, error: "ANTHROPIC_API_KEY is not configured" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
-    const resolvedSurface = inferSurface(tournament, surface);
-    const surfaceCtx = getSurfaceContext(resolvedSurface);
+    /* ─── Build Data Contract ─── */
+    const surfaceInfo = inferSurfaceWithConfidence(tournament, surface);
 
-    const userPrompt = `Pre-match briefing for: ${player1} (${odds1.toFixed(2)}) vs ${player2} (${odds2.toFixed(2)}) at ${tournament} on ${resolvedSurface}.`;
+    const dataContract = buildDataContract({
+      player1,
+      player2,
+      tournament,
+      surface: surfaceInfo.surface,
+      surfaceVerified: surfaceInfo.verified,
+      odds1,
+      odds2,
+      matchStatus: "pre_match",
+    });
+
+    const restrictions = buildPromptRestrictions(dataContract);
+    const guardrailBlock = buildGuardrailPromptBlock(restrictions);
+    const dataContextBlock = buildDataContextForPrompt(dataContract);
+
+    const surfaceCtx = surfaceInfo.verified
+      ? getSurfaceContext(surfaceInfo.surface)
+      : "Surface is NOT verified. Do not reference surface-specific patterns.";
+
+    const userPrompt = `Pre-match briefing for: ${player1} (${odds1.toFixed(2)}) vs ${player2} (${odds2.toFixed(2)}) at ${tournament}.`;
 
     const res = await fetch(ANTHROPIC_API, {
       method: "POST",
@@ -80,14 +116,25 @@ export async function POST(req: NextRequest) {
         max_tokens: 250,
         system: [
           "You are a professional Betfair tennis exchange trader preparing a pre-match briefing.",
-          `${surfaceCtx}`,
-          "Generate a trading briefing in under 100 words. Include:",
-          "- Key price levels to watch (specific odds)",
-          "- Serve/return matchup on this surface",
-          "- When to enter: after first hold? After early break? Pre-match value?",
+          "You are NOT a tipster or prediction oracle. You explain verified data in plain trader language.",
+          "",
+          dataContextBlock,
+          "",
+          surfaceCtx,
+          "",
+          "Generate a trading briefing in under 100 words. Include ONLY what verified data supports:",
+          "- Current price levels (from verified odds)",
+          "- When to enter: after first hold? After early break? Wait for price improvement?",
           "- Danger zones: where price could move sharply against you",
-          "- One specific edge if you see one",
-          "Be actionable for a Betfair exchange trader. Think in terms of price shortening, drifting, break pressure, hold of serve, and ladder weight — not fan opinions or punditry.",
+          "- What data is missing (no opening odds, no player stats, surface if unverified)",
+          "Do NOT claim player serve/return stats unless provided.",
+          "Do NOT reference opening odds (not available).",
+          "Do NOT predict set-end prices.",
+          surfaceInfo.verified
+            ? "- Surface-adjusted trading considerations"
+            : "- Surface is unverified — do not reference surface dynamics.",
+          "",
+          guardrailBlock,
           "",
           TENNIS_PROMPT_GUARDRAILS,
         ].join("\n"),
@@ -98,16 +145,22 @@ export async function POST(req: NextRequest) {
     if (!res.ok) {
       const errText = await res.text();
       return NextResponse.json(
-        { success: false, error: `Anthropic API error: ${res.status} ${errText}` },
-        { status: 502 }
+        {
+          success: false,
+          error: `Anthropic API error: ${res.status} ${errText}`,
+        },
+        { status: 502 },
       );
     }
 
     const data = await res.json();
-    const briefing =
+    let briefing =
       data.content?.[0]?.type === "text"
         ? data.content[0].text.trim()
         : "No briefing available.";
+
+    // Self-check the output
+    briefing = selfCheckOutput(briefing, restrictions);
 
     // Save to Supabase
     if (user) {
@@ -124,6 +177,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, briefing, cached: false });
   } catch {
-    return NextResponse.json({ success: false, error: "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "Server error" },
+      { status: 500 },
+    );
   }
 }

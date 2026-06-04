@@ -265,6 +265,7 @@ function TradingPage() {
   const searchCacheRef = useRef<{ markets: typeof searchResults; fetchedAt: number } | null>(null);
 
   /* AI Signals state */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [aiSignal, setAiSignal] = useState<{
     type: string;
     confidence: number;
@@ -273,6 +274,11 @@ function TradingPage() {
     model: string;
     timestamp: string;
     structured?: StructuredAISignal;
+    dataConfidence?: "HIGH" | "MEDIUM" | "LOW";
+    dataConfidenceReasons?: string[];
+    factPanel?: any;
+    sourcesUsed?: string[];
+    sourcesNotUsed?: string[];
   } | null>(null);
   const [aiSignalLoading, setAiSignalLoading] = useState(false);
   const [aiSignalHistory, setAiSignalHistory] = useState<
@@ -2165,7 +2171,35 @@ function TradingPage() {
 
       {/* Current signal display */}
       {aiSignal && (
-        <div className="p-4 border-b border-gray-800/50">
+        <div className="p-4 border-b border-gray-800/50 space-y-3">
+          {/* Stage 4: Fact Panel */}
+          {aiSignal.factPanel && (
+            <div className="rounded-xl p-3 border border-gray-700/50 bg-gray-800/30 space-y-1.5">
+              <div className="text-[9px] font-bold tracking-wider uppercase text-gray-400">MATCH FACTS</div>
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px]">
+                <span className="text-gray-500">Tournament:</span>
+                <span className="text-gray-300">{aiSignal.factPanel.tournament}</span>
+                <span className="text-gray-500">Surface:</span>
+                <span className={aiSignal.factPanel.surfaceVerified ? "text-gray-300" : "text-amber-400"}>{aiSignal.factPanel.surface}</span>
+                <span className="text-gray-500">Status:</span>
+                <span className="text-gray-300">{aiSignal.factPanel.matchStatus}</span>
+                <span className="text-gray-500">Score:</span>
+                <span className={aiSignal.factPanel.scoreVerified ? "text-gray-300" : "text-amber-400"}>{aiSignal.factPanel.score}</span>
+                <span className="text-gray-500">Odds:</span>
+                <span className="text-gray-300 font-mono text-[9px]">{aiSignal.factPanel.currentOdds}</span>
+              </div>
+              <div className="mt-1">
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                  aiSignal.factPanel.dataConfidence === "HIGH" ? "bg-green-500/20 text-green-400" :
+                  aiSignal.factPanel.dataConfidence === "MEDIUM" ? "bg-yellow-500/20 text-yellow-400" :
+                  "bg-red-500/20 text-red-400"
+                }`}>
+                  Data: {aiSignal.factPanel.dataConfidence}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -2191,21 +2225,53 @@ function TradingPage() {
               </span>
             </div>
 
-            {/* Concise 3-line display: Situation / Reason / Watch */}
+            {/* Structured display: Pre-match or In-play format */}
             {aiSignal.structured ? (
               <div className="space-y-1.5">
-                <div className="flex gap-2">
-                  <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-16 pt-0.5">Situation</span>
-                  <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.matchState} {aiSignal.structured.marketState}</p>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-16 pt-0.5">Reason</span>
-                  <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.reason}</p>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-16 pt-0.5">Watch</span>
-                  <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.traderFocus}</p>
-                </div>
+                {/* Pre-match format */}
+                {aiSignal.structured.whatWeKnow && (
+                  <div className="flex gap-2">
+                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">We Know</span>
+                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.whatWeKnow}</p>
+                  </div>
+                )}
+                {aiSignal.structured.whatWeDontKnow && (
+                  <div className="flex gap-2">
+                    <span className="text-[9px] font-bold tracking-wider uppercase text-amber-500/70 shrink-0 w-20 pt-0.5">Don&apos;t Know</span>
+                    <p className="text-xs text-amber-400/80 leading-snug">{aiSignal.structured.whatWeDontKnow}</p>
+                  </div>
+                )}
+                {aiSignal.structured.tradingView && (
+                  <div className="flex gap-2">
+                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">View</span>
+                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.tradingView}</p>
+                  </div>
+                )}
+                {aiSignal.structured.whatToWatch && (
+                  <div className="flex gap-2">
+                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">Watch</span>
+                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.whatToWatch}</p>
+                  </div>
+                )}
+                {/* In-play format */}
+                {aiSignal.structured.situation && (
+                  <div className="flex gap-2">
+                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">Situation</span>
+                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.situation}</p>
+                  </div>
+                )}
+                {aiSignal.structured.reason && !aiSignal.structured.whatWeKnow && (
+                  <div className="flex gap-2">
+                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">Reason</span>
+                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.reason}</p>
+                  </div>
+                )}
+                {aiSignal.structured.watch && (
+                  <div className="flex gap-2">
+                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">Watch</span>
+                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.watch}</p>
+                  </div>
+                )}
                 {aiSignal.structured.tradeSignal && (
                   <div className="rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1.5 mt-1">
                     <div className="text-[10px] text-blue-400 font-semibold">
@@ -2225,7 +2291,10 @@ function TradingPage() {
             <div>
               <div className="flex items-center justify-between text-xs mb-1.5">
                 <span className="text-gray-500">Confidence</span>
-                <span className="text-green-400 font-mono font-medium">
+                <span className={`font-mono font-medium ${
+                  aiSignal.confidence >= 70 ? "text-green-400" :
+                  aiSignal.confidence >= 40 ? "text-yellow-400" : "text-red-400"
+                }`}>
                   {aiSignal.structured ? aiSignal.structured.confidence : `${aiSignal.confidence}%`}
                 </span>
               </div>
@@ -2240,6 +2309,24 @@ function TradingPage() {
               </div>
             </div>
           </div>
+
+          {/* Stage 5: Source Transparency */}
+          {aiSignal.sourcesUsed && aiSignal.sourcesNotUsed && (
+            <div className="rounded-xl p-3 border border-gray-700/50 bg-gray-800/30 space-y-1.5">
+              <div className="text-[9px] font-bold tracking-wider uppercase text-gray-400">AI USING</div>
+              <div className="flex flex-wrap gap-1">
+                {aiSignal.sourcesUsed.map((s: string) => (
+                  <span key={s} className="text-[8px] px-1 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">{s}</span>
+                ))}
+              </div>
+              <div className="text-[9px] font-bold tracking-wider uppercase text-gray-400 mt-1">AI NOT USING</div>
+              <div className="flex flex-wrap gap-1">
+                {aiSignal.sourcesNotUsed.map((s: string) => (
+                  <span key={s} className="text-[8px] px-1 py-0.5 rounded bg-gray-800/50 text-gray-500 border border-gray-700/50">{s}</span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

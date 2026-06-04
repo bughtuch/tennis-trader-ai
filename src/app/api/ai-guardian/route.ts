@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calculateGreenUp, moveByTicks, BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
-import { inferSurface, TENNIS_PROMPT_GUARDRAILS } from "@/lib/tennisContext";
+import { TENNIS_PROMPT_GUARDRAILS } from "@/lib/tennisContext";
 
 type Side = "BACK" | "LAY";
 
@@ -193,7 +193,14 @@ async function assessPosition(payload: AssessPayload) {
           worstCasePrice
         );
 
-        const surface = inferSurface(undefined, matchContext.surface);
+        const { inferSurfaceWithConfidence } = await import("@/lib/tennisContext");
+        const surfaceInfo = inferSurfaceWithConfidence(undefined, matchContext.surface);
+
+        // Build guardrail context based on data availability
+        const scoreReliable = matchContext.scoreConfidence === "reliable" && matchContext.score;
+        const surfaceBlock = surfaceInfo.verified
+          ? `Surface: ${surfaceInfo.surface}. Factor surface into recovery likelihood — on clay, breaks are more common so recovery from a break down is more likely; on grass, holds dominate so being on the wrong side of a break is harder to recover from.`
+          : "Surface is NOT verified. Do not reference surface-specific recovery patterns.";
 
         const res = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
@@ -206,10 +213,14 @@ async function assessPosition(payload: AssessPayload) {
             model: "claude-haiku-4-5-20251001",
             max_tokens: 200,
             system: [
-              "You are a Betfair tennis exchange position advisor. Assess whether this losing position can recover based on serve-game dynamics and scoreboard context.",
-              `Surface: ${surface}. Factor surface into recovery likelihood — on clay, breaks are more common so recovery from a break down is more likely; on grass, holds dominate so being on the wrong side of a break is harder to recover from.`,
-              "Think in terms of: who is serving, break/hold patterns, momentum after break, second serve pressure, and whether the price move is scoreboard-driven or panic money.",
-              "Respond ONLY in JSON: {\"recoveryChance\": 0-100, \"reasoning\": \"one sentence using tennis context\", \"recommendation\": \"exit|hedge|hold\", \"waitGames\": number}",
+              "You are a Betfair tennis exchange position advisor. Assess whether this losing position can recover.",
+              "You are NOT a tipster. Only reference verified data. Do not invent facts.",
+              surfaceBlock,
+              scoreReliable
+                ? "Think in terms of: who is serving, break/hold patterns, and whether the price move is scoreboard-driven or panic money."
+                : "Score is unavailable. Assess recovery based on price action and position size only. Do not guess the score.",
+              "Do NOT claim player serve/return stats. Do NOT predict set-end prices.",
+              "Respond ONLY in JSON: {\"recoveryChance\": 0-100, \"reasoning\": \"one sentence using verified data only\", \"recommendation\": \"exit|hedge|hold\", \"waitGames\": number}",
               "",
               TENNIS_PROMPT_GUARDRAILS,
             ].join("\n"),
@@ -218,11 +229,12 @@ async function assessPosition(payload: AssessPayload) {
                 role: "user",
                 content: [
                   `Position: ${entrySide} at ${entryPrice} for £${entryStake}. Current exit price: ${exitPrice}. Current P&L: £${currentPnl}.`,
-                  `Player: ${matchContext.player ?? "unknown"}, surface: ${surface}.`,
-                  matchContext.scoreConfidence !== "reliable" || !matchContext.score
+                  `Player: ${matchContext.player ?? "unknown"}.`,
+                  surfaceInfo.verified ? `Surface: ${surfaceInfo.surface} [verified].` : "Surface: unverified.",
+                  !scoreReliable
                     ? "Score data unavailable — assess recovery based on price action and position size only. Do not invent a scoreline."
                     : `Score: ${matchContext.score}. Server: ${matchContext.server ?? "unknown"}.`,
-                  "Based on this context, should I hold, hedge, or exit?",
+                  "Based on this verified context, should I hold, hedge, or exit?",
                 ].join(" "),
               },
             ],
