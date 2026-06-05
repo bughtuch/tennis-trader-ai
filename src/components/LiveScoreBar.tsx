@@ -43,12 +43,11 @@ export default function LiveScoreBar({
   const p1Short = player1Name.split(" ").pop() ?? "P1";
   const p2Short = player2Name.split(" ").pop() ?? "P2";
 
-  /* Format game score display */
-  const gameScoreDisplay = tiebreak && tiebreakScore
-    ? `TB ${tiebreakScore[0]}-${tiebreakScore[1]}`
-    : gameScore
-      ? `${gameScore[0]}-${gameScore[1]}`
-      : null;
+  /* Per-player game/tiebreak scores */
+  const isTiebreak = !!(tiebreak && tiebreakScore);
+  const p1GameScore = isTiebreak ? tiebreakScore![0] : gameScore?.[0] ?? null;
+  const p2GameScore = isTiebreak ? tiebreakScore![1] : gameScore?.[1] ?? null;
+  const hasGameScore = p1GameScore !== null;
 
   return (
     <div className="bg-gray-900/80 border border-gray-700/60 rounded-2xl overflow-hidden max-w-md mx-auto">
@@ -100,10 +99,10 @@ export default function LiveScoreBar({
                 })}
               </div>
               {/* Game score */}
-              {gameScoreDisplay && (
+              {hasGameScore && (
                 <div className="min-w-[56px] text-right">
                   <span className="text-base font-bold font-mono text-yellow-400">
-                    {gameScore ? gameScore[0] : tiebreakScore?.[0] ?? ""}
+                    {p1GameScore}
                   </span>
                 </div>
               )}
@@ -166,10 +165,10 @@ export default function LiveScoreBar({
                 })}
               </div>
               {/* Game score */}
-              {gameScoreDisplay && (
+              {hasGameScore && (
                 <div className="min-w-[56px] text-right">
                   <span className="text-base font-bold font-mono text-yellow-400">
-                    {gameScore ? gameScore[1] : tiebreakScore?.[1] ?? ""}
+                    {p2GameScore}
                   </span>
                 </div>
               )}
@@ -178,8 +177,8 @@ export default function LiveScoreBar({
             </div>
           </div>
 
-          {/* Game score label (centered below, only when tiebreak) */}
-          {tiebreak && tiebreakScore && (
+          {/* Tiebreak label */}
+          {isTiebreak && (
             <div className="mt-2 pt-1.5 border-t border-gray-800/40 text-center">
               <span className="text-[11px] text-gray-400 font-medium">TIEBREAK</span>
             </div>
