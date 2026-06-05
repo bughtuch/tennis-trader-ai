@@ -201,7 +201,7 @@ function TradingPage() {
   const [selectedStake, setSelectedStake] = useState<number | null>(25);
   const [customStakeInput, setCustomStakeInput] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState<"player1" | "player2">("player1");
-  const [activeTab, setActiveTab] = useState<"ladder" | "ai" | "positions">("ladder");
+  const [activeTab, setActiveTab] = useState<"ladder" | "ai" | "positions">("ai");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -1882,7 +1882,7 @@ function TradingPage() {
                 outcomePnl.ifPlayer1Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer1Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
               }`}>
                 <div className="text-[10px] text-gray-500">{displayPlayers.player1.short} wins</div>
-                <div className={`text-sm font-bold font-mono ${
+                <div className={`text-lg font-bold font-mono ${
                   outcomePnl.ifPlayer1Wins > 0 ? "text-green-400" : outcomePnl.ifPlayer1Wins < 0 ? "text-red-400" : "text-gray-400"
                 }`}>
                   {outcomePnl.ifPlayer1Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer1Wins.toFixed(2)}
@@ -1892,7 +1892,7 @@ function TradingPage() {
                 outcomePnl.ifPlayer2Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer2Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
               }`}>
                 <div className="text-[10px] text-gray-500">{displayPlayers.player2.short} wins</div>
-                <div className={`text-sm font-bold font-mono ${
+                <div className={`text-lg font-bold font-mono ${
                   outcomePnl.ifPlayer2Wins > 0 ? "text-green-400" : outcomePnl.ifPlayer2Wins < 0 ? "text-red-400" : "text-gray-400"
                 }`}>
                   {outcomePnl.ifPlayer2Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer2Wins.toFixed(2)}
@@ -1903,11 +1903,11 @@ function TradingPage() {
             <>
               <div className="flex-1 rounded-lg px-2.5 py-1.5 text-center bg-gray-800/40">
                 <div className="text-[10px] text-gray-500">{displayPlayers.player1.short} wins</div>
-                <div className="text-sm font-bold font-mono text-gray-500">£0.00</div>
+                <div className="text-lg font-bold font-mono text-gray-500">£0.00</div>
               </div>
               <div className="flex-1 rounded-lg px-2.5 py-1.5 text-center bg-gray-800/40">
                 <div className="text-[10px] text-gray-500">{displayPlayers.player2.short} wins</div>
-                <div className="text-sm font-bold font-mono text-gray-500">£0.00</div>
+                <div className="text-lg font-bold font-mono text-gray-500">£0.00</div>
               </div>
             </>
           )}
@@ -2076,16 +2076,16 @@ function TradingPage() {
 
   const aiPanel = (
     <>
-    <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden w-full max-w-md mx-auto">
-      <div className="px-4 py-3 border-b border-gray-800/50">
+    <div className="bg-gray-900/50 border border-purple-500/20 rounded-2xl overflow-hidden w-full max-w-md mx-auto">
+      <div className="px-4 py-3 border-b border-gray-800/50 bg-gradient-to-r from-purple-500/5 to-transparent">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-            <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">
+            <h2 className="text-xs tracking-[0.2em] uppercase text-gray-400 font-medium">
               AI SIGNALS
             </h2>
           </div>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 font-medium">
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 font-medium">
             CLAUDE
           </span>
         </div>
@@ -3278,70 +3278,6 @@ function TradingPage() {
         </div>
       </div>
 
-      {/* ─── Live Score Bar ─── */}
-      {liveScore?.available && (
-        <div className="border-b border-gray-800/50 bg-gray-900/40">
-          <div className="px-2 md:px-4 py-2 flex items-center justify-center gap-2 text-xs flex-wrap">
-            {/* Player 1 name + server dot */}
-            <span className="flex items-center gap-1 font-medium text-white">
-              {liveScore.server === 1 && (
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
-              )}
-              {displayPlayers.player1.short}
-            </span>
-
-            {/* Set scores */}
-            <span className="font-mono font-bold text-white tracking-wide">
-              [{liveScore.sets?.map((s) => `${s[0]}-${s[1]}`).join(", ")}]
-            </span>
-
-            {/* Player 2 name + server dot */}
-            <span className="flex items-center gap-1 font-medium text-white">
-              {displayPlayers.player2.short}
-              {liveScore.server === 2 && (
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
-              )}
-            </span>
-
-            <span className="text-gray-600">|</span>
-
-            {/* Game score or tiebreak score */}
-            <span className="font-mono font-semibold text-yellow-400">
-              {liveScore.tiebreak && liveScore.tiebreakScore
-                ? `TB ${liveScore.tiebreakScore[0]}-${liveScore.tiebreakScore[1]}`
-                : `${liveScore.gameScore?.[0]}-${liveScore.gameScore?.[1]}`}
-            </span>
-
-            <span className="text-gray-600">|</span>
-
-            {/* Server indicator */}
-            <span className="flex items-center gap-1 text-gray-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
-              {liveScore.server === 1
-                ? displayPlayers.player1.short
-                : displayPlayers.player2.short}{" "}
-              serving
-            </span>
-
-            {/* Situation badges */}
-            {liveScore.matchPoint && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 animate-pulse">
-                MATCH PT
-              </span>
-            )}
-            {liveScore.setPoint && !liveScore.matchPoint && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 animate-pulse">
-                SET PT
-              </span>
-            )}
-            {liveScore.breakPoint && !liveScore.setPoint && !liveScore.matchPoint && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 animate-pulse">
-                BREAK PT
-              </span>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ─── Set Winning Price Bar ─── */}
       {displayPlayers.player1.odds > 1.01 && (
@@ -3406,52 +3342,6 @@ function TradingPage() {
         isInPlay={!!marketBook?.inplay}
       />
 
-      {/* ─── YOUR POSITION ─── */}
-      {openPositions.length > 0 && outcomePnl && (
-        <div className="border-b border-gray-800/50 bg-gray-900/40">
-          <div className="max-w-2xl min-[1200px]:max-w-6xl mx-auto px-4 py-3">
-            <div className="rounded-xl border border-gray-700/50 bg-gray-800/30 p-4 space-y-2">
-              <div className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium">YOUR POSITION</div>
-              {/* Show each open position entry */}
-              {openPositions.slice(0, 3).map((pos) => (
-                <div key={pos.id} className="text-xs text-gray-400">
-                  {pos.side === "BACK" ? "Backed" : "Laid"}{" "}
-                  <span className="text-white font-medium">{pos.player}</span>{" "}
-                  <span className="text-gray-500">£{pos.stake?.toFixed(2)} at {pos.entry_price?.toFixed(2)}</span>
-                </div>
-              ))}
-              {openPositions.length > 3 && (
-                <div className="text-[10px] text-gray-600">+{openPositions.length - 3} more</div>
-              )}
-              {/* Outcome P&L */}
-              <div className="flex gap-4 pt-1">
-                <div className={`flex-1 rounded-lg px-3 py-2 ${
-                  outcomePnl.ifPlayer1Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer1Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
-                }`}>
-                  <div className="text-xs text-gray-500">If {displayPlayers.player1.name} wins</div>
-                  <span className={`text-lg font-bold font-mono ${outcomePnl.ifPlayer1Wins >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {outcomePnl.ifPlayer1Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer1Wins.toFixed(2)}
-                  </span>
-                </div>
-                <div className={`flex-1 rounded-lg px-3 py-2 ${
-                  outcomePnl.ifPlayer2Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer2Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
-                }`}>
-                  <div className="text-xs text-gray-500">If {displayPlayers.player2.name} wins</div>
-                  <span className={`text-lg font-bold font-mono ${outcomePnl.ifPlayer2Wins >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {outcomePnl.ifPlayer2Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer2Wins.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-              {/* Locked profit if both sides are green */}
-              {outcomePnl.ifPlayer1Wins > 0 && outcomePnl.ifPlayer2Wins > 0 && (
-                <div className="text-sm font-semibold text-green-400 pt-1">
-                  Locked profit: +£{Math.min(outcomePnl.ifPlayer1Wins, outcomePnl.ifPlayer2Wins).toFixed(2)} on both runners
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ─── Content Area ─── */}
       <div className="max-w-full overflow-x-hidden">
@@ -3467,6 +3357,12 @@ function TradingPage() {
                 player2Odds={displayPlayers.player2.odds}
                 isInPlay={!!marketBook?.inplay}
                 score={liveScore?.available && liveScore.scoreConfidence === "reliable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+                gameScore={liveScore?.gameScore}
+                tiebreak={liveScore?.tiebreak}
+                tiebreakScore={liveScore?.tiebreakScore}
+                breakPoint={liveScore?.breakPoint}
+                setPoint={liveScore?.setPoint}
+                matchPoint={liveScore?.matchPoint}
               />
               {ladderPanel}
               <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
@@ -3516,6 +3412,12 @@ function TradingPage() {
                   player2Odds={displayPlayers.player2.odds}
                   isInPlay={!!marketBook?.inplay}
                   score={liveScore?.available && liveScore.scoreConfidence === "reliable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+                  gameScore={liveScore?.gameScore}
+                  tiebreak={liveScore?.tiebreak}
+                  tiebreakScore={liveScore?.tiebreakScore}
+                  breakPoint={liveScore?.breakPoint}
+                  setPoint={liveScore?.setPoint}
+                  matchPoint={liveScore?.matchPoint}
                 />
                 {ladderPanel}
                 <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
