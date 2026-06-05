@@ -108,7 +108,7 @@ export default function LiveScoreBar({
                 </div>
               )}
               {/* Situation badge (only on P1 row) */}
-              <div className="flex-shrink-0">
+              <div className="flex-shrink-0 min-w-[70px] text-right">
                 {matchPoint && (
                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 animate-pulse">
                     MATCH PT
@@ -174,7 +174,7 @@ export default function LiveScoreBar({
                 </div>
               )}
               {/* Empty badge space for alignment */}
-              <div className="flex-shrink-0" />
+              <div className="flex-shrink-0 min-w-[70px]" />
             </div>
           </div>
 
