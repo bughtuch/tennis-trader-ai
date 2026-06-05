@@ -3403,22 +3403,22 @@ function TradingPage() {
         {/* MOBILE + TABLET: Single panel with tab switching (<1200px) */}
         <div className="min-[1200px]:hidden px-2 md:px-4 py-3 md:py-4 max-w-full">
           <div className="transition-opacity duration-200 ease-in-out space-y-4">
+            <LiveScoreBar
+              player1Name={displayPlayers.player1.name}
+              player2Name={displayPlayers.player2.name}
+              player1Odds={displayPlayers.player1.odds}
+              player2Odds={displayPlayers.player2.odds}
+              isInPlay={!!marketBook?.inplay}
+              score={liveScore?.available && liveScore.scoreConfidence === "reliable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+              gameScore={liveScore?.gameScore}
+              tiebreak={liveScore?.tiebreak}
+              tiebreakScore={liveScore?.tiebreakScore}
+              breakPoint={liveScore?.breakPoint}
+              setPoint={liveScore?.setPoint}
+              matchPoint={liveScore?.matchPoint}
+            />
             {activeTab === "ladder" && (
               <>
-                <LiveScoreBar
-                  player1Name={displayPlayers.player1.name}
-                  player2Name={displayPlayers.player2.name}
-                  player1Odds={displayPlayers.player1.odds}
-                  player2Odds={displayPlayers.player2.odds}
-                  isInPlay={!!marketBook?.inplay}
-                  score={liveScore?.available && liveScore.scoreConfidence === "reliable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
-                  gameScore={liveScore?.gameScore}
-                  tiebreak={liveScore?.tiebreak}
-                  tiebreakScore={liveScore?.tiebreakScore}
-                  breakPoint={liveScore?.breakPoint}
-                  setPoint={liveScore?.setPoint}
-                  matchPoint={liveScore?.matchPoint}
-                />
                 {ladderPanel}
                 <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
                 <ServeHoldStats
