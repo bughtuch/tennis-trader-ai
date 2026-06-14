@@ -69,6 +69,8 @@ interface LiveScore {
   tiebreak?: boolean;
   tiebreakScore?: string[];
   scoreConfidence?: "reliable" | "estimated" | "unavailable";
+  provider?: "betfair" | "api-tennis" | "unavailable";
+  reason?: string;
 }
 
 const STAKES = [5, 10, 25, 50, 100];
@@ -3471,6 +3473,7 @@ function TradingPage() {
                 breakPoint={liveScore?.breakPoint}
                 setPoint={liveScore?.setPoint}
                 matchPoint={liveScore?.matchPoint}
+                provider={liveScore?.provider}
               />
               {ladderPanel}
               <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />

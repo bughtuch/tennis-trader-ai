@@ -21,6 +21,7 @@ interface LiveScoreBarProps {
   breakPoint?: boolean;
   setPoint?: boolean;
   matchPoint?: boolean;
+  provider?: string;
 }
 
 /* ─── Component ─── */
@@ -36,6 +37,7 @@ export default function LiveScoreBar({
   breakPoint,
   setPoint,
   matchPoint,
+  provider,
 }: LiveScoreBarProps) {
   const displaySets = score?.sets;
   const displayServer = score?.server;
@@ -181,6 +183,15 @@ export default function LiveScoreBar({
           {isTiebreak && (
             <div className="mt-2 pt-1.5 border-t border-gray-800/40 text-center">
               <span className="text-[11px] text-gray-400 font-medium">TIEBREAK</span>
+            </div>
+          )}
+
+          {/* Provider label */}
+          {provider && (
+            <div className="mt-1 text-center">
+              <span className="text-[9px] text-gray-500 font-medium">
+                via {provider === "betfair" ? "Betfair" : provider === "api-tennis" ? "API-Tennis" : provider}
+              </span>
             </div>
           )}
         </div>

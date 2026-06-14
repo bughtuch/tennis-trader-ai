@@ -251,6 +251,7 @@ function ClassicTradingPage() {
     server?: 1 | 2; matchStatus?: string; breakPoint?: boolean;
     setPoint?: boolean; matchPoint?: boolean; tiebreak?: boolean;
     tiebreakScore?: string[]; scoreConfidence?: ScoreConfidence;
+    provider?: "betfair" | "api-tennis" | "unavailable"; reason?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -1688,6 +1689,7 @@ function ClassicTradingPage() {
           scoreConfidence={liveScore?.scoreConfidence ?? "unavailable"}
           isScoreStale={isScoreStale}
           scoreAvailable={!!liveScore?.available}
+          provider={liveScore?.provider}
         />
 
         {/* Row 3: Stake controls */}

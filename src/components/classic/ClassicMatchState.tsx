@@ -18,6 +18,7 @@ interface ClassicMatchStateProps {
   scoreConfidence: ScoreConfidence;
   isScoreStale: boolean;
   scoreAvailable: boolean;
+  provider?: string;
 }
 
 export default function ClassicMatchState({
@@ -36,6 +37,7 @@ export default function ClassicMatchState({
   scoreConfidence,
   isScoreStale,
   scoreAvailable,
+  provider,
 }: ClassicMatchStateProps) {
   // --- Pre-match ---
   if (!isInPlay && !isSuspended) {
@@ -46,8 +48,8 @@ export default function ClassicMatchState({
     );
   }
 
-  // --- No reliable score ---
-  if (scoreConfidence !== "reliable" || !scoreAvailable) {
+  // --- No score at all ---
+  if (scoreConfidence === "unavailable" || !scoreAvailable) {
     return (
       <div className="px-3 sm:px-4 py-1.5 border-t border-gray-100 text-center">
         <span className="text-xs text-gray-400">No reliable score available</span>
@@ -163,6 +165,11 @@ export default function ClassicMatchState({
               <span className="w-2 h-2 rounded-full bg-green-500" />
               <span className="text-[10px] font-semibold text-green-700">HIGH</span>
             </>
+          )}
+          {provider && (
+            <span className="text-[9px] text-gray-400 ml-1">
+              via {provider === "betfair" ? "Betfair" : provider === "api-tennis" ? "API-Tennis" : provider}
+            </span>
           )}
         </div>
       </div>

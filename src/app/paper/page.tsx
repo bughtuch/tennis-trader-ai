@@ -63,6 +63,8 @@ interface LiveScore {
   tiebreak?: boolean;
   tiebreakScore?: string[];
   scoreConfidence?: "reliable" | "estimated" | "unavailable";
+  provider?: "betfair" | "api-tennis" | "unavailable";
+  reason?: string;
 }
 
 /* ─── Inline Market List for no-market state ─── */
@@ -3022,6 +3024,7 @@ function PaperTradingPage() {
                 player2Odds={displayPlayers.player2.odds}
                 isInPlay={!!marketBook?.inplay}
                 score={liveScore?.available && liveScore.scoreConfidence !== "unavailable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+                provider={liveScore?.provider}
               />
               {ladderPanel}
               <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
@@ -3072,6 +3075,7 @@ function PaperTradingPage() {
                   player2Odds={displayPlayers.player2.odds}
                   isInPlay={!!marketBook?.inplay}
                   score={liveScore?.available && liveScore.scoreConfidence !== "unavailable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+                  provider={liveScore?.provider}
                 />
                 {ladderPanel}
                 <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
