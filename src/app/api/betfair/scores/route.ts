@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           jsonrpc: "2.0",
           method: "ScoresAPING/v1.0/listScores",
-          params: { filter: { eventIds: [String(eventId)] } },
+          params: { updateKeys: [{ eventId: String(eventId) }] },
           id: 1,
         }),
       }),
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           jsonrpc: "2.0",
           method: "ScoresAPING/v1.0/listIncidents",
-          params: { filter: { eventIds: [String(eventId)] } },
+          params: { updateKeys: [{ eventId: String(eventId) }] },
           id: 2,
         }),
       }).catch((err) => {
