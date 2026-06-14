@@ -69,6 +69,7 @@ interface LiveScore {
 
 interface PaperMarket {
   id: string;
+  eventId: string;
   player1: { name: string; odds: number | null };
   player2: { name: string; odds: number | null };
   tournament: string;
@@ -122,6 +123,7 @@ function mapToPaperMarket(cat: any, book?: any): PaperMarket | null {
 
   return {
     id: cat.marketId,
+    eventId: cat.event?.id ?? "",
     tournament: compName || eventName || "Tennis",
     tournamentColor: paperTournamentColor(compName || eventName),
     player1: { name: runners[0].runnerName, odds: odds1 },
@@ -208,6 +210,7 @@ function PaperMarketList() {
   function handleSelect(m: PaperMarket) {
     const params = new URLSearchParams();
     params.set("marketId", m.id);
+    if (m.eventId) params.set("eventId", m.eventId);
     params.set("p1", m.player1.name);
     params.set("p2", m.player2.name);
     if (m.player1.odds) params.set("p1Odds", String(m.player1.odds));
@@ -392,6 +395,7 @@ function PaperTradingPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const marketId = searchParams.get("marketId");
+  const eventId = searchParams.get("eventId");
   const p1Name = searchParams.get("p1");
   const p2Name = searchParams.get("p2");
   const p1Flag = searchParams.get("p1Flag") ?? "";
@@ -410,6 +414,7 @@ function PaperTradingPage() {
           const m = JSON.parse(saved);
           const params = new URLSearchParams();
           if (m.marketId) params.set("marketId", m.marketId);
+          if (m.eventId) params.set("eventId", m.eventId);
           if (m.p1) params.set("p1", m.p1);
           if (m.p2) params.set("p2", m.p2);
           if (m.p1Flag) params.set("p1Flag", m.p1Flag);
@@ -429,11 +434,11 @@ function PaperTradingPage() {
       try {
         localStorage.setItem(
           "lastMarket",
-          JSON.stringify({ marketId, p1: p1Name, p2: p2Name, p1Flag, p2Flag, tournament })
+          JSON.stringify({ marketId, eventId, p1: p1Name, p2: p2Name, p1Flag, p2Flag, tournament })
         );
       } catch { /* SSR guard */ }
     }
-  }, [marketId, p1Name, p2Name, p1Flag, p2Flag, tournament]);
+  }, [marketId, eventId, p1Name, p2Name, p1Flag, p2Flag, tournament]);
 
   const [selectedStake, setSelectedStake] = useState<number | null>(25);
   const [customStakeInput, setCustomStakeInput] = useState("");
@@ -1037,10 +1042,10 @@ function PaperTradingPage() {
 
     async function fetchScore() {
       try {
-        const res = await fetch("/api/tennis-scores", {
+        const res = await fetch("/api/betfair/scores", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ player1: p1Name, player2: p2Name }),
+          body: JSON.stringify({ eventId, player1: p1Name, player2: p2Name }),
         });
         const data: LiveScore = await res.json();
         setLiveScore(data.available ? data : null);
@@ -1050,9 +1055,9 @@ function PaperTradingPage() {
     }
 
     fetchScore();
-    const id = setInterval(fetchScore, 15_000);
+    const id = setInterval(fetchScore, 5_000);
     return () => clearInterval(id);
-  }, [p1Name, p2Name]);
+  }, [eventId, p1Name, p2Name]);
 
   /* ─── Pre-Match Briefing: auto-fetch on market open ─── */
   useEffect(() => {
@@ -3016,7 +3021,7 @@ function PaperTradingPage() {
                 player1Odds={displayPlayers.player1.odds}
                 player2Odds={displayPlayers.player2.odds}
                 isInPlay={!!marketBook?.inplay}
-                score={liveScore?.available && liveScore.scoreConfidence === "reliable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+                score={liveScore?.available && liveScore.scoreConfidence !== "unavailable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
               />
               {ladderPanel}
               <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />
@@ -3066,7 +3071,7 @@ function PaperTradingPage() {
                   player1Odds={displayPlayers.player1.odds}
                   player2Odds={displayPlayers.player2.odds}
                   isInPlay={!!marketBook?.inplay}
-                  score={liveScore?.available && liveScore.scoreConfidence === "reliable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+                  score={liveScore?.available && liveScore.scoreConfidence !== "unavailable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
                 />
                 {ladderPanel}
                 <RiskRewardPanel bestBackPrice={currentBackPrice} bestLayPrice={currentLayPrice} stake={activeStake} />

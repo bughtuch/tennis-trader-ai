@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
     // Build lightweight market list for search
     const markets = catalogues.map((cat: any) => ({
       marketId: cat.marketId,
+      eventId: cat.event?.id ?? "",
       players: (cat.runners ?? []).map((r: any) => r.runnerName).join(" vs "),
       event: cat.event?.name ?? "",
       competition: cat.competition?.name ?? "",

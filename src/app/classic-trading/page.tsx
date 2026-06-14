@@ -135,6 +135,7 @@ function ClassicTradingPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const marketId = searchParams.get("marketId");
+  const eventId = searchParams.get("eventId");
   const p1Name = searchParams.get("p1");
   const p2Name = searchParams.get("p2");
   const p1Flag = searchParams.get("p1Flag") ?? "";
@@ -151,6 +152,7 @@ function ClassicTradingPage() {
           const m = JSON.parse(saved);
           const params = new URLSearchParams();
           if (m.marketId) params.set("marketId", m.marketId);
+          if (m.eventId) params.set("eventId", m.eventId);
           if (m.p1) params.set("p1", m.p1);
           if (m.p2) params.set("p2", m.p2);
           if (m.p1Flag) params.set("p1Flag", m.p1Flag);
@@ -171,7 +173,7 @@ function ClassicTradingPage() {
       try {
         localStorage.setItem(
           "lastMarket",
-          JSON.stringify({ marketId, p1: p1Name, p2: p2Name, p1Flag, p2Flag, tournament })
+          JSON.stringify({ marketId, eventId, p1: p1Name, p2: p2Name, p1Flag, p2Flag, tournament })
         );
         const updated = saveRecentMarket({ marketId, p1: p1Name, p2: p2Name, p1Flag, p2Flag, tournament });
         setRecentMarkets(updated);
@@ -179,7 +181,7 @@ function ClassicTradingPage() {
     } else {
       setRecentMarkets(loadRecentMarkets());
     }
-  }, [marketId, p1Name, p2Name, p1Flag, p2Flag, tournament]);
+  }, [marketId, eventId, p1Name, p2Name, p1Flag, p2Flag, tournament]);
 
   /* ─── UI state ─── */
   const [selectedStake, setSelectedStake] = useState<number | null>(25);
@@ -255,19 +257,19 @@ function ClassicTradingPage() {
     if (!p1Name || !p2Name) return;
     async function fetchScore() {
       try {
-        const res = await fetch("/api/tennis-scores", {
+        const res = await fetch("/api/betfair/scores", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ player1: p1Name, player2: p2Name }),
+          body: JSON.stringify({ eventId, player1: p1Name, player2: p2Name }),
         });
         const data = await res.json();
         setLiveScore(data.available ? data : null);
       } catch { setLiveScore(null); }
     }
     fetchScore();
-    const id = setInterval(fetchScore, 15_000);
+    const id = setInterval(fetchScore, 5_000);
     return () => clearInterval(id);
-  }, [p1Name, p2Name]);
+  }, [eventId, p1Name, p2Name]);
 
   /* ─── Stale score detection ─── */
   const [isScoreStale, setIsScoreStale] = useState(false);
@@ -401,6 +403,7 @@ function ClassicTradingPage() {
     if (subscriptionLoaded && subscriptionStatus !== "active") {
       const params = new URLSearchParams();
       if (marketId) params.set("marketId", marketId);
+      if (eventId) params.set("eventId", eventId);
       if (p1Name) params.set("p1", p1Name);
       if (p2Name) params.set("p2", p2Name);
       if (p1Flag) params.set("p1Flag", p1Flag);
@@ -409,7 +412,7 @@ function ClassicTradingPage() {
       const qs = params.toString();
       router.replace(`/paper${qs ? `?${qs}` : ""}`);
     }
-  }, [subscriptionLoaded, subscriptionStatus, marketId, p1Name, p2Name, p1Flag, p2Flag, tournament, router]);
+  }, [subscriptionLoaded, subscriptionStatus, marketId, eventId, p1Name, p2Name, p1Flag, p2Flag, tournament, router]);
 
   /* ─── Betfair connection ─── */
   const { isConnected: betfairHookConnected } = useBetfairToken();
@@ -1504,12 +1507,13 @@ function ClassicTradingPage() {
             )}
             {searchQuery.length >= 2 && !searchLoading && searchResults.length > 0 && (
               <div className="p-2 max-h-64 overflow-y-auto">
-                {searchResults.map((m: { marketId: string; runner1: string; runner2: string; event: string }) => (
+                {searchResults.map((m: { marketId: string; eventId?: string; runner1: string; runner2: string; event: string }) => (
                   <button
                     key={m.marketId}
                     onClick={() => {
                       const params = new URLSearchParams({
                         marketId: m.marketId,
+                        ...(m.eventId ? { eventId: m.eventId } : {}),
                         p1: m.runner1,
                         p2: m.runner2,
                         tournament: m.event,

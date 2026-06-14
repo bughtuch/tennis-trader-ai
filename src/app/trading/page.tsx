@@ -53,6 +53,8 @@ interface LadderRow {
   isLastTraded: boolean;
   isBestBack: boolean;
   isBestLay: boolean;
+  tradedVolume: number;
+  pnl: number | null; // null = FLAT / no position
 }
 
 interface LiveScore {
@@ -155,6 +157,7 @@ function TradingPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const marketId = searchParams.get("marketId");
+  const eventId = searchParams.get("eventId");
   const p1Name = searchParams.get("p1");
   const p2Name = searchParams.get("p2");
   const p1Flag = searchParams.get("p1Flag") ?? "";
@@ -173,6 +176,7 @@ function TradingPage() {
           const m = JSON.parse(saved);
           const params = new URLSearchParams();
           if (m.marketId) params.set("marketId", m.marketId);
+          if (m.eventId) params.set("eventId", m.eventId);
           if (m.p1) params.set("p1", m.p1);
           if (m.p2) params.set("p2", m.p2);
           if (m.p1Flag) params.set("p1Flag", m.p1Flag);
@@ -192,11 +196,11 @@ function TradingPage() {
       try {
         localStorage.setItem(
           "lastMarket",
-          JSON.stringify({ marketId, p1: p1Name, p2: p2Name, p1Flag, p2Flag, tournament })
+          JSON.stringify({ marketId, eventId, p1: p1Name, p2: p2Name, p1Flag, p2Flag, tournament })
         );
       } catch { /* SSR guard */ }
     }
-  }, [marketId, p1Name, p2Name, p1Flag, p2Flag, tournament]);
+  }, [marketId, eventId, p1Name, p2Name, p1Flag, p2Flag, tournament]);
 
   const [selectedStake, setSelectedStake] = useState<number | null>(25);
   const [customStakeInput, setCustomStakeInput] = useState("");
@@ -204,6 +208,11 @@ function TradingPage() {
   const [activeTab, setActiveTab] = useState<"ladder" | "ai" | "positions">("ai");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /* ─── LTP Flash state ─── */
+  const [flashDir, setFlashDir] = useState<"up" | "down" | null>(null);
+  const prevLTPRef = useRef<number>(0);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ─── Safe Mode / Pro Mode ─── */
   const [tradingMode, setTradingMode] = useState<"safe" | "pro">(() => {
@@ -259,7 +268,7 @@ function TradingPage() {
   /* ─── Market Search state ─── */
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Array<{ marketId: string; runner1: string; runner2: string; event: string; competition: string; inPlay: boolean }>>([]);
+  const [searchResults, setSearchResults] = useState<Array<{ marketId: string; eventId: string; runner1: string; runner2: string; event: string; competition: string; inPlay: boolean }>>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchCacheRef = useRef<{ markets: typeof searchResults; fetchedAt: number } | null>(null);
@@ -575,6 +584,7 @@ function TradingPage() {
     if (subscriptionLoaded && subscriptionStatus !== "active") {
       const params = new URLSearchParams();
       if (marketId) params.set("marketId", marketId);
+      if (eventId) params.set("eventId", eventId);
       if (p1Name) params.set("p1", p1Name);
       if (p2Name) params.set("p2", p2Name);
       if (p1Flag) params.set("p1Flag", p1Flag);
@@ -583,7 +593,7 @@ function TradingPage() {
       const qs = params.toString();
       router.replace(`/paper${qs ? `?${qs}` : ""}`);
     }
-  }, [subscriptionLoaded, subscriptionStatus, marketId, p1Name, p2Name, p1Flag, p2Flag, tournament, router]);
+  }, [subscriptionLoaded, subscriptionStatus, marketId, eventId, p1Name, p2Name, p1Flag, p2Flag, tournament, router]);
 
   /* ─── Betfair connection: read from shared hook ─── */
   const { isConnected: betfairHookConnected } = useBetfairToken();
@@ -775,6 +785,39 @@ function TradingPage() {
   /* ─── Build ladder from live data only ─── */
   const selectedRunner = isLive ? marketBook.runners?.[selectedPlayer === "player1" ? 0 : 1] : null;
 
+  /* ─── Traded volume map (per-price) ─── */
+  const tvMap = useMemo(() => {
+    const map = new Map<number, number>();
+    const tv = selectedRunner?.ex?.tradedVolume;
+    if (!tv) return map;
+    for (const ps of tv) {
+      map.set(ps.price, (map.get(ps.price) ?? 0) + ps.size);
+    }
+    return map;
+  }, [selectedRunner?.ex?.tradedVolume]);
+
+  /* ─── Pre-compute aggregated position for ladder P&L ─── */
+  const ladderAggPos = useMemo(() => {
+    const runnerId = selectedRunner?.selectionId;
+    if (!runnerId) return null;
+    const positions = openPositions.filter(p => p.selection_id === String(runnerId));
+    if (positions.length === 0) return null;
+    let backTotal = 0, backWeighted = 0, layTotal = 0, layWeighted = 0;
+    for (const pos of positions) {
+      if (!pos.stake || !pos.entry_price) continue;
+      if (pos.side === "BACK") { backTotal += pos.stake; backWeighted += pos.stake * pos.entry_price; }
+      else { layTotal += pos.stake; layWeighted += pos.stake * pos.entry_price; }
+    }
+    const netStake = Math.round((backTotal - layTotal) * 100) / 100;
+    const netSide: "BACK" | "LAY" | "FLAT" = netStake > 0 ? "BACK" : netStake < 0 ? "LAY" : "FLAT";
+    const avgEntry = netSide === "BACK" && backTotal > 0
+      ? Math.round((backWeighted / backTotal) * 100) / 100
+      : netSide === "LAY" && layTotal > 0
+        ? Math.round((layWeighted / layTotal) * 100) / 100
+        : 0;
+    return { netSide, netStake: Math.abs(netStake), avgEntry };
+  }, [selectedRunner?.selectionId, openPositions]);
+
   let liveLadder: LadderRow[] | null = null;
   let livePlayerOdds = { player1: 0, player2: 0 };
 
@@ -786,6 +829,16 @@ function TradingPage() {
     livePlayerOdds = { player1: bestBack0, player2: bestBack1 };
 
     if (selectedRunner?.ex) {
+      // P&L calculator for each price row
+      const calcPnl = (price: number): number | null => {
+        if (!ladderAggPos || ladderAggPos.netSide === "FLAT" || ladderAggPos.netStake <= 0 || ladderAggPos.avgEntry <= 0) return null;
+        if (ladderAggPos.netSide === "BACK") {
+          return ladderAggPos.netStake * (ladderAggPos.avgEntry / price - 1);
+        } else {
+          return ladderAggPos.netStake * (1 - ladderAggPos.avgEntry / price);
+        }
+      };
+
       // Index all available back/lay volume by price
       const backMap = new Map<number, number>();
       const layMap = new Map<number, number>();
@@ -815,7 +868,6 @@ function TradingPage() {
       const ladderLow = moveByTicks(centerPrice, -TICKS_EACH_SIDE);
       const ladderHigh = moveByTicks(centerPrice, TICKS_EACH_SIDE);
 
-      // Walk every tick from ladderLow to ladderHigh (capped at 17 rows)
       const rows: LadderRow[] = [];
       let tick = roundToTick(ladderLow);
       while (tick <= ladderHigh) {
@@ -828,6 +880,8 @@ function TradingPage() {
             : tick === bestBackPrice,
           isBestBack: tick === bestBackPrice,
           isBestLay: tick === bestLayPrice,
+          tradedVolume: tvMap.get(tick) ?? 0,
+          pnl: calcPnl(tick),
         });
         const next = moveByTicks(tick, 1);
         if (next <= tick) break; // safety
@@ -882,6 +936,8 @@ function TradingPage() {
         isLastTraded: isBest,
         isBestBack: isBest,
         isBestLay: isLay,
+        tradedVolume: 0,
+        pnl: null,
       });
       const next = moveByTicks(tick, 1);
       if (next <= tick) break;
@@ -944,7 +1000,7 @@ function TradingPage() {
     return p.selection_id === String(runner.selectionId);
   });
 
-  function getAggregatedPosition() {
+  const aggregatedPos = useMemo(() => {
     if (selectedRunnerPositions.length === 0) return null;
     let backTotal = 0, backWeighted = 0, layTotal = 0, layWeighted = 0;
     for (const pos of selectedRunnerPositions) {
@@ -972,8 +1028,7 @@ function TradingPage() {
       backTotal: Math.round(backTotal * 100) / 100,
       layTotal: Math.round(layTotal * 100) / 100,
     };
-  }
-  const aggregatedPos = getAggregatedPosition();
+  }, [selectedRunnerPositions]);
 
   /* ─── P&L per runner outcome (Feature 5) ─── */
   function getOutcomePnl() {
@@ -1121,10 +1176,10 @@ function TradingPage() {
 
     async function fetchScore() {
       try {
-        const res = await fetch("/api/tennis-scores", {
+        const res = await fetch("/api/betfair/scores", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ player1: p1Name, player2: p2Name }),
+          body: JSON.stringify({ eventId, player1: p1Name, player2: p2Name }),
         });
         const data: LiveScore = await res.json();
         setLiveScore(data.available ? data : null);
@@ -1134,9 +1189,9 @@ function TradingPage() {
     }
 
     fetchScore();
-    const id = setInterval(fetchScore, 15_000);
+    const id = setInterval(fetchScore, 5_000);
     return () => clearInterval(id);
-  }, [p1Name, p2Name]);
+  }, [eventId, p1Name, p2Name]);
 
   /* ─── Suspension-triggered instant score refresh ─── */
   useEffect(() => {
@@ -1144,10 +1199,10 @@ function TradingPage() {
     clearSuspension();
     (async () => {
       try {
-        const res = await fetch("/api/tennis-scores", {
+        const res = await fetch("/api/betfair/scores", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ player1: p1Name, player2: p2Name }),
+          body: JSON.stringify({ eventId, player1: p1Name, player2: p2Name }),
         });
         const data: LiveScore = await res.json();
         setLiveScore(data.available ? data : null);
@@ -1155,7 +1210,7 @@ function TradingPage() {
         /* non-critical */
       }
     })();
-  }, [suspensionDetected, clearSuspension, p1Name, p2Name]);
+  }, [suspensionDetected, clearSuspension, eventId, p1Name, p2Name]);
 
   /* ─── Pre-Match Briefing: auto-fetch on market open ─── */
   useEffect(() => {
@@ -1465,6 +1520,30 @@ function TradingPage() {
     ? Math.max(...activeLadderData.map((r) => Math.max(r.backSize, r.laySize)), 1)
     : 1;
 
+  /* ─── LTP flash effect ─── */
+  const currentLTP = (selectedRunner as { lastTradedPrice?: number } | null)?.lastTradedPrice ?? 0;
+  useEffect(() => {
+    if (currentLTP <= 0 || prevLTPRef.current <= 0) {
+      prevLTPRef.current = currentLTP;
+      return;
+    }
+    if (currentLTP !== prevLTPRef.current) {
+      const dir = currentLTP < prevLTPRef.current ? "up" : "down";
+      setFlashDir(dir);
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = setTimeout(() => setFlashDir(null), 600);
+      prevLTPRef.current = currentLTP;
+    }
+  }, [currentLTP]);
+
+  /* ─── Compact volume formatter for traded volume column ─── */
+  function formatTradedVol(v: number): string {
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `${Math.round(v / 1_000)}K`;
+    if (v > 0) return `${Math.round(v)}`;
+    return "";
+  }
+
   /* ─── Keyboard shortcuts ─── */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stateRef = useRef<any>(null);
@@ -1610,7 +1689,7 @@ function TradingPage() {
   /* ─────────────────────────────────────────────────────────── */
 
   const ladderPanel = (
-    <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden w-full max-w-md mx-auto">
+    <div className="bg-gray-900/50 border border-gray-800/50 rounded-xl overflow-hidden w-full">
       {/* Ladder Header */}
       <div className="px-3 md:px-4 py-3 border-b border-gray-800/50">
         <div className="flex items-center justify-between">
@@ -1702,7 +1781,8 @@ function TradingPage() {
       )}
 
       {/* Grid Header */}
-      <div className="grid grid-cols-3 py-2 border-b border-gray-800/50">
+      <div className="grid grid-cols-[40px_1fr_auto_1fr_44px] py-2 border-b border-gray-800/50">
+        <div className="text-[10px] tracking-[0.12em] uppercase text-gray-500 font-medium text-center">P&L</div>
         <div className="text-[11px] tracking-[0.15em] uppercase text-blue-400 font-medium pl-3">
           BACK
         </div>
@@ -1731,26 +1811,89 @@ function TradingPage() {
         <div className="text-[11px] tracking-[0.15em] uppercase text-pink-400 font-medium text-right pr-3">
           LAY
         </div>
+        <div className="text-[10px] tracking-[0.12em] uppercase text-gray-500 font-medium text-center">VOL</div>
       </div>
+
+      {/* Pinned Position Bar — always visible when position exists */}
+      {aggregatedPos && aggregatedPos.netSide !== "FLAT" && (
+        <div className="px-3 py-1.5 border-b border-gray-800/50 bg-gray-900/60 flex items-center gap-3 flex-wrap">
+          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold tracking-wide ${
+            aggregatedPos.netSide === "BACK"
+              ? "bg-blue-500/20 text-blue-400"
+              : "bg-pink-500/20 text-pink-400"
+          }`}>
+            {aggregatedPos.netSide}
+          </span>
+          <span className="text-xs font-mono text-gray-300">
+            £{aggregatedPos.netStake.toFixed(1)} @ {aggregatedPos.avgEntry.toFixed(2)}
+          </span>
+          <div className="flex items-center gap-2 ml-auto">
+            {outcomePnl && (
+              <>
+                <div className={`rounded px-2 py-0.5 text-center ${
+                  outcomePnl.ifPlayer1Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer1Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
+                }`}>
+                  <div className="text-[9px] text-gray-500">{displayPlayers.player1.short}</div>
+                  <div className={`text-lg font-bold font-mono leading-tight ${
+                    outcomePnl.ifPlayer1Wins > 0 ? "text-green-400" : outcomePnl.ifPlayer1Wins < 0 ? "text-red-400" : "text-gray-400"
+                  }`}>
+                    {outcomePnl.ifPlayer1Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer1Wins.toFixed(2)}
+                  </div>
+                </div>
+                <div className={`rounded px-2 py-0.5 text-center ${
+                  outcomePnl.ifPlayer2Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer2Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
+                }`}>
+                  <div className="text-[9px] text-gray-500">{displayPlayers.player2.short}</div>
+                  <div className={`text-lg font-bold font-mono leading-tight ${
+                    outcomePnl.ifPlayer2Wins > 0 ? "text-green-400" : outcomePnl.ifPlayer2Wins < 0 ? "text-red-400" : "text-gray-400"
+                  }`}>
+                    {outcomePnl.ifPlayer2Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer2Wins.toFixed(2)}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Ladder Body */}
       <div className="max-h-[calc(100vh-280px)] min-h-[400px] overflow-y-auto" id="ladder-scroll">
         {activeLadderData && activeLadderData.length > 0 ? (
           activeLadderData.map((row) => {
             const unmatched = unmatchedByPrice.get(row.price);
+            const isEntryRow = aggregatedPos && aggregatedPos.netSide !== "FLAT" && aggregatedPos.avgEntry > 0
+              && row.price === roundToTick(aggregatedPos.avgEntry);
+            // LTP row styling: yellow base, directional flash
+            const ltpClass = row.isLastTraded
+              ? flashDir
+                ? flashDir === "up" ? "ltp-flash-up" : "ltp-flash-down"
+                : "bg-yellow-400/15 border-l-2 border-l-yellow-400"
+              : "";
+            const entryClass = isEntryRow && !row.isLastTraded ? "border-l-2 border-l-amber-400 bg-amber-400/5" : "";
             return (
             <div
               key={row.price}
               {...(row.isLastTraded ? { "data-last-traded": "true" } : {})}
-              className={`grid grid-cols-3 items-center border-b border-gray-800/20 min-h-[48px] md:min-h-0 transition-colors hover:brightness-125 ${
-                row.isLastTraded ? "bg-green-400/10 border-l-2 border-l-green-400" : ""
-              }`}
+              className={`grid grid-cols-[40px_1fr_auto_1fr_44px] items-center border-b border-gray-800/20 min-h-[44px] md:min-h-0 hover:brightness-125 ${ltpClass} ${entryClass}`}
             >
+              {/* P&L cell */}
+              <div className="h-full flex items-center justify-center">
+                {isEntryRow ? (
+                  <span className="text-[10px] font-bold text-amber-400">ENT</span>
+                ) : row.pnl != null ? (
+                  <span className={`text-[10px] font-mono font-semibold ${
+                    row.pnl >= 0 ? "text-green-400" : "text-red-400"
+                  }`}>
+                    {row.pnl >= 0 ? "+" : ""}{Math.round(row.pnl)}
+                  </span>
+                ) : null}
+              </div>
+
               {/* Back cell */}
               <button
                 onClick={() => handleTradeClick(row.price, "BACK")}
                 disabled={tradeLoading || cooldownActive}
-                className={`relative py-1.5 px-3 text-right text-sm font-mono transition-all overflow-hidden ${
+                className={`relative py-1.5 md:py-0.5 px-3 text-right text-sm md:text-xs font-mono transition-all overflow-hidden ${
                   cooldownActive
                     ? "opacity-40 cursor-not-allowed text-gray-700"
                     : row.isBestBack
@@ -1763,7 +1906,7 @@ function TradingPage() {
                 {/* Depth bar */}
                 {row.backSize > 0 && (
                   <div
-                    className="absolute inset-y-0 right-0 bg-blue-400 opacity-20 pointer-events-none"
+                    className="absolute inset-y-0 right-0 bg-blue-400 opacity-[0.35] pointer-events-none"
                     style={{ width: `${Math.min((row.backSize / maxSize) * 100, 100)}%` }}
                   />
                 )}
@@ -1779,21 +1922,18 @@ function TradingPage() {
 
               {/* Price cell */}
               <div
-                className={`py-1.5 flex items-center justify-center font-mono font-bold text-sm ${
-                  row.isLastTraded ? "text-green-400" : "text-white"
+                className={`py-1.5 md:py-0.5 flex items-center justify-center font-mono font-bold text-sm ${
+                  row.isLastTraded ? "text-white" : "text-white"
                 }`}
               >
                 {row.price.toFixed(2)}
-                {row.isLastTraded && (
-                  <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                )}
               </div>
 
               {/* Lay cell */}
               <button
                 onClick={() => handleTradeClick(row.price, "LAY")}
                 disabled={tradeLoading || cooldownActive}
-                className={`relative py-1.5 px-3 text-left text-sm font-mono transition-all overflow-hidden ${
+                className={`relative py-1.5 md:py-0.5 px-3 text-left text-sm md:text-xs font-mono transition-all overflow-hidden ${
                   cooldownActive
                     ? "opacity-40 cursor-not-allowed text-gray-700"
                     : row.isBestLay
@@ -1806,7 +1946,7 @@ function TradingPage() {
                 {/* Depth bar */}
                 {row.laySize > 0 && (
                   <div
-                    className="absolute inset-y-0 left-0 bg-pink-400 opacity-20 pointer-events-none"
+                    className="absolute inset-y-0 left-0 bg-pink-400 opacity-[0.35] pointer-events-none"
                     style={{ width: `${Math.min((row.laySize / maxSize) * 100, 100)}%` }}
                   />
                 )}
@@ -1819,6 +1959,15 @@ function TradingPage() {
                   )}
                 </span>
               </button>
+
+              {/* Traded Volume cell */}
+              <div className="h-full flex items-center justify-center">
+                {row.tradedVolume > 0 && (
+                  <span className="text-[10px] text-gray-500 font-mono">
+                    {formatTradedVol(row.tradedVolume)}
+                  </span>
+                )}
+              </div>
             </div>
             );
           })
@@ -1850,13 +1999,13 @@ function TradingPage() {
         )}
       </div>
 
-      {/* Position Summary (aggregated) */}
-      <div className="px-3 md:px-4 py-3 border-t border-gray-800/50 bg-gray-900/30 space-y-2">
-        <div className="flex items-center justify-between">
+      {/* Position Summary (compact — full P&L now in pinned bar above) */}
+      {selectedRunnerPositions.length > 0 && (
+        <div className="px-3 md:px-4 py-2 border-t border-gray-800/50 bg-gray-900/30 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-gray-500 uppercase tracking-wide">Pos</span>
             {aggregatedPos && aggregatedPos.netSide !== "FLAT" ? (
-              <span className={`text-sm font-bold font-mono px-2 py-0.5 rounded ${
+              <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded ${
                 aggregatedPos.netSide === "BACK"
                   ? "bg-blue-500/15 text-blue-400"
                   : "bg-pink-500/15 text-pink-400"
@@ -1864,55 +2013,14 @@ function TradingPage() {
                 {aggregatedPos.netSide} £{aggregatedPos.netStake.toFixed(1)} @ {aggregatedPos.avgEntry.toFixed(2)}
               </span>
             ) : (
-              <span className="text-sm font-bold font-mono text-gray-500 px-2 py-0.5 rounded bg-gray-800/50">£0</span>
+              <span className="text-xs font-mono text-gray-500">FLAT</span>
             )}
           </div>
-          <div className="text-xs">
-            <span className="text-gray-500">Open: </span>
-            <span className="text-gray-300 font-mono font-semibold">
-              {selectedRunnerPositions.length}
-            </span>
-          </div>
+          <span className="text-[10px] text-gray-500">
+            {selectedRunnerPositions.length} open
+          </span>
         </div>
-        {/* P&L per runner outcome — always visible */}
-        <div className="flex items-center gap-3">
-          {outcomePnl ? (
-            <>
-              <div className={`flex-1 rounded-lg px-2.5 py-1.5 text-center ${
-                outcomePnl.ifPlayer1Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer1Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
-              }`}>
-                <div className="text-[10px] text-gray-500">{displayPlayers.player1.short} wins</div>
-                <div className={`text-lg font-bold font-mono ${
-                  outcomePnl.ifPlayer1Wins > 0 ? "text-green-400" : outcomePnl.ifPlayer1Wins < 0 ? "text-red-400" : "text-gray-400"
-                }`}>
-                  {outcomePnl.ifPlayer1Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer1Wins.toFixed(2)}
-                </div>
-              </div>
-              <div className={`flex-1 rounded-lg px-2.5 py-1.5 text-center ${
-                outcomePnl.ifPlayer2Wins > 0 ? "bg-green-500/10" : outcomePnl.ifPlayer2Wins < 0 ? "bg-red-500/10" : "bg-gray-800/40"
-              }`}>
-                <div className="text-[10px] text-gray-500">{displayPlayers.player2.short} wins</div>
-                <div className={`text-lg font-bold font-mono ${
-                  outcomePnl.ifPlayer2Wins > 0 ? "text-green-400" : outcomePnl.ifPlayer2Wins < 0 ? "text-red-400" : "text-gray-400"
-                }`}>
-                  {outcomePnl.ifPlayer2Wins >= 0 ? "+" : ""}£{outcomePnl.ifPlayer2Wins.toFixed(2)}
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex-1 rounded-lg px-2.5 py-1.5 text-center bg-gray-800/40">
-                <div className="text-[10px] text-gray-500">{displayPlayers.player1.short} wins</div>
-                <div className="text-lg font-bold font-mono text-gray-500">£0.00</div>
-              </div>
-              <div className="flex-1 rounded-lg px-2.5 py-1.5 text-center bg-gray-800/40">
-                <div className="text-[10px] text-gray-500">{displayPlayers.player2.short} wins</div>
-                <div className="text-lg font-bold font-mono text-gray-500">£0.00</div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Unmatched Orders List */}
       {unmatchedOrders.filter(o => o.marketId === marketId && (!selectedRunner || o.selectionId === selectedRunner.selectionId)).length > 0 && (
@@ -3356,7 +3464,7 @@ function TradingPage() {
                 player1Odds={displayPlayers.player1.odds}
                 player2Odds={displayPlayers.player2.odds}
                 isInPlay={!!marketBook?.inplay}
-                score={liveScore?.available && liveScore.scoreConfidence === "reliable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+                score={liveScore?.available && liveScore.scoreConfidence !== "unavailable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
                 gameScore={liveScore?.gameScore}
                 tiebreak={liveScore?.tiebreak}
                 tiebreakScore={liveScore?.tiebreakScore}
@@ -3409,7 +3517,7 @@ function TradingPage() {
               player1Odds={displayPlayers.player1.odds}
               player2Odds={displayPlayers.player2.odds}
               isInPlay={!!marketBook?.inplay}
-              score={liveScore?.available && liveScore.scoreConfidence === "reliable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
+              score={liveScore?.available && liveScore.scoreConfidence !== "unavailable" ? { sets: liveScore.sets ?? [], server: liveScore.server } : undefined}
               gameScore={liveScore?.gameScore}
               tiebreak={liveScore?.tiebreak}
               tiebreakScore={liveScore?.tiebreakScore}
@@ -3505,6 +3613,7 @@ function TradingPage() {
                         onClick={() => {
                           const params = new URLSearchParams({
                             marketId: m.marketId,
+                            eventId: m.eventId,
                             p1: m.runner1,
                             p2: m.runner2,
                             tournament: m.competition || m.event,
