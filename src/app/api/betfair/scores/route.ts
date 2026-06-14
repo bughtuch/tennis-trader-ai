@@ -91,8 +91,8 @@ function extractGameScore(match: any, p1IsHome: boolean): string[] {
 function extractServerFromMatch(match: any, p1IsHome: boolean): 1 | 2 | undefined {
   if (!match.event_serve) return undefined;
   const serve = String(match.event_serve).toLowerCase();
-  const homeServing = serve === "home" || serve === "first_player" || serve === "1";
-  const awayServing = serve === "away" || serve === "second_player" || serve === "2";
+  const homeServing = serve === "home" || serve === "first_player" || serve === "first player" || serve === "1";
+  const awayServing = serve === "away" || serve === "second_player" || serve === "second player" || serve === "2";
   if (homeServing) return p1IsHome ? 1 : 2;
   if (awayServing) return p1IsHome ? 2 : 1;
   const { home } = getPlayerNames(match);
@@ -474,7 +474,7 @@ async function tryApiTennis(
   console.log(`[API-Tennis Fallback] Fetching for: "${player1}" vs "${player2}"`);
 
   const searchRes = await fetch(
-    `https://api.api-tennis.com/tennis/?method=get_events&event_live=1&APIkey=${encodeURIComponent(apiKey)}`,
+    `https://api.api-tennis.com/tennis/?method=get_livescore&APIkey=${encodeURIComponent(apiKey)}`,
     { headers: { Accept: "application/json" } }
   );
 
@@ -486,7 +486,18 @@ async function tryApiTennis(
   const data = await searchRes.json();
 
   if (!data.result || !Array.isArray(data.result)) {
-    console.warn("[API-Tennis Fallback] API returned no results array. success:", data.success);
+    console.warn("[API-Tennis Fallback] API returned no results. success:", data.success);
+    return null;
+  }
+
+  // Filter to actual match events (have player names)
+  data.result = data.result.filter((m: any) => {
+    const { home, away } = getPlayerNames(m);
+    return home || away;
+  });
+
+  if (data.result.length === 0) {
+    console.warn("[API-Tennis Fallback] No live events with player data");
     return null;
   }
 
@@ -665,10 +676,13 @@ export async function POST(req: NextRequest) {
 
     // Final fallback
     if (!result) {
+      const hasApiTennisKey = !!process.env.TENNIS_SCORES_API_KEY;
       result = {
         available: false,
         provider: "unavailable",
-        reason: "No score provider available (Betfair key not entitled, no TENNIS_SCORES_API_KEY)",
+        reason: hasApiTennisKey
+          ? "Score providers tried but no match found (Betfair key not entitled, api-tennis no player match)"
+          : "No score provider available (Betfair key not entitled, no TENNIS_SCORES_API_KEY)",
       };
     }
 
