@@ -549,6 +549,18 @@ export const EXPANDED_BANNED_PHRASES = [
   "risk reward ratio",
   "portfolio diversification",
   "market sentiment",
+  // Absolute certainty phrases — no prediction is ever guaranteed
+  "\\bguaranteed\\b",
+  "\\bcertain\\b",
+  "\\bdefinitely\\b",
+  "\\bmust happen\\b",
+  "\\bwill definitely\\b",
+  "\\bis guaranteed\\b",
+  "\\bcertainly\\b",
+  "\\bno doubt\\b",
+  "\\bsure thing\\b",
+  "\\binevitable\\b",
+  "\\bsurefire\\b",
 ];
 
 /* ─── Stage 8: Self-Check Output ─── */
