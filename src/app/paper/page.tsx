@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "rea
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore, type PriceSize } from "@/lib/store";
-import { calculateGreenUp, moveByTicks, roundToTick, calculateOptimisedGreenUp, BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
+import { calculateGreenUp, calculateLayStakeFromLiability, moveByTicks, roundToTick, calculateOptimisedGreenUp, BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
 import RiskRewardPanel from "@/components/RiskRewardPanel";
 import ServeHoldStats from "@/components/ServeHoldStats";
 import SetWinningPrice from "@/components/SetWinningPrice";
@@ -445,6 +445,9 @@ function PaperTradingPage() {
 
   const [selectedStake, setSelectedStake] = useState<number | null>(25);
   const [customStakeInput, setCustomStakeInput] = useState("");
+  const [layInputMode, setLayInputMode] = useState<"stake" | "liability">(() => {
+    try { return (localStorage.getItem("layInputMode") as "stake" | "liability") || "stake"; } catch { return "stake"; }
+  });
   const [selectedPlayer, setSelectedPlayer] = useState<"player1" | "player2">("player1");
   const [activeTab, setActiveTab] = useState<"ladder" | "ai" | "positions">("ladder");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -475,9 +478,10 @@ function PaperTradingPage() {
   }, []);
 
   // Resolve active stake: custom input takes priority over quick buttons
-  const activeStake = customStakeInput
+  const rawInputAmount = customStakeInput
     ? (Number(customStakeInput) || 0)
     : selectedStake ?? 25;
+  const activeStake = rawInputAmount;
 
   /* ─── Session timer state ─── */
   const [sessionStart] = useState(() => Date.now());
@@ -1013,13 +1017,20 @@ function PaperTradingPage() {
       return;
     }
 
+    const effectiveStake = (side === "LAY" && layInputMode === "liability")
+      ? calculateLayStakeFromLiability(rawInputAmount, price)
+      : rawInputAmount;
+    if (side === "LAY" && layInputMode === "liability") {
+      console.log(`[trade] LIABILITY MODE: input=£${rawInputAmount} → stake=£${effectiveStake} @ ${price}`);
+    }
+
     const playerName = displayPlayers[selectedPlayer].name;
     await placePaperTrade({
       marketId,
       selectionId: runner.selectionId,
       side,
       price,
-      size: activeStake,
+      size: effectiveStake,
       player: playerName,
     });
     fetchTrades();
@@ -1482,6 +1493,25 @@ function PaperTradingPage() {
           <span className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium shrink-0">
             STAKE
           </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-500 uppercase tracking-wider">Lay input</span>
+            <div className="flex rounded-lg overflow-hidden border border-gray-700/50">
+              <button
+                onClick={() => { setLayInputMode("stake"); try { localStorage.setItem("layInputMode","stake"); } catch {} }}
+                className={`px-2.5 py-0.5 text-[10px] font-medium transition-all ${
+                  layInputMode === "stake" ? "bg-pink-500/20 text-pink-400" : "bg-gray-800/50 text-gray-500 hover:text-gray-400"
+                }`}
+              >Stake</button>
+              <button
+                onClick={() => { setLayInputMode("liability"); try { localStorage.setItem("layInputMode","liability"); } catch {} }}
+                className={`px-2.5 py-0.5 text-[10px] font-medium transition-all ${
+                  layInputMode === "liability" ? "bg-pink-500/20 text-pink-400" : "bg-gray-800/50 text-gray-500 hover:text-gray-400"
+                }`}
+              >Liability</button>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-nowrap mt-1.5">
           {STAKES.map((stake) => (
             <button
               key={stake}
@@ -1511,6 +1541,11 @@ function PaperTradingPage() {
             />
           </div>
         </div>
+        {layInputMode === "liability" && (
+          <div className="px-3 text-[9px] text-pink-400/60 mt-1">
+            Lay amounts = max liability · Stake calculated at trade time
+          </div>
+        )}
       </div>
 
       {/* Grid Header */}

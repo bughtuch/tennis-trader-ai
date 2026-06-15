@@ -231,3 +231,11 @@ export function calculateLiability(
   // BACK liability is simply the stake
   return r2(stake);
 }
+
+/* ─── 6b. calculateLayStakeFromLiability ─── */
+
+export function calculateLayStakeFromLiability(liability: number, odds: number): number {
+  if (odds <= 1 || !Number.isFinite(odds)) return 0;
+  if (liability <= 0 || !Number.isFinite(liability)) return 0;
+  return r2(liability / (odds - 1));
+}

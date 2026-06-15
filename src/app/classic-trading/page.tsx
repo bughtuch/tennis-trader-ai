@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
 import { validateAndExecute, type TradeActionParams } from "@/lib/tradeActions";
-import { BETFAIR_MIN_STAKE, moveByTicks } from "@/lib/tradingMaths";
+import { BETFAIR_MIN_STAKE, moveByTicks, calculateLayStakeFromLiability } from "@/lib/tradingMaths";
 import ClassicLadder from "@/components/classic/ClassicLadder";
 import ClassicPositionPanel from "@/components/classic/ClassicPositionPanel";
 import ClassicTrustPanel from "@/components/classic/ClassicTrustPanel";
@@ -196,13 +196,17 @@ function ClassicTradingPage() {
   const [tradingMode, setTradingMode] = useState<"safe" | "pro">(() => {
     try { return (localStorage.getItem("trading_mode") as "safe" | "pro") || "safe"; } catch { return "safe"; }
   });
+  const [layInputMode, setLayInputMode] = useState<"stake" | "liability">(() => {
+    try { return (localStorage.getItem("layInputMode") as "stake" | "liability") || "stake"; } catch { return "stake"; }
+  });
   const [pendingRealTrade, setPendingRealTrade] = useState<{
     price: number; side: "BACK" | "LAY"; selectionId: number; playerName: string;
   } | null>(null);
 
-  const activeStake = customStakeInput
+  const rawInputAmount = customStakeInput
     ? (Number(customStakeInput) || 0)
     : selectedStake ?? 25;
+  const activeStake = rawInputAmount;
   const stakeBelowMin = activeStake > 0 && activeStake < BETFAIR_MIN_STAKE;
 
   /* ─── Session timer ─── */
@@ -726,30 +730,43 @@ function ClassicTradingPage() {
       return;
     }
 
+    const effectiveStake = (side === "LAY" && layInputMode === "liability")
+      ? calculateLayStakeFromLiability(rawInputAmount, price)
+      : rawInputAmount;
+    if (side === "LAY" && layInputMode === "liability") {
+      console.log(`[trade] LIABILITY MODE: input=£${rawInputAmount} → stake=£${effectiveStake} @ ${price}`);
+    }
+
     if (marketBook?.inplay) {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
+      addPendingOrder({ id: pendingId, side, price, size: effectiveStake, placedAt: Date.now(), delaySeconds: 5 });
     }
     const result = await execAction({
-      actionName: "PLACE_TRADE", marketId, selectionId, side, price, size: activeStake,
+      actionName: "PLACE_TRADE", marketId, selectionId, side, price, size: effectiveStake,
     });
     if (result.success) {
-      addLivePosition({ marketId, selectionId, side, price, size: activeStake, betId: result.betId });
+      addLivePosition({ marketId, selectionId, side, price, size: effectiveStake, betId: result.betId });
     }
   }
 
   /* ─── Confirmed trade (from Safe Mode modal) ─── */
   async function executeConfirmedRealTrade(selectionId: number, price: number, side: "BACK" | "LAY") {
     if (!marketId) return;
+    const effectiveStake = (side === "LAY" && layInputMode === "liability")
+      ? calculateLayStakeFromLiability(rawInputAmount, price)
+      : rawInputAmount;
+    if (side === "LAY" && layInputMode === "liability") {
+      console.log(`[trade] LIABILITY MODE: input=£${rawInputAmount} → stake=£${effectiveStake} @ ${price}`);
+    }
     if (marketBook?.inplay) {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
+      addPendingOrder({ id: pendingId, side, price, size: effectiveStake, placedAt: Date.now(), delaySeconds: 5 });
     }
     const result = await execAction({
-      actionName: "PLACE_TRADE", marketId, selectionId, side, price, size: activeStake,
+      actionName: "PLACE_TRADE", marketId, selectionId, side, price, size: effectiveStake,
     });
     if (result.success) {
-      addLivePosition({ marketId, selectionId, side, price, size: activeStake, betId: result.betId });
+      addLivePosition({ marketId, selectionId, side, price, size: effectiveStake, betId: result.betId });
     }
   }
 
@@ -1561,8 +1578,12 @@ function ClassicTradingPage() {
         <RealTradeConfirmModal
           side={pendingRealTrade.side}
           price={pendingRealTrade.price}
-          stake={activeStake}
+          stake={(pendingRealTrade.side === "LAY" && layInputMode === "liability")
+            ? calculateLayStakeFromLiability(rawInputAmount, pendingRealTrade.price)
+            : rawInputAmount}
           runner={pendingRealTrade.playerName}
+          inputMode={pendingRealTrade.side === "LAY" ? layInputMode : undefined}
+          inputAmount={pendingRealTrade.side === "LAY" && layInputMode === "liability" ? rawInputAmount : undefined}
           onConfirm={() => {
             executeConfirmedRealTrade(pendingRealTrade.selectionId, pendingRealTrade.price, pendingRealTrade.side);
             setPendingRealTrade(null);
@@ -1709,6 +1730,23 @@ function ClassicTradingPage() {
         {/* Row 3: Stake controls */}
         <div className="px-3 sm:px-4 py-1.5 border-t border-gray-100 flex items-center gap-2 sm:gap-3 flex-wrap">
           <span className="text-[10px] font-semibold tracking-wider uppercase text-gray-500">STAKE</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-gray-400 uppercase tracking-wider">Lay</span>
+            <div className="flex rounded overflow-hidden border border-gray-300">
+              <button
+                onClick={() => { setLayInputMode("stake"); try { localStorage.setItem("layInputMode","stake"); } catch {} }}
+                className={`px-2 py-0.5 text-[10px] font-medium transition-all ${
+                  layInputMode === "stake" ? "bg-pink-100 text-pink-600" : "bg-white text-gray-400 hover:text-gray-600"
+                }`}
+              >Stake</button>
+              <button
+                onClick={() => { setLayInputMode("liability"); try { localStorage.setItem("layInputMode","liability"); } catch {} }}
+                className={`px-2 py-0.5 text-[10px] font-medium transition-all ${
+                  layInputMode === "liability" ? "bg-pink-100 text-pink-600" : "bg-white text-gray-400 hover:text-gray-600"
+                }`}
+              >Liability</button>
+            </div>
+          </div>
           <div className="flex items-center gap-1">
             {STAKES.map((stake) => (
               <button
@@ -1738,6 +1776,11 @@ function ClassicTradingPage() {
           {stakeBelowMin && customStakeInput && (
             <span className="text-[10px] text-amber-600 font-medium">
               Below Betfair £{BETFAIR_MIN_STAKE} min
+            </span>
+          )}
+          {layInputMode === "liability" && (
+            <span className="text-[9px] text-pink-500/70">
+              Lay = liability · Stake at trade time
             </span>
           )}
           <button

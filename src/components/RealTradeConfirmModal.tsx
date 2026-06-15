@@ -5,6 +5,8 @@ interface RealTradeConfirmModalProps {
   price: number;
   stake: number;
   runner?: string;
+  inputMode?: "stake" | "liability";
+  inputAmount?: number;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -18,6 +20,8 @@ export default function RealTradeConfirmModal({
   price,
   stake,
   runner,
+  inputMode,
+  inputAmount,
   onConfirm,
   onCancel,
 }: RealTradeConfirmModalProps) {
@@ -56,6 +60,12 @@ export default function RealTradeConfirmModal({
             <span className="text-gray-400">Odds</span>
             <span className="text-white font-mono font-semibold">{price.toFixed(2)}</span>
           </div>
+          {side === "LAY" && inputMode === "liability" && inputAmount !== undefined && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-400">You entered (liability)</span>
+              <span className="text-pink-400 font-mono font-semibold">£{inputAmount.toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-400">Stake</span>
             <span className="text-white font-mono font-semibold">£{stake.toFixed(2)}</span>

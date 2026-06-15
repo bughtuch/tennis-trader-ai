@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "rea
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore, type PriceSize, type PendingOrder } from "@/lib/store";
-import { calculateGreenUp, calculateLiability, moveByTicks, roundToTick, BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
+import { calculateGreenUp, calculateLiability, calculateLayStakeFromLiability, moveByTicks, roundToTick, BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
@@ -221,6 +221,9 @@ function TradingPage() {
   const [tradingMode, setTradingMode] = useState<"safe" | "pro">(() => {
     try { return (localStorage.getItem("trading_mode") as "safe" | "pro") || "safe"; } catch { return "safe"; }
   });
+  const [layInputMode, setLayInputMode] = useState<"stake" | "liability">(() => {
+    try { return (localStorage.getItem("layInputMode") as "stake" | "liability") || "stake"; } catch { return "stake"; }
+  });
   const [showProModeWarning, setShowProModeWarning] = useState(false);
   const [pendingRealTrade, setPendingRealTrade] = useState<{ price: number; side: "BACK" | "LAY" } | null>(null);
 
@@ -259,9 +262,10 @@ function TradingPage() {
   }, []);
 
   // Resolve active stake: custom input takes priority over quick buttons
-  const activeStake = customStakeInput
+  const rawInputAmount = customStakeInput
     ? (Number(customStakeInput) || 0)
     : selectedStake ?? 25;
+  const activeStake = rawInputAmount;
 
   /* ─── Session timer state ─── */
   const [sessionStart] = useState(() => Date.now());
@@ -1143,31 +1147,44 @@ function TradingPage() {
       return;
     }
 
+    const effectiveStake = (side === "LAY" && layInputMode === "liability")
+      ? calculateLayStakeFromLiability(rawInputAmount, price)
+      : rawInputAmount;
+    if (side === "LAY" && layInputMode === "liability") {
+      console.log(`[trade] LIABILITY MODE: input=£${rawInputAmount} → stake=£${effectiveStake} @ ${price}`);
+    }
+
     // Add pending order indicator for in-play bet delay
     if (marketBook?.inplay) {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
+      addPendingOrder({ id: pendingId, side, price, size: effectiveStake, placedAt: Date.now(), delaySeconds: 5 });
     }
     const result = await execAction({
-      actionName: "PLACE_TRADE", marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake,
+      actionName: "PLACE_TRADE", marketId, selectionId: selectedRunner.selectionId, side, price, size: effectiveStake,
     });
     if (result.success) {
-      addLivePosition({ marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake, betId: result.betId });
+      addLivePosition({ marketId, selectionId: selectedRunner.selectionId, side, price, size: effectiveStake, betId: result.betId });
     }
   }
 
   /* ─── Real trade execution (from confirmation modal) ─── */
   async function executeConfirmedRealTrade(price: number, side: "BACK" | "LAY") {
     if (!marketId || !selectedRunner) return;
+    const effectiveStake = (side === "LAY" && layInputMode === "liability")
+      ? calculateLayStakeFromLiability(rawInputAmount, price)
+      : rawInputAmount;
+    if (side === "LAY" && layInputMode === "liability") {
+      console.log(`[trade] LIABILITY MODE: input=£${rawInputAmount} → stake=£${effectiveStake} @ ${price}`);
+    }
     if (marketBook?.inplay) {
       const pendingId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      addPendingOrder({ id: pendingId, side, price, size: activeStake, placedAt: Date.now(), delaySeconds: 5 });
+      addPendingOrder({ id: pendingId, side, price, size: effectiveStake, placedAt: Date.now(), delaySeconds: 5 });
     }
     const result = await execAction({
-      actionName: "PLACE_TRADE", marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake,
+      actionName: "PLACE_TRADE", marketId, selectionId: selectedRunner.selectionId, side, price, size: effectiveStake,
     });
     if (result.success) {
-      addLivePosition({ marketId, selectionId: selectedRunner.selectionId, side, price, size: activeStake, betId: result.betId });
+      addLivePosition({ marketId, selectionId: selectedRunner.selectionId, side, price, size: effectiveStake, betId: result.betId });
     }
   }
 
@@ -1741,6 +1758,23 @@ function TradingPage() {
             {tradingMode === "safe" ? "SAFE MODE" : "PRO MODE"}
           </button>
         </div>
+        <div className="flex items-center gap-2 px-3 pt-1">
+          <span className="text-[10px] text-gray-500 uppercase tracking-wider">Lay input</span>
+          <div className="flex rounded-lg overflow-hidden border border-gray-700/50">
+            <button
+              onClick={() => { setLayInputMode("stake"); try { localStorage.setItem("layInputMode","stake"); } catch {} }}
+              className={`px-2.5 py-0.5 text-[10px] font-medium transition-all ${
+                layInputMode === "stake" ? "bg-pink-500/20 text-pink-400" : "bg-gray-800/50 text-gray-500 hover:text-gray-400"
+              }`}
+            >Stake</button>
+            <button
+              onClick={() => { setLayInputMode("liability"); try { localStorage.setItem("layInputMode","liability"); } catch {} }}
+              className={`px-2.5 py-0.5 text-[10px] font-medium transition-all ${
+                layInputMode === "liability" ? "bg-pink-500/20 text-pink-400" : "bg-gray-800/50 text-gray-500 hover:text-gray-400"
+              }`}
+            >Liability</button>
+          </div>
+        </div>
         <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
           {STAKES.map((stake) => (
             <button
@@ -1771,6 +1805,11 @@ function TradingPage() {
             />
           </div>
         </div>
+        {layInputMode === "liability" && (
+          <div className="px-3 text-[9px] text-pink-400/60">
+            Lay amounts = max liability · Stake calculated at trade time
+          </div>
+        )}
       </div>
 
       {/* Pending Orders (bet delay) */}
@@ -2974,8 +3013,12 @@ function TradingPage() {
         <RealTradeConfirmModal
           side={pendingRealTrade.side}
           price={pendingRealTrade.price}
-          stake={activeStake}
+          stake={(pendingRealTrade.side === "LAY" && layInputMode === "liability")
+            ? calculateLayStakeFromLiability(rawInputAmount, pendingRealTrade.price)
+            : rawInputAmount}
           runner={displayPlayers[selectedPlayer].name}
+          inputMode={pendingRealTrade.side === "LAY" ? layInputMode : undefined}
+          inputAmount={pendingRealTrade.side === "LAY" && layInputMode === "liability" ? rawInputAmount : undefined}
           onConfirm={() => {
             executeConfirmedRealTrade(pendingRealTrade.price, pendingRealTrade.side);
             setPendingRealTrade(null);
