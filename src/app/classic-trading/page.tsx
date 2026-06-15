@@ -13,6 +13,7 @@ import ClassicLadder from "@/components/classic/ClassicLadder";
 import ClassicPositionPanel from "@/components/classic/ClassicPositionPanel";
 import ClassicTrustPanel from "@/components/classic/ClassicTrustPanel";
 import ClassicAIPanel from "@/components/classic/ClassicAIPanel";
+import AIMarketView from "@/components/AIMarketView";
 import ClassicTradeTools from "@/components/classic/ClassicTradeTools";
 import { calculateLiabilityReduction } from "@/components/classic/ClassicLiabilityTools";
 import { calculateMarketHedge } from "@/components/classic/ClassicMarketHedge";
@@ -1201,22 +1202,35 @@ function ClassicTradingPage() {
   );
 
   const aiPanel = (
-    <ClassicAIPanel
-      aiSignal={aiSignal}
-      aiSignalLoading={aiSignalLoading}
-      guardianData={guardianData}
-      guardianLoading={guardianLoading}
-      onFetchSignal={fetchAiSignal}
-      onFetchGuardian={fetchGuardianAssessment}
-      player1Name={displayPlayers.player1.name}
-      player2Name={displayPlayers.player2.name}
-      player1Odds={displayPlayers.player1.odds}
-      player2Odds={displayPlayers.player2.odds}
-      isInPlay={!!marketBook?.inplay}
-      sessionPnl={sessionPnl}
-      consecutiveLosses={consecutiveLosses}
-      ladderRelationship={ladderRelationship}
-    />
+    <div className="space-y-3">
+      <AIMarketView
+        player1Name={displayPlayers.player1.name}
+        player2Name={displayPlayers.player2.name}
+        player1Odds={displayPlayers.player1.odds}
+        player2Odds={displayPlayers.player2.odds}
+        tournament={tournament}
+        isInPlay={!!marketBook?.inplay}
+        isSuspended={marketBook?.status === "SUSPENDED"}
+        liveScore={liveScore}
+        variant="light"
+      />
+      <ClassicAIPanel
+        aiSignal={aiSignal}
+        aiSignalLoading={aiSignalLoading}
+        guardianData={guardianData}
+        guardianLoading={guardianLoading}
+        onFetchSignal={fetchAiSignal}
+        onFetchGuardian={fetchGuardianAssessment}
+        player1Name={displayPlayers.player1.name}
+        player2Name={displayPlayers.player2.name}
+        player1Odds={displayPlayers.player1.odds}
+        player2Odds={displayPlayers.player2.odds}
+        isInPlay={!!marketBook?.inplay}
+        sessionPnl={sessionPnl}
+        consecutiveLosses={consecutiveLosses}
+        ladderRelationship={ladderRelationship}
+      />
+    </div>
   );
 
   const tradeToolsPanel = (

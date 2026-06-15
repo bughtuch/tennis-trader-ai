@@ -16,6 +16,7 @@ import PostTradeReview from "@/components/PostTradeReview";
 import GameMatrix from "@/components/GameMatrix";
 import AutomationRules from "@/components/AutomationRules";
 import LiveScoreBar from "@/components/LiveScoreBar";
+import AIMarketView from "@/components/AIMarketView";
 import ScaleOutButtons from "@/components/ScaleOutButtons";
 import { getOpenPaperTrades, getClosedPaperTrades, closePaperTrade as closePaperTradeLocal, getPaperStats } from "@/lib/paperTrades";
 import { inferSurface, buildMatchContext, formatMatchContextForPrompt, type StructuredAISignal } from "@/lib/tennisContext";
@@ -1820,276 +1821,103 @@ function PaperTradingPage() {
 
   const aiPanel = (
     <>
-    <div className="bg-gray-900/50 border border-gray-800/50 rounded-2xl overflow-hidden w-full max-w-md mx-auto">
-      <div className="px-4 py-3 border-b border-gray-800/50">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-            <h2 className="text-[10px] tracking-[0.2em] uppercase text-gray-400 font-medium">
-              AI SIGNALS
-            </h2>
-          </div>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 font-medium">
-            CLAUDE
-          </span>
-        </div>
-      </div>
+    <div className="space-y-3 w-full max-w-md mx-auto">
+      {/* AI Market View — always-on, auto-loading */}
+      <AIMarketView
+        player1Name={activeDisplayPlayers.player1.name}
+        player2Name={activeDisplayPlayers.player2.name}
+        player1Odds={activeDisplayPlayers.player1.odds}
+        player2Odds={activeDisplayPlayers.player2.odds}
+        tournament={tournament}
+        isInPlay={!!marketBook?.inplay}
+        isSuspended={marketBook?.status === "SUSPENDED"}
+        liveScore={liveScore}
+      />
 
       {/* Pre-Match Briefing */}
-      <div className="p-4 border-b border-gray-800/50">
-        <div className="rounded-xl p-3 border" style={{ borderColor: "rgba(200, 184, 154, 0.3)", background: "rgba(200, 184, 154, 0.05)" }}>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: "#C8B89A" }}>
-              PRE-MATCH BRIEFING
-            </span>
-            {briefingCached && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-700/50 text-gray-500">cached</span>
-            )}
-          </div>
-          {briefingLoading ? (
-            <div className="flex items-center gap-2 py-2">
-              <svg className="w-3.5 h-3.5 animate-spin" style={{ color: "#C8B89A" }} viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span className="text-xs text-gray-500">Generating briefing...</span>
-            </div>
-          ) : briefing ? (
-            <p className="text-xs leading-relaxed" style={{ color: "#C8B89A" }}>{briefing}</p>
-          ) : (
-            <p className="text-xs text-gray-600">No briefing available — open a market to generate.</p>
-          )}
-        </div>
-      </div>
-
-      {/* Signal type selector + Get Signal button */}
-      <div className="p-4 border-b border-gray-800/50 space-y-3">
-        <div className="flex gap-1.5">
-          {[
-            { id: "pre_match" as const, label: "Pre-Match" },
-            { id: "in_play" as const, label: "In-Play" },
-            { id: "edge_alert" as const, label: "Edge" },
-          ].map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setSignalType(t.id)}
-              className={`flex-1 px-2 py-1.5 rounded-lg text-[10px] font-medium transition-all ${
-                signalType === t.id
-                  ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
-                  : "bg-gray-800/30 text-gray-500 border border-transparent hover:text-gray-300"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={fetchAiSignal}
-          disabled={aiSignalLoading}
-          className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-        >
-          {aiSignalLoading ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
-              </svg>
-              Analysing...
-            </span>
-          ) : (
-            "Get AI Signal"
-          )}
-        </button>
-      </div>
-
-      {/* Current signal display */}
-      {aiSignal && (
-        <div className="p-4 border-b border-gray-800/50 space-y-3">
-          {/* Fact Panel */}
-          {aiSignal.factPanel && (
-            <div className="rounded-xl p-3 border border-gray-700/50 bg-gray-800/30 space-y-1.5">
-              <div className="text-[9px] font-bold tracking-wider uppercase text-gray-400">MATCH FACTS</div>
-              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px]">
-                <span className="text-gray-500">Tournament:</span>
-                <span className="text-gray-300">{aiSignal.factPanel.tournament}</span>
-                <span className="text-gray-500">Surface:</span>
-                <span className={aiSignal.factPanel.surfaceVerified ? "text-gray-300" : "text-amber-400"}>{aiSignal.factPanel.surface}</span>
-                <span className="text-gray-500">Odds:</span>
-                <span className="text-gray-300 font-mono text-[9px]">{aiSignal.factPanel.currentOdds}</span>
-              </div>
-              <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
-                aiSignal.factPanel.dataConfidence === "HIGH" ? "bg-green-500/20 text-green-400" :
-                aiSignal.factPanel.dataConfidence === "MEDIUM" ? "bg-yellow-500/20 text-yellow-400" :
-                "bg-red-500/20 text-red-400"
-              }`}>Data: {aiSignal.factPanel.dataConfidence}</span>
-            </div>
-          )}
-
-          <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                    aiSignal.edgeSize === "strong"
-                      ? "bg-green-500/20 text-green-400"
-                      : aiSignal.edgeSize === "moderate"
-                        ? "bg-blue-500/20 text-blue-400"
-                        : aiSignal.edgeSize === "mild"
-                          ? "bg-yellow-500/20 text-yellow-400"
-                          : "bg-gray-500/20 text-gray-400"
-                  }`}
-                >
-                  {aiSignal.edgeSize.toUpperCase()}
-                </span>
-                <span className="text-[10px] text-gray-500 uppercase">
-                  {aiSignal.type.replace("_", " ")}
-                </span>
-              </div>
-              <span className="text-[10px] text-gray-600">
-                {aiSignal.model.split("-").slice(1, 3).join(" ")}
+      <div className="bg-gray-900/50 border border-gray-700/40 rounded-2xl overflow-hidden">
+        <div className="p-4">
+          <div className="rounded-xl p-3 border" style={{ borderColor: "rgba(200, 184, 154, 0.3)", background: "rgba(200, 184, 154, 0.05)" }}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: "#C8B89A" }}>
+                PRE-MATCH BRIEFING
               </span>
-            </div>
-
-            {/* Structured display */}
-            {aiSignal.structured ? (
-              <div className="space-y-1.5">
-                {aiSignal.structured.whatWeKnow && (
-                  <div className="flex gap-2">
-                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">We Know</span>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.whatWeKnow}</p>
-                  </div>
-                )}
-                {aiSignal.structured.whatWeDontKnow && (
-                  <div className="flex gap-2">
-                    <span className="text-[9px] font-bold tracking-wider uppercase text-amber-500/70 shrink-0 w-20 pt-0.5">Don&apos;t Know</span>
-                    <p className="text-xs text-amber-400/80 leading-snug">{aiSignal.structured.whatWeDontKnow}</p>
-                  </div>
-                )}
-                {aiSignal.structured.tradingView && (
-                  <div className="flex gap-2">
-                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">View</span>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.tradingView}</p>
-                  </div>
-                )}
-                {aiSignal.structured.whatToWatch && (
-                  <div className="flex gap-2">
-                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">Watch</span>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.whatToWatch}</p>
-                  </div>
-                )}
-                {aiSignal.structured.situation && (
-                  <div className="flex gap-2">
-                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">Situation</span>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.situation}</p>
-                  </div>
-                )}
-                {aiSignal.structured.reason && !aiSignal.structured.whatWeKnow && (
-                  <div className="flex gap-2">
-                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">Reason</span>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.reason}</p>
-                  </div>
-                )}
-                {aiSignal.structured.watch && (
-                  <div className="flex gap-2">
-                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500 shrink-0 w-20 pt-0.5">Watch</span>
-                    <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.watch}</p>
-                  </div>
-                )}
-                {aiSignal.structured.tradeSignal && (
-                  <div className="rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1.5 mt-1">
-                    <div className="text-[10px] text-blue-400 font-semibold">
-                      {aiSignal.structured.tradeSignal.entry} — {aiSignal.structured.tradeSignal.reason}
-                    </div>
-                    <div className="text-[9px] text-gray-500 mt-0.5">
-                      Risk: {aiSignal.structured.tradeSignal.risk} | Out: {aiSignal.structured.tradeSignal.invalidation}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line">{aiSignal.analysis}</p>
-            )}
-
-            {/* Confidence */}
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1.5">
-                <span className="text-gray-500">Confidence</span>
-                <span className={`font-mono font-medium ${
-                  aiSignal.confidence >= 70 ? "text-green-400" :
-                  aiSignal.confidence >= 40 ? "text-yellow-400" : "text-red-400"
-                }`}>
-                  {aiSignal.structured ? aiSignal.structured.confidence : `${aiSignal.confidence}%`}
-                </span>
-              </div>
-              {aiSignal.structured?.confidenceReason && (
-                <p className="text-[9px] italic text-gray-500 mb-1">{aiSignal.structured.confidenceReason}</p>
+              {briefingCached && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-700/50 text-gray-500">cached</span>
               )}
-              <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-blue-500 to-green-400 transition-all duration-500"
-                  style={{ width: `${aiSignal.confidence}%` }}
-                />
-              </div>
             </div>
+            {briefingLoading ? (
+              <div className="flex items-center gap-2 py-2">
+                <svg className="w-3.5 h-3.5 animate-spin" style={{ color: "#C8B89A" }} viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-xs text-gray-500">Generating briefing...</span>
+              </div>
+            ) : briefing ? (
+              <p className="text-xs leading-relaxed" style={{ color: "#C8B89A" }}>{briefing}</p>
+            ) : (
+              <p className="text-xs text-gray-600">No briefing available — open a market to generate.</p>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Recent signals history */}
-      <div className="p-4">
-        {aiSignalHistory.length > 0 ? (
-          <>
-            <h3 className="text-[10px] tracking-[0.2em] uppercase text-gray-500 font-medium mb-3">
-              RECENT SIGNALS
-            </h3>
-            <div className="space-y-2">
-              {aiSignalHistory.map((sig, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-800/30"
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                        sig.edgeSize === "strong"
-                          ? "bg-green-500/20 text-green-400"
-                          : sig.edgeSize === "moderate"
-                            ? "bg-blue-500/20 text-blue-400"
-                            : "bg-yellow-500/20 text-yellow-400"
-                      }`}
-                    >
-                      {sig.edgeSize.toUpperCase()}
-                    </span>
-                    <span className="text-xs text-gray-300 uppercase">
-                      {sig.type.replace("_", " ")}
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-mono text-gray-500">
-                    {sig.confidence}%
-                  </span>
+      {/* Deep Analysis — manual trigger for full AI signal */}
+      <div className="bg-gray-900/50 border border-gray-700/40 rounded-2xl overflow-hidden">
+        <div className="p-3">
+          <button
+            onClick={fetchAiSignal}
+            disabled={aiSignalLoading}
+            className="w-full py-2 rounded-lg text-[11px] font-medium text-gray-400 bg-gray-800/50 hover:bg-gray-800 hover:text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-gray-700/30"
+          >
+            {aiSignalLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Running deep analysis...
+              </span>
+            ) : (
+              "Run Deep Analysis"
+            )}
+          </button>
+
+          {aiSignal && (
+            <div className="mt-3 space-y-2">
+              <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-2.5 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                    aiSignal.edgeSize === "strong" ? "bg-green-500/20 text-green-400" :
+                    aiSignal.edgeSize === "moderate" ? "bg-blue-500/20 text-blue-400" :
+                    aiSignal.edgeSize === "mild" ? "bg-yellow-500/20 text-yellow-400" :
+                    "bg-gray-500/20 text-gray-400"
+                  }`}>{aiSignal.edgeSize.toUpperCase()}</span>
+                  <span className="text-[10px] text-gray-500 uppercase">{aiSignal.type.replace("_", " ")}</span>
                 </div>
-              ))}
+                {aiSignal.structured ? (
+                  <div className="space-y-1">
+                    {(aiSignal.structured.situation || aiSignal.structured.whatWeKnow) && (
+                      <p className="text-xs text-gray-300 leading-snug">{aiSignal.structured.situation || aiSignal.structured.whatWeKnow}</p>
+                    )}
+                    {(aiSignal.structured.watch || aiSignal.structured.whatToWatch) && (
+                      <p className="text-[10px] text-gray-500 leading-snug">Watch: {aiSignal.structured.watch || aiSignal.structured.whatToWatch}</p>
+                    )}
+                    {aiSignal.structured.tradeSignal && (
+                      <div className="rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1 mt-1">
+                        <div className="text-[10px] text-blue-400 font-semibold">{aiSignal.structured.tradeSignal.entry} — {aiSignal.structured.tradeSignal.reason}</div>
+                        <div className="text-[9px] text-gray-500 mt-0.5">Risk: {aiSignal.structured.tradeSignal.risk}</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line">{aiSignal.analysis}</p>
+                )}
+              </div>
             </div>
-          </>
-        ) : (
-          <div className="text-center py-6">
-            <div className="text-gray-600 text-sm mb-1">No signals yet</div>
-            <div className="text-gray-700 text-xs">
-              Click &quot;Get AI Signal&quot; to analyse this match
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
     <AutomationRules
@@ -2939,7 +2767,7 @@ function PaperTradingPage() {
         <div className="flex">
           {[
             { id: "ladder" as const, label: "Ladder" },
-            { id: "ai" as const, label: "AI Signals" },
+            { id: "ai" as const, label: "AI View" },
             { id: "positions" as const, label: "Positions" },
           ].map((tab) => (
             <button
