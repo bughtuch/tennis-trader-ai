@@ -82,3 +82,12 @@ body {
 .animate-fade-in {
   animation: fade-in 0.8s ease-in forwards;
 }
+
+/* LTP directional flash */
+@keyframes ltp-flash-green { 0% { background-color: rgba(74,222,128,0.35); } 100% { background-color: rgba(250,204,21,0.15); } }
+@keyframes ltp-flash-red { 0% { background-color: rgba(248,113,113,0.35); } 100% { background-color: rgba(250,204,21,0.15); } }
+.ltp-flash-up { animation: ltp-flash-green 0.6s ease-out forwards; }
+.ltp-flash-down { animation: ltp-flash-red 0.6s ease-out forwards; }
+
+@keyframes pulse-subtle { 0%,100% { opacity: 1; } 50% { opacity: 0.85; } }
+.animate-pulse-subtle { animation: pulse-subtle 2s ease-in-out infinite; }

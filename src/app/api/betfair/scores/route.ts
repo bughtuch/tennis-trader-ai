@@ -42,6 +42,28 @@ function getHeaders(sessionToken: string, appKey: string) {
   };
 }
 
+/* ─── Set score normalization ─── */
+
+/**
+ * Parse a raw set score value into an integer games count.
+ * Handles tiebreak notations from score providers:
+ *   "6.4"  → 6  (decimal = tiebreak score)
+ *   "7.7"  → 7
+ *   "7(7)" → 7  (parenthetical tiebreak)
+ *   "6(4)" → 6
+ *   "6"    → 6  (normal)
+ */
+function parseSetScore(raw: unknown): number {
+  if (raw === null || raw === undefined || raw === "") return 0;
+  const str = String(raw).trim();
+  // Strip parenthetical tiebreak notation: "7(7)" → "7"
+  const stripped = str.replace(/\(.*\)/, "");
+  // Use Math.floor to handle decimal tiebreak notation: "6.4" → 6
+  const num = Number(stripped);
+  if (!Number.isFinite(num) || num < 0) return 0;
+  return Math.floor(num);
+}
+
 /* ─── api-tennis.com helpers ─── */
 
 function getPlayerNames(m: any): { home: string; away: string } {
@@ -56,15 +78,15 @@ function extractSetScores(match: any, p1IsHome: boolean): number[][] {
     const homeSet = match[`event_home_player_set${i}`] ?? match[`event_first_player_set${i}`];
     const awaySet = match[`event_away_player_set${i}`] ?? match[`event_second_player_set${i}`];
     if (homeSet !== undefined && homeSet !== "" && homeSet !== null) {
-      const h = Number(homeSet);
-      const a = Number(awaySet);
+      const h = parseSetScore(homeSet);
+      const a = parseSetScore(awaySet);
       if (p1IsHome) { sets.push([h, a]); } else { sets.push([a, h]); }
     }
   }
   if (sets.length === 0 && Array.isArray(match.scores)) {
     for (const s of match.scores) {
-      const first = Number(s.score_first ?? s.score_home ?? 0);
-      const second = Number(s.score_second ?? s.score_away ?? 0);
+      const first = parseSetScore(s.score_first ?? s.score_home ?? 0);
+      const second = parseSetScore(s.score_second ?? s.score_away ?? 0);
       if (p1IsHome) { sets.push([first, second]); } else { sets.push([second, first]); }
     }
   }
@@ -310,14 +332,14 @@ async function tryBetfairScores(
 
     if (Array.isArray(homeScore.setScores) && Array.isArray(awayScore.setScores)) {
       for (let i = 0; i < homeScore.setScores.length; i++) {
-        sets.push([Number(homeScore.setScores[i]) || 0, Number(awayScore.setScores[i]) || 0]);
+        sets.push([parseSetScore(homeScore.setScores[i]), parseSetScore(awayScore.setScores[i])]);
       }
     } else if (typeof homeSets === "number" && typeof awaySets === "number") {
       const homeSetScores = scores.player1SetScores ?? homeScore.setScoreString;
       const awaySetScores = scores.player2SetScores ?? awayScore.setScoreString;
       if (typeof homeSetScores === "string" && homeSetScores) {
-        const h = homeSetScores.split(",").map(Number);
-        const a = (awaySetScores ?? "").split(",").map(Number);
+        const h = homeSetScores.split(",").map(parseSetScore);
+        const a = (awaySetScores ?? "").split(",").map(parseSetScore);
         sets = h.map((s: number, i: number) => [s, a[i] ?? 0]);
       }
     }
@@ -362,8 +384,8 @@ async function tryBetfairScores(
     const p1SetScores = scores.player1SetScores;
     const p2SetScores = scores.player2SetScores;
     if (typeof p1SetScores === "string" && p1SetScores) {
-      const p1 = p1SetScores.split(",").map(Number);
-      const p2 = (p2SetScores ?? "").split(",").map(Number);
+      const p1 = p1SetScores.split(",").map(parseSetScore);
+      const p2 = (p2SetScores ?? "").split(",").map(parseSetScore);
       sets = p1.map((s: number, i: number) => [s, p2[i] ?? 0]);
     }
     const p1Pts = scores.player1PointsWon;

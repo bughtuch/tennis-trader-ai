@@ -55,7 +55,12 @@ function validateAndClampSets(sets: number[][], maxSets: number): { sets: number
 }
 
 function isValidGameScore(score: string): boolean {
-  return VALID_GAME_SCORES.has(score.toUpperCase());
+  // Accept standard game scores AND tiebreak numeric scores (0-99)
+  if (VALID_GAME_SCORES.has(score.toUpperCase())) return true;
+  // Accept numeric tiebreak scores
+  const num = Number(score);
+  if (Number.isFinite(num) && num >= 0 && num <= 99) return true;
+  return false;
 }
 
 function validateGameScore(gameScore: string[]): { gameScore: string[]; valid: boolean } {
@@ -71,10 +76,117 @@ function validateGameScore(gameScore: string[]): { gameScore: string[]; valid: b
  * Without tournament context, default to best-of-3 (more common).
  */
 function inferMaxSets(): number {
-  // Default to best-of-3 — the API doesn't provide tournament context
-  // and best-of-3 is far more common. Worst case: a 5th set is truncated
-  // but still shown as "estimated".
-  return 5; // Allow up to 5 to avoid false positives; real clamping is 5
+  // Allow up to 5 to avoid false positives; real clamping is 5
+  return 5;
+}
+
+/* ─── Set score normalization ─── */
+
+/**
+ * Parse a raw set score value into an integer games count.
+ * Handles tiebreak notations from score providers:
+ *   "6.4"  → 6  (decimal = tiebreak score)
+ *   "7.7"  → 7
+ *   "7(7)" → 7  (parenthetical tiebreak)
+ *   "6(4)" → 6
+ *   "6"    → 6  (normal)
+ */
+function parseSetScore(raw: unknown): number {
+  if (raw === null || raw === undefined || raw === "") return 0;
+  const str = String(raw).trim();
+  // Strip parenthetical tiebreak notation: "7(7)" → "7"
+  const stripped = str.replace(/\(.*\)/, "");
+  // Use Math.floor to handle decimal tiebreak notation: "6.4" → 6
+  const num = Number(stripped);
+  if (!Number.isFinite(num) || num < 0) return 0;
+  return Math.floor(num);
+}
+
+/* ─── Field name compatibility ─── */
+// api-tennis.com may use either event_home_player/event_away_player
+// or event_first_player/event_second_player depending on endpoint version.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getPlayerNames(m: any): { home: string; away: string } {
+  const home = m.event_home_player || m.event_first_player || "";
+  const away = m.event_away_player || m.event_second_player || "";
+  return { home, away };
+}
+
+/* ─── Score extraction with field compatibility ─── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractSetScores(match: any, p1IsHome: boolean): number[][] {
+  const sets: number[][] = [];
+
+  // Strategy 1: Try event_home_player_set1..5 fields (legacy format)
+  for (let i = 1; i <= 5; i++) {
+    const homeSet = match[`event_home_player_set${i}`] ?? match[`event_first_player_set${i}`];
+    const awaySet = match[`event_away_player_set${i}`] ?? match[`event_second_player_set${i}`];
+    if (homeSet !== undefined && homeSet !== "" && homeSet !== null) {
+      const h = parseSetScore(homeSet);
+      const a = parseSetScore(awaySet);
+      if (p1IsHome) {
+        sets.push([h, a]);
+      } else {
+        sets.push([a, h]);
+      }
+    }
+  }
+
+  // Strategy 2: If no sets found, try scores[] array format
+  if (sets.length === 0 && Array.isArray(match.scores)) {
+    for (const s of match.scores) {
+      const first = parseSetScore(s.score_first ?? s.score_home ?? 0);
+      const second = parseSetScore(s.score_second ?? s.score_away ?? 0);
+      if (p1IsHome) {
+        sets.push([first, second]);
+      } else {
+        sets.push([second, first]);
+      }
+    }
+  }
+
+  return sets;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractGameScore(match: any, p1IsHome: boolean): string[] {
+  // Strategy 1: Separate fields
+  const homeGame = match.event_home_player_game ?? match.event_first_player_game ?? null;
+  const awayGame = match.event_away_player_game ?? match.event_second_player_game ?? null;
+  if (homeGame !== null || awayGame !== null) {
+    const hg = String(homeGame ?? "");
+    const ag = String(awayGame ?? "");
+    return p1IsHome ? [hg, ag] : [ag, hg];
+  }
+
+  // Strategy 2: Combined event_game_result field (e.g. "40 - 30")
+  if (match.event_game_result) {
+    const parts = String(match.event_game_result).split(/\s*-\s*/);
+    if (parts.length === 2) {
+      return p1IsHome ? [parts[0].trim(), parts[1].trim()] : [parts[1].trim(), parts[0].trim()];
+    }
+  }
+
+  return ["", ""];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractServer(match: any, p1IsHome: boolean): 1 | 2 | undefined {
+  if (!match.event_serve) return undefined;
+  // event_serve can be "home"/"away" or "first_player"/"second_player" or player name
+  const serve = String(match.event_serve).toLowerCase();
+  const homeServing = serve === "home" || serve === "first_player" || serve === "1";
+  const awayServing = serve === "away" || serve === "second_player" || serve === "2";
+
+  if (homeServing) return p1IsHome ? 1 : 2;
+  if (awayServing) return p1IsHome ? 2 : 1;
+
+  // If event_serve contains a player name, try matching
+  const { home } = getPlayerNames(match);
+  if (home && serve.includes(home.toLowerCase().split(" ").pop() || "___")) {
+    return p1IsHome ? 1 : 2;
+  }
+  return p1IsHome ? 2 : 1; // default to away serving if unrecognised
 }
 
 export async function POST(req: NextRequest) {
@@ -83,12 +195,14 @@ export async function POST(req: NextRequest) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
+    console.warn("[Tennis Scores] REJECT: no auth");
     return NextResponse.json({ available: false } as ScoreResponse);
   }
 
   const apiKey = process.env.TENNIS_SCORES_API_KEY;
 
   if (!apiKey) {
+    console.warn("[Tennis Scores] REJECT: TENNIS_SCORES_API_KEY not configured");
     return NextResponse.json({ available: false } as ScoreResponse);
   }
 
@@ -96,8 +210,11 @@ export async function POST(req: NextRequest) {
     const { player1, player2 } = await req.json();
 
     if (!player1 || !player2) {
+      console.warn("[Tennis Scores] REJECT: missing player names");
       return NextResponse.json({ available: false } as ScoreResponse);
     }
+
+    console.log(`[Tennis Scores] Fetching for: "${player1}" vs "${player2}"`);
 
     // Search for live match by player names
     const searchRes = await fetch(
@@ -106,14 +223,28 @@ export async function POST(req: NextRequest) {
     );
 
     if (!searchRes.ok) {
-      console.error("[Tennis Scores] API error:", searchRes.status);
+      console.error("[Tennis Scores] API HTTP error:", searchRes.status, searchRes.statusText);
       return NextResponse.json({ available: false } as ScoreResponse);
     }
 
     const data = await searchRes.json();
 
     if (!data.result || !Array.isArray(data.result)) {
+      console.warn("[Tennis Scores] API returned no results array. success:", data.success, "keys:", Object.keys(data));
       return NextResponse.json({ available: false } as ScoreResponse);
+    }
+
+    console.log(`[Tennis Scores] API returned ${data.result.length} live events`);
+
+    // Log first event's field names for diagnostics (once)
+    if (data.result.length > 0) {
+      const sample = data.result[0];
+      const fieldKeys = Object.keys(sample).filter(k =>
+        k.includes("player") || k.includes("score") || k.includes("serve") || k.includes("set") || k.includes("game")
+      );
+      console.log("[Tennis Scores] Sample event fields:", fieldKeys.join(", "));
+      const { home, away } = getPlayerNames(sample);
+      console.log(`[Tennis Scores] Sample players: "${home}" vs "${away}"`);
     }
 
     // Find match by player name — strict then last-name fallback
@@ -139,70 +270,66 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Step 1: Try strict full-name matching
+    // Step 1: Try strict full-name matching (using compatible field accessor)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let matches = data.result.filter((m: any) => {
-      const home = (m.event_home_player || "").toLowerCase();
-      const away = (m.event_away_player || "").toLowerCase();
-      return playersMatchStrict(home, away);
+      const { home, away } = getPlayerNames(m);
+      return playersMatchStrict(home.toLowerCase(), away.toLowerCase());
     });
 
     // Step 2: Fall back to last-name if no strict match
     if (matches.length === 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       matches = data.result.filter((m: any) => {
-        const home = (m.event_home_player || "").toLowerCase();
-        const away = (m.event_away_player || "").toLowerCase();
-        return playersMatchLastName(home, away);
+        const { home, away } = getPlayerNames(m);
+        return playersMatchLastName(home.toLowerCase(), away.toLowerCase());
       });
+      if (matches.length > 0) {
+        console.log(`[Tennis Scores] Last-name fallback matched ${matches.length} events`);
+      }
     }
 
     // Step 3: Require exactly 1 match — ambiguous = unavailable
-    if (matches.length !== 1) {
+    if (matches.length === 0) {
+      // Log the first 5 live events for debugging name mismatches
+      const liveNames = data.result.slice(0, 5).map((m: { event_home_player?: string; event_away_player?: string; event_first_player?: string; event_second_player?: string }) => {
+        const { home, away } = getPlayerNames(m);
+        return `"${home}" vs "${away}"`;
+      });
+      console.warn(`[Tennis Scores] REJECT: no player match. Looking for "${player1}" vs "${player2}". Live events (first 5): ${liveNames.join("; ")}`);
+      return NextResponse.json({ available: false } as ScoreResponse);
+    }
+    if (matches.length > 1) {
+      console.warn(`[Tennis Scores] REJECT: ambiguous match — ${matches.length} events matched for "${player1}" vs "${player2}"`);
       return NextResponse.json({ available: false } as ScoreResponse);
     }
 
     const match = matches[0];
+    console.log(`[Tennis Scores] Matched event. Raw score-related fields:`, JSON.stringify(
+      Object.fromEntries(
+        Object.entries(match).filter(([k]) =>
+          k.includes("set") || k.includes("game") || k.includes("serve") || k.includes("score") || k.includes("status") || k.includes("tiebreak")
+        )
+      )
+    ));
 
     // Determine player order: does p1 match home or away?
-    const homeLower = (match.event_home_player || "").toLowerCase();
+    const { home: homePlayer } = getPlayerNames(match);
+    const homeLower = homePlayer.toLowerCase();
     const p1IsHome =
       homeLower.includes(p1Lower) ||
       (p1Lower.split(" ").pop()!.length >= 3 && (homeLower.split(" ").pop() || "").includes(p1Lower.split(" ").pop()!));
 
-    // Parse set scores
-    const sets: number[][] = [];
-    for (let i = 1; i <= 5; i++) {
-      const homeSet = match[`event_home_player_set${i}`];
-      const awaySet = match[`event_away_player_set${i}`];
-      if (homeSet !== undefined && homeSet !== "" && homeSet !== null) {
-        const h = Number(homeSet);
-        const a = Number(awaySet);
-        if (p1IsHome) {
-          sets.push([h, a]);
-        } else {
-          sets.push([a, h]);
-        }
-      }
-    }
+    // Parse set scores (with field compatibility)
+    const sets = extractSetScores(match, p1IsHome);
 
-    // Parse game score
-    const homeGame = match.event_home_player_game ?? "";
-    const awayGame = match.event_away_player_game ?? "";
-    const gameScore = p1IsHome
-      ? [String(homeGame), String(awayGame)]
-      : [String(awayGame), String(homeGame)];
+    // Parse game score (with field compatibility)
+    const gameScore = extractGameScore(match, p1IsHome);
 
-    // Server: api-tennis uses event_serve for who is serving (home/away)
-    let server: 1 | 2 | undefined;
-    if (match.event_serve) {
-      const homeServing = match.event_serve === "home";
-      if (p1IsHome) {
-        server = homeServing ? 1 : 2;
-      } else {
-        server = homeServing ? 2 : 1;
-      }
-    }
+    // Server detection (with field compatibility)
+    const server = extractServer(match, p1IsHome);
+
+    console.log(`[Tennis Scores] Parsed: sets=${JSON.stringify(sets)} game=${JSON.stringify(gameScore)} server=${server} p1IsHome=${p1IsHome}`);
 
     // Detect break point, set point, match point
     const currentSet = sets.length > 0 ? sets[sets.length - 1] : [0, 0];
@@ -215,12 +342,20 @@ export async function POST(req: NextRequest) {
     const tiebreak = p1Games >= 6 && p2Games >= 6;
     let tiebreakScore: string[] | undefined;
     if (tiebreak) {
-      const homeTB = match.event_home_player_tiebreak ?? "";
-      const awayTB = match.event_away_player_tiebreak ?? "";
+      const homeTB = match.event_home_player_tiebreak ?? match.event_first_player_tiebreak ?? "";
+      const awayTB = match.event_away_player_tiebreak ?? match.event_second_player_tiebreak ?? "";
       if (homeTB !== "" || awayTB !== "") {
         tiebreakScore = p1IsHome
           ? [String(homeTB), String(awayTB)]
           : [String(awayTB), String(homeTB)];
+      }
+      // If no dedicated tiebreak fields, use game score as tiebreak score
+      if (!tiebreakScore && gameScore[0] !== "" && gameScore[1] !== "") {
+        const g1Num = Number(gameScore[0]);
+        const g2Num = Number(gameScore[1]);
+        if (Number.isFinite(g1Num) && Number.isFinite(g2Num)) {
+          tiebreakScore = gameScore;
+        }
       }
     }
 
@@ -234,53 +369,81 @@ export async function POST(req: NextRequest) {
     let setPoint = false;
     let matchPoint = false;
 
-    // Check if returner has a point advantage (simplified)
-    const pointOrder = ["0", "15", "30", "40", "AD"];
-    const p1Idx = pointOrder.indexOf(g1);
-    const p2Idx = pointOrder.indexOf(g2);
+    if (tiebreak) {
+      // In tiebreak: check for set/match point based on numeric scores
+      const tb1 = Number(g1);
+      const tb2 = Number(g2);
+      if (Number.isFinite(tb1) && Number.isFinite(tb2)) {
+        const diff = tb1 - tb2;
+        // Set point: player has 6+ and leads by 1+ (will win on next point)
+        if (tb1 >= 6 && diff >= 1) { setPoint = true; }
+        if (tb2 >= 6 && diff <= -1) { setPoint = true; }
+        // Match point: set point + would win match
+        if (setPoint) {
+          if (tb1 > tb2 && setsWonP1 >= 1) matchPoint = true;
+          if (tb2 > tb1 && setsWonP2 >= 1) matchPoint = true;
+        }
+      }
+    } else {
+      // Standard game scoring
+      const pointOrder = ["0", "15", "30", "40", "AD"];
+      const p1Idx = pointOrder.indexOf(g1);
+      const p2Idx = pointOrder.indexOf(g2);
 
-    if (!tiebreak && p1Idx >= 0 && p2Idx >= 0) {
-      // P1 has point to win game
-      const p1GamePt = (p1Idx >= 3 && p1Idx > p2Idx);
-      // P2 has point to win game
-      const p2GamePt = (p2Idx >= 3 && p2Idx > p1Idx);
+      if (p1Idx >= 0 && p2Idx >= 0) {
+        // P1 has point to win game
+        const p1GamePt = (p1Idx >= 3 && p1Idx > p2Idx);
+        // P2 has point to win game
+        const p2GamePt = (p2Idx >= 3 && p2Idx > p1Idx);
 
-      if (p1GamePt && returnerIsP1) breakPoint = true;
-      if (p2GamePt && returnerIsP2) breakPoint = true;
+        if (p1GamePt && returnerIsP1) breakPoint = true;
+        if (p2GamePt && returnerIsP2) breakPoint = true;
 
-      // Set point: game point + would win set
-      const p1WouldWinSet = p1Games >= 5 && p1Games > p2Games;
-      const p2WouldWinSet = p2Games >= 5 && p2Games > p1Games;
+        // Set point: game point + would win set
+        const p1WouldWinSet = p1Games >= 5 && p1Games > p2Games;
+        const p2WouldWinSet = p2Games >= 5 && p2Games > p1Games;
 
-      if (p1GamePt && p1WouldWinSet) setPoint = true;
-      if (p2GamePt && p2WouldWinSet) setPoint = true;
+        if (p1GamePt && p1WouldWinSet) setPoint = true;
+        if (p2GamePt && p2WouldWinSet) setPoint = true;
 
-      // Match point: set point + would win match
-      const p1WouldWinMatch = p1WouldWinSet && setsWonP1 >= 1;
-      const p2WouldWinMatch = p2WouldWinSet && setsWonP2 >= 1;
+        // Match point: set point + would win match
+        const p1WouldWinMatch = p1WouldWinSet && setsWonP1 >= 1;
+        const p2WouldWinMatch = p2WouldWinSet && setsWonP2 >= 1;
 
-      if (p1GamePt && p1WouldWinMatch) matchPoint = true;
-      if (p2GamePt && p2WouldWinMatch) matchPoint = true;
+        if (p1GamePt && p1WouldWinMatch) matchPoint = true;
+        if (p2GamePt && p2WouldWinMatch) matchPoint = true;
+      }
     }
 
-    // ─── Validate scores before returning — reject bad data ───
+    // ─── Validate scores — PARTIAL display instead of binary rejection ───
     const maxSets = inferMaxSets();
     const validated = validateAndClampSets(sets, maxSets);
     const validatedGame = validateGameScore(gameScore);
 
-    if (validated.confidence !== "reliable") {
-      return NextResponse.json({ available: false } as ScoreResponse);
-    }
-    if (!validatedGame.valid && validatedGame.gameScore.some(g => g !== "")) {
-      return NextResponse.json({ available: false } as ScoreResponse);
+    // Determine overall confidence
+    let scoreConfidence: ScoreConfidence = "reliable";
+
+    if (validated.sets.length === 0) {
+      // No set scores at all — still return what we have (server, status)
+      scoreConfidence = "estimated";
+      console.warn("[Tennis Scores] No valid set scores parsed from API response");
+    } else if (validated.confidence !== "reliable") {
+      // Set scores required clamping
+      scoreConfidence = "estimated";
+      console.warn("[Tennis Scores] Set scores clamped, confidence: estimated");
     }
 
-    const scoreConfidence: ScoreConfidence = "reliable";
+    if (!validatedGame.valid && validatedGame.gameScore.some(g => g !== "")) {
+      // Game score invalid — DON'T reject entire response, just clear game score
+      console.warn(`[Tennis Scores] Invalid game score: ${JSON.stringify(gameScore)} — clearing game score but keeping sets`);
+      validatedGame.gameScore = ["", ""];
+      if (scoreConfidence === "reliable") scoreConfidence = "estimated";
+    }
 
     const result: ScoreResponse = {
-      available: true,
-      sets: validated.sets,
-      gameScore: validatedGame.gameScore,
+      available: validated.sets.length > 0 || server !== undefined,
+      sets: validated.sets.length > 0 ? validated.sets : undefined,
+      gameScore: validatedGame.gameScore[0] !== "" || validatedGame.gameScore[1] !== "" ? validatedGame.gameScore : undefined,
       server,
       matchStatus: match.event_status || "IN_PROGRESS",
       breakPoint,
@@ -290,6 +453,8 @@ export async function POST(req: NextRequest) {
       tiebreakScore,
       scoreConfidence,
     };
+
+    console.log(`[Tennis Scores] SUCCESS: confidence=${scoreConfidence} sets=${JSON.stringify(result.sets)} game=${JSON.stringify(result.gameScore)} server=${result.server} bp=${breakPoint} sp=${setPoint} mp=${matchPoint}`);
 
     return NextResponse.json(result);
   } catch (error) {
