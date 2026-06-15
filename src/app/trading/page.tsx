@@ -803,6 +803,14 @@ function TradingPage() {
     return map;
   }, [selectedRunner?.ex?.tradedVolume]);
 
+  // Pure deterministic: liability → stake at current best lay odds (updates every tick)
+  const effectiveStakeAtBestLay = useMemo(() => {
+    if (layInputMode !== "liability") return rawInputAmount;
+    const layOdds = selectedRunner?.ex?.availableToLay?.[0]?.price ?? 0;
+    if (layOdds <= 1) return 0;
+    return calculateLayStakeFromLiability(rawInputAmount, layOdds);
+  }, [layInputMode, rawInputAmount, selectedRunner?.ex?.availableToLay]);
+
   /* ─── Pre-compute aggregated position for ladder P&L ─── */
   const ladderAggPos = useMemo(() => {
     const runnerId = selectedRunner?.selectionId;
@@ -1806,8 +1814,11 @@ function TradingPage() {
           </div>
         </div>
         {layInputMode === "liability" && (
-          <div className="px-3 text-[9px] text-pink-400/60">
-            Lay amounts = max liability · Stake calculated at trade time
+          <div className="px-3 text-[9px] text-pink-400/60 flex items-center gap-2">
+            <span>Liability £{rawInputAmount}</span>
+            <span>→</span>
+            <span className="text-pink-400 font-mono">Stake £{effectiveStakeAtBestLay.toFixed(2)}</span>
+            <span className="text-gray-600">@ {(selectedRunner?.ex?.availableToLay?.[0]?.price ?? 0).toFixed(2)}</span>
           </div>
         )}
       </div>

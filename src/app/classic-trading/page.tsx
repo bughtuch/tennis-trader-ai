@@ -631,6 +631,14 @@ function ClassicTradingPage() {
   const p2LayPrice = runner1?.ex?.availableToLay?.[0]?.price ?? 0;
   const p2BackPrice = runner1?.ex?.availableToBack?.[0]?.price ?? 0;
 
+  // Pure deterministic: liability → stake at current best lay odds (updates every tick)
+  const previewLayPrice = lastClickedRunner === "player1" ? p1LayPrice : p2LayPrice;
+  const effectiveStakeAtBestLay = useMemo(() => {
+    if (layInputMode !== "liability") return rawInputAmount;
+    if (previewLayPrice <= 1) return 0;
+    return calculateLayStakeFromLiability(rawInputAmount, previewLayPrice);
+  }, [layInputMode, rawInputAmount, previewLayPrice]);
+
   /* ─── Pressure per runner ─── */
   const p1Pressure = useMemo(() => calcPressure(runner0), [runner0]);
   const p2Pressure = useMemo(() => calcPressure(runner1), [runner1]);
@@ -1779,8 +1787,8 @@ function ClassicTradingPage() {
             </span>
           )}
           {layInputMode === "liability" && (
-            <span className="text-[9px] text-pink-500/70">
-              Lay = liability · Stake at trade time
+            <span className="text-[9px] text-pink-500/70 font-mono">
+              £{rawInputAmount} liability → £{effectiveStakeAtBestLay.toFixed(2)} stake @ {previewLayPrice.toFixed(2)}
             </span>
           )}
           <button

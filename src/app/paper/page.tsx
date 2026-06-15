@@ -767,6 +767,14 @@ function PaperTradingPage() {
   /* ─── Build ladder from market book data ─── */
   const selectedRunner = marketBook?.runners?.[selectedPlayer === "player1" ? 0 : 1] ?? null;
 
+  // Pure deterministic: liability → stake at current best lay odds (updates every tick)
+  const effectiveStakeAtBestLay = useMemo(() => {
+    if (layInputMode !== "liability") return rawInputAmount;
+    const layOdds = selectedRunner?.ex?.availableToLay?.[0]?.price ?? 0;
+    if (layOdds <= 1) return 0;
+    return calculateLayStakeFromLiability(rawInputAmount, layOdds);
+  }, [layInputMode, rawInputAmount, selectedRunner?.ex?.availableToLay]);
+
   let liveLadder: LadderRow[] | null = null;
   let livePlayerOdds = { player1: 0, player2: 0 };
 
@@ -1542,8 +1550,11 @@ function PaperTradingPage() {
           </div>
         </div>
         {layInputMode === "liability" && (
-          <div className="px-3 text-[9px] text-pink-400/60 mt-1">
-            Lay amounts = max liability · Stake calculated at trade time
+          <div className="px-3 text-[9px] text-pink-400/60 mt-1 flex items-center gap-2">
+            <span>Liability £{rawInputAmount}</span>
+            <span>→</span>
+            <span className="text-pink-400 font-mono">Stake £{effectiveStakeAtBestLay.toFixed(2)}</span>
+            <span className="text-gray-600">@ {(selectedRunner?.ex?.availableToLay?.[0]?.price ?? 0).toFixed(2)}</span>
           </div>
         )}
       </div>
