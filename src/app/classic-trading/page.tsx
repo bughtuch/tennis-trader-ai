@@ -1708,9 +1708,9 @@ function ClassicTradingPage() {
             {/* View toggle */}
             <Link
               href={`/trading?${searchParams.toString()}`}
-              className="px-2 py-0.5 rounded text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-all hidden sm:inline-block"
+              className="px-2 py-0.5 rounded text-[10px] text-gray-400 hover:text-gray-300 transition-all hidden sm:inline-block"
             >
-              Modern &rarr;
+              Legacy view
             </Link>
           </div>
         </div>

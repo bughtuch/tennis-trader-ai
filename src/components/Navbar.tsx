@@ -18,7 +18,7 @@ const goProStyle = `
 const commonLinks = {
   home: { href: "/dashboard", label: "Home" },
   markets: { href: "/markets", label: "Markets" },
-  trading: { href: "/trading", label: "Trading" },
+  trading: { href: "/classic-trading", label: "Trading" },
   paper: { href: "/paper", label: "Paper Trade" },
   dna: { href: "/trading-dna", label: "DNA" },
   settings: { href: "/settings", label: "Settings" },

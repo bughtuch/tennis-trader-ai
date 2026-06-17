@@ -40,7 +40,7 @@ export default function Footer() {
             </h4>
             <ul className="space-y-2 text-sm text-gray-400">
               <li>
-                <Link href="/trading" className="hover:text-white transition-colors">
+                <Link href="/classic-trading" className="hover:text-white transition-colors">
                   Trading Ladder
                 </Link>
               </li>
@@ -50,12 +50,12 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/trading" className="hover:text-white transition-colors">
+                <Link href="/classic-trading" className="hover:text-white transition-colors">
                   AI Signals
                 </Link>
               </li>
               <li>
-                <Link href="/trading" className="hover:text-white transition-colors">
+                <Link href="/classic-trading" className="hover:text-white transition-colors">
                   AI Guardian
                 </Link>
               </li>

@@ -141,7 +141,7 @@ export default function MarketsPage() {
   const router = useRouter();
   const { isConnected: betfairConnected, token: betfairToken } = useBetfairToken();
   const { subscriptionStatus, subscriptionLoaded, fetchSubscriptionStatus } = useAppStore();
-  const tradePath = subscriptionLoaded && subscriptionStatus === "active" ? "/trading" : "/paper";
+  const tradePath = subscriptionLoaded && subscriptionStatus === "active" ? "/classic-trading" : "/paper";
   const [upgradeBannerDismissed, setUpgradeBannerDismissed] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
