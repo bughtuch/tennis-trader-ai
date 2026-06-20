@@ -2305,13 +2305,7 @@ function TradingPage() {
             <div className="mt-3 space-y-2">
               <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-2.5 space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                    aiSignal.edgeSize === "strong" ? "bg-green-500/20 text-green-400" :
-                    aiSignal.edgeSize === "moderate" ? "bg-blue-500/20 text-blue-400" :
-                    aiSignal.edgeSize === "mild" ? "bg-yellow-500/20 text-yellow-400" :
-                    "bg-gray-500/20 text-gray-400"
-                  }`}>{aiSignal.edgeSize.toUpperCase()}</span>
-                  <span className="text-[10px] text-gray-500 uppercase">{aiSignal.type.replace("_", " ")}</span>
+                  <span className="text-[10px] text-gray-500 uppercase">{aiSignal.type === "edge_alert" ? "MARKET READ" : aiSignal.type === "pre_match" ? "PRE-MATCH" : "IN-PLAY"}</span>
                 </div>
                 {aiSignal.structured ? (
                   <div className="space-y-1">
@@ -2819,7 +2813,7 @@ function TradingPage() {
                       <span className="text-xs font-medium text-white">{opt.label}</span>
                       {isRecommended && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-semibold">
-                          AI PICK
+                          AI NOTE
                         </span>
                       )}
                     </div>

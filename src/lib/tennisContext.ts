@@ -125,7 +125,7 @@ You MUST respond with valid JSON matching this exact structure:
 {
   "whatWeKnow": "<state ONLY verified facts from the DATA CONTRACT — current odds, verified surface, tournament. Max 2-3 sentences.>",
   "whatWeDontKnow": "<explicitly list what data is missing or unverified — opening odds, player stats, H2H, etc. Be honest.>",
-  "tradingView": "<your trading read based ONLY on verified data. If data confidence is LOW, say 'Insufficient verified data for trade suggestion.' Max 2-3 sentences.>",
+  "tradingView": "<your market read based ONLY on verified data. If data confidence is LOW, say 'Insufficient verified data for analysis.' Max 2-3 sentences.>",
   "whatToWatch": "<specific things the trader should watch for — first service games, early break, price reaction. Max 2 sentences.>",
   "confidence": "<LOW | MEDIUM | HIGH — must match the DATA CONFIDENCE level provided>",
   "confidenceReason": "<why this confidence — reference which data is verified vs missing>",
@@ -138,7 +138,7 @@ RULES:
 - whatWeDontKnow must be honest about gaps. Missing data is acceptable. Wrong data is unacceptable.
 - Do NOT predict set-end prices or project specific future prices.
 - Do NOT claim player statistics unless explicitly provided.
-- tradeSignal is NOT included for pre-match. Omit it entirely.
+- Do NOT recommend trades, entries, exits, or timing. Describe market conditions only.
 - Be concise. Plain trader language. No jargon.
 - Do NOT wrap in markdown code fences. Return raw JSON only.
 `.trim();

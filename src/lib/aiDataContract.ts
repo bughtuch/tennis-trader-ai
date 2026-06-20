@@ -36,7 +36,7 @@ export interface PromptRestrictions {
   canMentionSurface: boolean;
   canMentionOpeningOdds: boolean;
   canMentionScore: boolean;
-  canProvideTradeAdvice: boolean;
+  canProvideDetailedAnalysis: boolean;
   canProjectSetPrices: boolean;
   canClaimPlayerStats: boolean;
   restrictedMode: boolean;
@@ -297,7 +297,7 @@ export function buildPromptRestrictions(
     canMentionSurface: contract.surface.status === "verified",
     canMentionOpeningOdds: false, // Never — not tracked
     canMentionScore: contract.currentScore.status === "verified",
-    canProvideTradeAdvice: contract.dataConfidence !== "LOW",
+    canProvideDetailedAnalysis: contract.dataConfidence !== "LOW",
     canProjectSetPrices: false, // Stage 9: removed entirely
     canClaimPlayerStats: false, // Never — no player stats data
     restrictedMode: contract.dataConfidence === "LOW",
@@ -322,9 +322,9 @@ export function buildPromptRestrictions(
     );
   }
 
-  if (!restrictions.canProvideTradeAdvice) {
+  if (!restrictions.canProvideDetailedAnalysis) {
     restrictions.bannedTopics.push(
-      "TRADE ADVICE RULE: Do NOT recommend specific trades. Say: 'Insufficient verified data for trade suggestion.'",
+      "RESTRICTED MODE: Data confidence is LOW. State only what is known. Say: 'Insufficient verified data for analysis.'",
     );
   }
 

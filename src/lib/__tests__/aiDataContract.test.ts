@@ -143,7 +143,7 @@ function test4_noScoreAvailable(): TestResult {
 
     const restrictions = buildPromptRestrictions(contract);
     assert(restrictions.canMentionScore === false, "Should NOT mention score");
-    assert(restrictions.canProvideTradeAdvice === false, "Should NOT provide trade advice");
+    assert(restrictions.canProvideDetailedAnalysis === false, "Should NOT provide trade advice");
     assert(restrictions.restrictedMode === true, "Should be in restricted mode");
 
     details.push("Score missing: PASS");
@@ -180,7 +180,7 @@ function test5_inPlayVerifiedScore(): TestResult {
 
     const restrictions = buildPromptRestrictions(contract);
     assert(restrictions.canMentionScore === true, "Should be able to mention score");
-    assert(restrictions.canProvideTradeAdvice === true, "Should be able to provide trade advice");
+    assert(restrictions.canProvideDetailedAnalysis === true, "Should be able to provide trade advice");
 
     details.push("Score verified: PASS");
     details.push("Data confidence HIGH: PASS");

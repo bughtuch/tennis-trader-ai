@@ -76,7 +76,7 @@ function getConfig(
         system: [
           "You are a professional Betfair tennis exchange trader preparing a pre-match read.",
           "You are NOT a tipster, prediction oracle, or commentator.",
-          "You are a trading assistant that explains verified market and match information in plain trader language.",
+          "You are a market analyst that explains verified market and match information in plain trader language.",
           "A trader may disagree with your opinion, but they must trust the facts you present.",
           "",
           dataContextBlock,
@@ -161,7 +161,7 @@ function buildUserPrompt(
         `Tournament: ${ctx.tournament ?? "Unknown"}`,
         `Current odds: ${p1} ${ctx.odds1 ?? "?"} / ${p2} ${ctx.odds2 ?? "?"}`,
         "",
-        "Give your pre-match trading read as structured JSON. Reference ONLY the data provided in the DATA CONTRACT. Be honest about what you do not know.",
+        "Give your pre-match market read as structured JSON. Reference ONLY the data provided in the DATA CONTRACT. Be honest about what you do not know.",
       ].join("\n");
 
     case "in_play": {
@@ -198,8 +198,8 @@ function buildUserPrompt(
         ctx.ladderContext ? `Ladder: ${ctx.ladderContext}` : "",
         "",
         ctx.scoreConfidence === "unavailable"
-          ? "Score unavailable. Is there a pricing edge based on price action and ladder weight alone? Respond with structured JSON."
-          : "Is there a pricing edge? Respond with structured JSON. Only include tradeSignal if data supports it.",
+          ? "Score unavailable. Describe price action and ladder weight. Respond with structured JSON."
+          : "Describe current market conditions. Respond with structured JSON.",
       ]
         .filter(Boolean)
         .join("\n");
@@ -322,7 +322,7 @@ function buildInsufficientDataResponse(
       ? {
           whatWeKnow: "Insufficient live data for analysis",
           whatWeDontKnow: "Missing required player and match data",
-          tradingView: "Insufficient verified data for trade suggestion.",
+          tradingView: "Insufficient verified data for analysis.",
           whatToWatch: "Wait for market data to become available",
           confidence: "LOW",
           confidenceReason: "Missing required player and match data",

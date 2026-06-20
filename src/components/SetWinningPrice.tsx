@@ -52,7 +52,7 @@ function PlayerRow({ data }: { data: PlayerSetPrices }) {
       </span>
       {data.overreacted && (
         <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 animate-pulse shrink-0">
-          OVERREACTED — lay opportunity
+          OVERREACTED — price below set-win level
         </span>
       )}
     </div>

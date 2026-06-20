@@ -51,7 +51,7 @@ export default function Footer() {
               </li>
               <li>
                 <Link href="/classic-trading" className="hover:text-white transition-colors">
-                  AI Signals
+                  AI Analysis
                 </Link>
               </li>
               <li>
