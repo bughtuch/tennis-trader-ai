@@ -59,29 +59,29 @@ export default function VaultNoteCard({ note, onToggleActive, onDelete, onUpdate
         <div className="flex items-center gap-2">
           <button
             onClick={() => onUpdatePriority(note.id, nextPriority)}
-            className={`text-sm leading-none ${starColor} hover:text-amber-300 transition-colors`}
+            className={`text-sm leading-none p-1.5 -m-1.5 rounded ${starColor} hover:text-amber-300 transition-colors`}
             title={`Priority: ${note.priority} (click to cycle)`}
           >
             {stars}
           </button>
           {note.form_status && <VaultFormBadge form={note.form_status} />}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] text-gray-600">{age}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-[9px] text-gray-600 mr-1">{age}</span>
           <button
             onClick={() => onToggleActive(note.id, !note.is_active)}
-            className="text-[9px] text-gray-600 hover:text-gray-400 transition-colors"
+            className="text-[10px] px-2 py-1.5 rounded text-gray-600 hover:text-gray-400 hover:bg-gray-700/30 transition-colors"
             title={note.is_active ? "Mark inactive" : "Mark active"}
           >
             {note.is_active ? "Archive" : "Restore"}
           </button>
           {confirmDelete ? (
             <div className="flex items-center gap-1">
-              <button onClick={() => onDelete(note.id)} className="text-[9px] text-red-400 hover:text-red-300">Delete</button>
-              <button onClick={() => setConfirmDelete(false)} className="text-[9px] text-gray-600 hover:text-gray-400">Cancel</button>
+              <button onClick={() => onDelete(note.id)} className="text-[10px] px-2 py-1.5 rounded text-red-400 hover:text-red-300 hover:bg-red-500/10">Delete</button>
+              <button onClick={() => setConfirmDelete(false)} className="text-[10px] px-2 py-1.5 rounded text-gray-600 hover:text-gray-400 hover:bg-gray-700/30">Cancel</button>
             </div>
           ) : (
-            <button onClick={() => setConfirmDelete(true)} className="text-[9px] text-gray-700 hover:text-red-400 transition-colors">&times;</button>
+            <button onClick={() => setConfirmDelete(true)} className="text-[10px] px-1.5 py-1.5 rounded text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition-colors">&times;</button>
           )}
         </div>
       </div>

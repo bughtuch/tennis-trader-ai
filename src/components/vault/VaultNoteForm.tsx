@@ -111,13 +111,13 @@ export default function VaultNoteForm({ players, customTags, onSave, onCreateCus
       {/* Priority */}
       <div>
         <label className="text-[10px] text-gray-500 uppercase tracking-wider">Priority</label>
-        <div className="flex gap-1 mt-0.5">
+        <div className="flex flex-wrap gap-1 mt-0.5">
           {PRIORITY_OPTIONS.map(opt => (
             <button
               key={opt.value}
               type="button"
               onClick={() => setPriority(opt.value)}
-              className={`px-3 py-1 rounded text-sm transition-colors ${
+              className={`px-3 py-1.5 rounded text-sm transition-colors ${
                 priority === opt.value
                   ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
                   : "bg-gray-800/50 text-gray-600 border border-gray-700/30 hover:text-gray-400"
@@ -141,13 +141,13 @@ export default function VaultNoteForm({ players, customTags, onSave, onCreateCus
       {/* Form Status */}
       <div>
         <label className="text-[10px] text-gray-500 uppercase tracking-wider">Current Form (optional)</label>
-        <div className="flex gap-1 mt-0.5">
+        <div className="flex flex-wrap gap-1 mt-0.5">
           {FORM_OPTIONS.map(opt => (
             <button
               key={opt.value}
               type="button"
               onClick={() => setFormStatus(formStatus === opt.value ? null : opt.value)}
-              className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+              className={`px-2.5 py-1.5 rounded text-[11px] font-medium border transition-colors ${
                 formStatus === opt.value ? opt.color : "text-gray-600 border-gray-700/30 bg-gray-800/30 hover:text-gray-400"
               }`}
             >

@@ -52,7 +52,7 @@ export default function VaultTagPicker({ selected, onChange, customTags = [], on
             key={tag}
             type="button"
             onClick={() => toggle(tag)}
-            className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+            className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-colors ${
               selected.includes(tag)
                 ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
                 : "bg-gray-800/50 text-gray-500 border border-gray-700/50 hover:text-gray-300"
@@ -64,7 +64,7 @@ export default function VaultTagPicker({ selected, onChange, customTags = [], on
         <button
           type="button"
           onClick={() => setShowCustomInput(!showCustomInput)}
-          className="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-800/50 text-gray-500 border border-gray-700/50 hover:text-gray-300 transition-colors"
+          className="px-2.5 py-1.5 rounded text-[11px] font-medium bg-gray-800/50 text-gray-500 border border-gray-700/50 hover:text-gray-300 transition-colors"
         >
           + Custom
         </button>

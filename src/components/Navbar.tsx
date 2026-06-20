@@ -161,12 +161,12 @@ export default function Navbar() {
           </Link>
 
           {/* Nav Links */}
-          <div className="hidden sm:flex items-center gap-1">
+          <div className="hidden lg:flex items-center gap-1">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   pathname === link.href
                     ? "text-white bg-white/5"
                     : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
@@ -185,7 +185,7 @@ export default function Navbar() {
           {/* Mobile Hamburger */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="sm:hidden p-2 -mr-1 text-gray-400 hover:text-white transition-colors"
+            className="lg:hidden p-2 -mr-1 text-gray-400 hover:text-white transition-colors"
             aria-label="Toggle menu"
           >
             {mobileMenuOpen ? (
@@ -200,7 +200,7 @@ export default function Navbar() {
           </button>
 
           {/* Right Side */}
-          <div className="hidden sm:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <div className="flex items-center gap-2 text-xs">
               {betfairLive ? (
                 <>
@@ -217,7 +217,7 @@ export default function Navbar() {
 
             {user ? (
               <div className="flex items-center gap-3">
-                <span className="hidden sm:inline text-sm text-gray-400 max-w-[150px] truncate">
+                <span className="hidden lg:inline text-sm text-gray-400 max-w-[150px] truncate">
                   {user.email}
                 </span>
                 {subscriptionLoaded && subscriptionStatus !== "active" && (
@@ -225,7 +225,7 @@ export default function Navbar() {
                     <style>{goProStyle}</style>
                     <Link
                       href="/settings#subscribe"
-                      className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-yellow-900 bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 rounded-lg transition-all hover:from-yellow-300 hover:to-amber-400"
+                      className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-yellow-900 bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 rounded-lg transition-all hover:from-yellow-300 hover:to-amber-400"
                       style={{ animation: "goldPulse 2s ease-in-out infinite" }}
                     >
                       Go Pro — £37/mo
@@ -261,7 +261,7 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="sm:hidden border-t border-gray-800/50 bg-gray-900/95 backdrop-blur-xl">
+        <div className="lg:hidden border-t border-gray-800/50 bg-gray-900/95 backdrop-blur-xl">
           <div className="px-4 py-3 space-y-1">
             {navLinks.map((link) => (
               <Link
