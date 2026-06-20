@@ -21,8 +21,7 @@ const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const viewCache = new Map<string, { data: MarketViewResponse; at: number }>();
 const CACHE_TTL_MS = 30_000;
 
-type MarketState = "BALANCED" | "BACK_PRESSURE" | "LAY_PRESSURE" | "VOLATILE" | "MOMENTUM_SHIFT";
-type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
+type MarketState = "BALANCED" | "FAVOURITE_SUPPORTED" | "DRIFT_DETECTED" | "VOLATILE" | "LATE_STEAM";
 type ConfidenceLevel = "LOW" | "MEDIUM" | "HIGH";
 
 interface MarketViewResponse {
@@ -30,7 +29,6 @@ interface MarketViewResponse {
   marketView: {
     marketState: MarketState;
     summary: string;
-    risk: RiskLevel;
     confidence: ConfidenceLevel;
     confidenceReason: string;
     dataSource: {
@@ -47,26 +45,27 @@ interface MarketViewResponse {
 const MARKET_VIEW_OUTPUT_FORMAT = `
 You MUST respond with valid JSON matching this exact structure:
 {
-  "marketState": "<BALANCED | BACK_PRESSURE | LAY_PRESSURE | VOLATILE | MOMENTUM_SHIFT>",
+  "marketState": "<BALANCED | FAVOURITE_SUPPORTED | DRIFT_DETECTED | VOLATILE | LATE_STEAM>",
   "summary": "<One concise paragraph (2-3 sentences max) describing current market conditions in plain trader language. State what the market is telling you, not what will happen.>",
-  "risk": "<LOW | MEDIUM | HIGH>",
   "confidence": "<LOW | MEDIUM | HIGH — must match data confidence level>",
   "confidenceReason": "<One sentence explaining confidence — reference data quality>"
 }
 
 MARKET STATE DEFINITIONS:
 - BALANCED: Normal spread, no unusual weight on either side, odds stable
-- BACK_PRESSURE: Significant backing activity, odds shortening for one player
-- LAY_PRESSURE: Significant laying activity, odds drifting for one player
+- FAVOURITE_SUPPORTED: Significant backing activity, odds shortening for one player
+- DRIFT_DETECTED: Favourite drifting, underdog attracting money
 - VOLATILE: Large price swings, uncertain market, frequent suspensions
-- MOMENTUM_SHIFT: Recent odds movement suggesting a change in momentum (e.g. break of serve)
+- LATE_STEAM: Recent sharp odds movement in one direction
 
 RULES:
 - summary MUST reference ONLY verified data from the DATA CONTRACT
 - If score is unavailable, give a price-action read only
 - Do NOT predict outcomes or project future prices
 - Do NOT claim player statistics unless provided
-- If data confidence is LOW, marketState should be BALANCED and risk should be HIGH
+- If data confidence is LOW, marketState should be BALANCED
+- Do NOT recommend trades, entries, exits, or timing
+- Describe what the market is doing. The trader decides.
 - Plain trader language. No jargon. No filler.
 - Do NOT wrap in markdown code fences. Return raw JSON only.
 `.trim();
@@ -164,7 +163,7 @@ export async function POST(req: NextRequest) {
     if (body.isScoreStale) flags.push("SCORE DATA MAY BE STALE");
 
     const systemPrompt = [
-      "You are a professional Betfair tennis exchange trading assistant providing a real-time market view.",
+      "You are a professional Betfair tennis exchange market analyst describing current market conditions.",
       "You give instant, concise market reads based ONLY on verified data.",
       "You are NOT a tipster, prediction oracle, or commentator.",
       "",
@@ -221,7 +220,7 @@ export async function POST(req: NextRequest) {
 
     /* ─── Parse response ─── */
     const checkedText = selfCheckOutput(rawText, restrictions);
-    let parsed: { marketState?: string; summary?: string; risk?: string; confidence?: string; confidenceReason?: string } | null = null;
+    let parsed: { marketState?: string; summary?: string; confidence?: string; confidenceReason?: string } | null = null;
 
     try {
       let jsonStr = checkedText.trim();
@@ -233,13 +232,11 @@ export async function POST(req: NextRequest) {
       parsed = null;
     }
 
-    const validStates: MarketState[] = ["BALANCED", "BACK_PRESSURE", "LAY_PRESSURE", "VOLATILE", "MOMENTUM_SHIFT"];
-    const validRisk: RiskLevel[] = ["LOW", "MEDIUM", "HIGH"];
+    const validStates: MarketState[] = ["BALANCED", "FAVOURITE_SUPPORTED", "DRIFT_DETECTED", "VOLATILE", "LATE_STEAM"];
     const validConf: ConfidenceLevel[] = ["LOW", "MEDIUM", "HIGH"];
 
     let marketState: MarketState = "BALANCED";
     let summary = "Market view unavailable.";
-    let risk: RiskLevel = "MEDIUM";
     let confidence: ConfidenceLevel = dataContract.dataConfidence as ConfidenceLevel;
     let confidenceReason = "Based on available data quality";
 
@@ -248,9 +245,6 @@ export async function POST(req: NextRequest) {
       if (validStates.includes(rawState)) marketState = rawState;
 
       if (parsed.summary) summary = stripBannedPhrases(parsed.summary);
-
-      const rawRisk = (parsed.risk ?? "").toUpperCase() as RiskLevel;
-      if (validRisk.includes(rawRisk)) risk = rawRisk;
 
       const rawConf = (parsed.confidence ?? "").toUpperCase() as ConfidenceLevel;
       if (validConf.includes(rawConf)) confidence = rawConf;
@@ -269,7 +263,6 @@ export async function POST(req: NextRequest) {
       marketView: {
         marketState,
         summary,
-        risk,
         confidence,
         confidenceReason,
         dataSource: {

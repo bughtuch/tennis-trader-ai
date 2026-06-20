@@ -561,6 +561,18 @@ export const EXPANDED_BANNED_PHRASES = [
   "\\bsure thing\\b",
   "\\binevitable\\b",
   "\\bsurefire\\b",
+  // Trade advice phrases — AI describes, trader decides
+  "should enter",
+  "consider entering",
+  "wait for",
+  "look to back",
+  "look to lay",
+  "entry point",
+  "trade opportunity",
+  "trading opportunity",
+  "ideal entry",
+  "suggested trade",
+  "recommended trade",
 ];
 
 /* ─── Stage 8: Self-Check Output ─── */

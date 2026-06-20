@@ -115,13 +115,7 @@ export interface StructuredAISignal {
   // Common
   confidence: ConfidenceLevel;
   confidenceReason: string;
-  edgeSize: "none" | "mild" | "moderate" | "strong";
-  tradeSignal?: {
-    entry: string;
-    reason: string;
-    risk: string;
-    invalidation: string;
-  };
+  edgeSize?: "none" | "mild" | "moderate" | "strong";
 }
 
 /* ─── Mandatory Output Format for AI ─── */
@@ -157,19 +151,13 @@ You MUST respond with valid JSON matching this exact structure:
   "watch": "<what the trader should watch next — be specific. If data is limited, say what would need to happen before acting.>",
   "confidence": "<LOW | MEDIUM | HIGH — must match the DATA CONFIDENCE level provided>",
   "confidenceReason": "<why this confidence — reference data quality>",
-  "edgeSize": "<none | mild | moderate | strong — 'none' if data confidence is LOW>",
-  "tradeSignal": {
-    "entry": "<specific price and direction>",
-    "reason": "<why enter — reference verified data>",
-    "risk": "<what could go wrong>",
-    "invalidation": "<price or event that cancels>"
-  }
+  "edgeSize": "<none | mild | moderate | strong — 'none' if data confidence is LOW>"
 }
 
 RULES:
 - situation MUST use the exact score and server from DATA CONTRACT. If score is unavailable, state that clearly.
 - reason MUST reference verified data only. Do not guess what happened on court if score is unavailable.
-- tradeSignal is optional — only include if there is a genuine edge AND data confidence is HIGH or MEDIUM. Omit entirely otherwise.
+- Do NOT recommend trades, entries, exits, or timing. Describe market conditions only.
 - Do NOT predict set-end prices or project specific future prices.
 - Be concise. Max 2-3 sentences per field. Plain trader language.
 - Do NOT wrap in markdown code fences. Return raw JSON only.

@@ -5,14 +5,12 @@ import { buildMatchContext, formatMatchContextForPrompt, inferSurface } from "@/
 
 /* ─── Types ─── */
 
-type MarketState = "BALANCED" | "BACK_PRESSURE" | "LAY_PRESSURE" | "VOLATILE" | "MOMENTUM_SHIFT";
-type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
+type MarketState = "BALANCED" | "FAVOURITE_SUPPORTED" | "DRIFT_DETECTED" | "VOLATILE" | "LATE_STEAM";
 type ConfidenceLevel = "LOW" | "MEDIUM" | "HIGH";
 
 interface MarketViewData {
   marketState: MarketState;
   summary: string;
-  risk: RiskLevel;
   confidence: ConfidenceLevel;
   confidenceReason: string;
   dataSource: {
@@ -58,18 +56,21 @@ interface AIMarketViewProps {
 /* ─── Market State Config ─── */
 
 const STATE_CONFIG: Record<MarketState, { label: string; color: string; bg: string }> = {
-  BALANCED: { label: "BALANCED", color: "text-gray-400", bg: "bg-gray-500/20" },
-  BACK_PRESSURE: { label: "BACK PRESSURE", color: "text-blue-400", bg: "bg-blue-500/20" },
-  LAY_PRESSURE: { label: "LAY PRESSURE", color: "text-pink-400", bg: "bg-pink-500/20" },
-  VOLATILE: { label: "VOLATILE", color: "text-amber-400", bg: "bg-amber-500/20" },
-  MOMENTUM_SHIFT: { label: "MOMENTUM SHIFT", color: "text-purple-400", bg: "bg-purple-500/20" },
+  BALANCED:            { label: "Balanced Market",     color: "text-gray-400",   bg: "bg-gray-500/20" },
+  FAVOURITE_SUPPORTED: { label: "Favourite Supported", color: "text-blue-400",   bg: "bg-blue-500/20" },
+  DRIFT_DETECTED:      { label: "Drift Detected",     color: "text-pink-400",   bg: "bg-pink-500/20" },
+  VOLATILE:            { label: "Volatile",            color: "text-amber-400",  bg: "bg-amber-500/20" },
+  LATE_STEAM:          { label: "Late Steam",          color: "text-purple-400", bg: "bg-purple-500/20" },
 };
 
-const RISK_CONFIG: Record<RiskLevel, { color: string; bg: string }> = {
-  LOW: { color: "text-green-400", bg: "bg-green-500/20" },
-  MEDIUM: { color: "text-amber-400", bg: "bg-amber-500/20" },
-  HIGH: { color: "text-red-400", bg: "bg-red-500/20" },
-};
+function normalizeState(raw: string): MarketState {
+  const map: Record<string, MarketState> = {
+    BACK_PRESSURE: "FAVOURITE_SUPPORTED",
+    LAY_PRESSURE: "DRIFT_DETECTED",
+    MOMENTUM_SHIFT: "LATE_STEAM",
+  };
+  return (map[raw] ?? raw) as MarketState;
+}
 
 const CONF_CONFIG: Record<ConfidenceLevel, { color: string; bg: string }> = {
   HIGH: { color: "text-green-400", bg: "bg-green-500/20" },
@@ -160,6 +161,7 @@ export default function AIMarketView({
 
       const data = await res.json();
       if (data.success && data.marketView) {
+        data.marketView.marketState = normalizeState(data.marketView.marketState);
         setViewData(data.marketView);
         lastFetchRef.current = Date.now();
         setSecondsAgo(0);
@@ -207,7 +209,6 @@ export default function AIMarketView({
   /* ─── Render ─── */
 
   const stateConf = viewData ? STATE_CONFIG[viewData.marketState] : null;
-  const riskConf = viewData ? RISK_CONFIG[viewData.risk] : null;
   const confConf = viewData ? CONF_CONFIG[viewData.confidence] : null;
 
   const formatAge = (s: number) => {
@@ -261,23 +262,16 @@ export default function AIMarketView({
             <div className="text-xs text-red-500">{error}</div>
           ) : viewData ? (
             <div className="space-y-2">
-              {/* Row 1: State + Risk */}
+              {/* Row 1: State + Confidence */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                   viewData.marketState === "BALANCED" ? "bg-gray-100 text-gray-600" :
-                  viewData.marketState === "BACK_PRESSURE" ? "bg-blue-100 text-blue-700" :
-                  viewData.marketState === "LAY_PRESSURE" ? "bg-pink-100 text-pink-700" :
+                  viewData.marketState === "FAVOURITE_SUPPORTED" ? "bg-blue-100 text-blue-700" :
+                  viewData.marketState === "DRIFT_DETECTED" ? "bg-pink-100 text-pink-700" :
                   viewData.marketState === "VOLATILE" ? "bg-amber-100 text-amber-700" :
                   "bg-purple-100 text-purple-700"
                 }`}>
                   {STATE_CONFIG[viewData.marketState].label}
-                </span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                  viewData.risk === "LOW" ? "bg-green-100 text-green-700" :
-                  viewData.risk === "MEDIUM" ? "bg-amber-100 text-amber-700" :
-                  "bg-red-100 text-red-700"
-                }`}>
-                  {viewData.risk} RISK
                 </span>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                   viewData.confidence === "HIGH" ? "bg-green-100 text-green-700" :
@@ -346,16 +340,11 @@ export default function AIMarketView({
           <div className="text-xs text-red-400">{error}</div>
         ) : viewData ? (
           <div className="space-y-3">
-            {/* State + Risk + Confidence badges */}
+            {/* State + Confidence badges */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {stateConf && (
                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${stateConf.bg} ${stateConf.color}`}>
                   {stateConf.label}
-                </span>
-              )}
-              {riskConf && (
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${riskConf.bg} ${riskConf.color}`}>
-                  {viewData.risk} RISK
                 </span>
               )}
               {confConf && (

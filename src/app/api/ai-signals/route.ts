@@ -126,7 +126,7 @@ function getConfig(
           "",
           IN_PLAY_OUTPUT_FORMAT,
           "",
-          "For edge alerts: include tradeSignal ONLY if data confidence is HIGH or MEDIUM and you see a genuine edge. Otherwise omit tradeSignal entirely.",
+          "Do NOT recommend trades, entries, exits, or timing. Describe market conditions only.",
           "",
           guardrailBlock,
           "",
@@ -269,22 +269,6 @@ function parseStructuredResponse(
         confidenceReason: stripBannedPhrases(parsed.confidenceReason ?? ""),
         edgeSize: validEdge.includes(edgeSize) ? edgeSize : "none",
       };
-
-      // Include trade signal only if present and valid
-      if (
-        parsed.tradeSignal &&
-        parsed.tradeSignal.entry &&
-        parsed.tradeSignal.reason
-      ) {
-        structured.tradeSignal = {
-          entry: stripBannedPhrases(parsed.tradeSignal.entry),
-          reason: stripBannedPhrases(parsed.tradeSignal.reason),
-          risk: stripBannedPhrases(parsed.tradeSignal.risk ?? ""),
-          invalidation: stripBannedPhrases(
-            parsed.tradeSignal.invalidation ?? "",
-          ),
-        };
-      }
 
       return structured;
     }
@@ -550,13 +534,8 @@ export async function POST(req: NextRequest) {
       ) {
         structured.edgeSize = "none";
       }
-      // Remove trade signal if data confidence is LOW
-      if (dataContract.dataConfidence === "LOW") {
-        delete structured.tradeSignal;
-      }
-
       confidence = confidenceToNumber(structured.confidence);
-      edgeSize = structured.edgeSize;
+      edgeSize = structured.edgeSize ?? "none";
 
       // Build readable analysis for backward compat
       if (signalType === "pre_match") {
@@ -573,11 +552,6 @@ export async function POST(req: NextRequest) {
           `REASON: ${structured.reason}`,
           `WATCH: ${structured.watch}`,
         ];
-        if (structured.tradeSignal) {
-          sections.push(
-            `TRADE SIGNAL: Entry: ${structured.tradeSignal.entry} | Reason: ${structured.tradeSignal.reason} | Risk: ${structured.tradeSignal.risk} | Invalidation: ${structured.tradeSignal.invalidation}`,
-          );
-        }
         analysis = sections.join("\n\n");
       }
     } else {

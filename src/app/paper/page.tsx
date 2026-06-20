@@ -1950,12 +1950,6 @@ function PaperTradingPage() {
                     {(aiSignal.structured.watch || aiSignal.structured.whatToWatch) && (
                       <p className="text-[10px] text-gray-500 leading-snug">Watch: {aiSignal.structured.watch || aiSignal.structured.whatToWatch}</p>
                     )}
-                    {aiSignal.structured.tradeSignal && (
-                      <div className="rounded border border-blue-500/30 bg-blue-500/5 px-2 py-1 mt-1">
-                        <div className="text-[10px] text-blue-400 font-semibold">{aiSignal.structured.tradeSignal.entry} — {aiSignal.structured.tradeSignal.reason}</div>
-                        <div className="text-[9px] text-gray-500 mt-0.5">Risk: {aiSignal.structured.tradeSignal.risk}</div>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line">{aiSignal.analysis}</p>

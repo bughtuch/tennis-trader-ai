@@ -213,7 +213,7 @@ function StructuredSignalDisplay({
         {structured.tradingView && (
           <div>
             <div className="text-[9px] font-bold tracking-wider uppercase text-gray-500">
-              TRADING VIEW
+              MARKET OBSERVATION
             </div>
             <p className="text-[11px] text-gray-700 leading-snug">
               {structured.tradingView}
@@ -267,31 +267,6 @@ function StructuredSignalDisplay({
           </p>
         </div>
       )}
-      {structured.tradeSignal && (
-        <div className="rounded border border-blue-200 bg-blue-50 p-2 space-y-1">
-          <div className="text-[9px] font-bold tracking-wider uppercase text-blue-600">
-            TRADE SIGNAL
-          </div>
-          <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[10px]">
-            <span className="font-semibold text-gray-600">Entry:</span>
-            <span className="text-gray-700">
-              {structured.tradeSignal.entry}
-            </span>
-            <span className="font-semibold text-gray-600">Reason:</span>
-            <span className="text-gray-700">
-              {structured.tradeSignal.reason}
-            </span>
-            <span className="font-semibold text-gray-600">Risk:</span>
-            <span className="text-gray-700">
-              {structured.tradeSignal.risk}
-            </span>
-            <span className="font-semibold text-gray-600">Invalidation:</span>
-            <span className="text-gray-700">
-              {structured.tradeSignal.invalidation}
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -326,7 +301,7 @@ export default function ClassicAIPanel({
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-200 bg-gray-50">
         <h2 className="text-xs font-bold tracking-wider uppercase text-gray-600">
-          AI ASSISTANT
+          AI ANALYSIS
         </h2>
       </div>
 
@@ -345,7 +320,7 @@ export default function ClassicAIPanel({
             className="w-full flex items-center justify-between mb-1"
           >
             <span className="text-[10px] font-semibold tracking-wider uppercase text-gray-500">
-              AI SIGNAL
+              AI ANALYSIS
             </span>
             <span className="text-[10px] text-gray-400">
               {signalOpen ? "▾" : "▸"}
@@ -359,7 +334,7 @@ export default function ClassicAIPanel({
                 disabled={aiSignalLoading}
                 className="w-full py-1.5 px-3 rounded-lg text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 disabled:opacity-50 transition-colors"
               >
-                {aiSignalLoading ? "Analysing..." : "Get AI Signal"}
+                {aiSignalLoading ? "Analysing..." : "Run Analysis"}
               </button>
 
               {aiSignal && (
@@ -371,22 +346,9 @@ export default function ClassicAIPanel({
 
                   {/* Signal content */}
                   <div className="rounded-lg border border-gray-200 bg-gray-50 p-2 space-y-1.5">
-                    {/* Confidence & Edge badges */}
+                    {/* Confidence badge */}
                     <div className="flex items-center justify-between">
                       <ConfidenceBadge signal={aiSignal} />
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                          aiSignal.edgeSize === "strong"
-                            ? "bg-green-100 text-green-700"
-                            : aiSignal.edgeSize === "moderate"
-                              ? "bg-blue-100 text-blue-700"
-                              : aiSignal.edgeSize === "mild"
-                                ? "bg-amber-100 text-amber-700"
-                                : "bg-gray-100 text-gray-600"
-                        }`}
-                      >
-                        {aiSignal.edgeSize} edge
-                      </span>
                     </div>
 
                     {/* Structured or fallback analysis */}
