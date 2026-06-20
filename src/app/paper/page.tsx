@@ -17,6 +17,7 @@ import GameMatrix from "@/components/GameMatrix";
 import AutomationRules from "@/components/AutomationRules";
 import LiveScoreBar from "@/components/LiveScoreBar";
 import AIMarketView from "@/components/AIMarketView";
+import TradingVaultWidget from "@/components/vault/TradingVaultWidget";
 import ScaleOutButtons from "@/components/ScaleOutButtons";
 import { getOpenPaperTrades, getClosedPaperTrades, closePaperTrade as closePaperTradeLocal, getPaperStats } from "@/lib/paperTrades";
 import { inferSurface, buildMatchContext, formatMatchContextForPrompt, type StructuredAISignal } from "@/lib/tennisContext";
@@ -1878,6 +1879,11 @@ function PaperTradingPage() {
         isInPlay={!!marketBook?.inplay}
         isSuspended={marketBook?.status === "SUSPENDED"}
         liveScore={liveScore}
+      />
+
+      <TradingVaultWidget
+        player1Name={activeDisplayPlayers.player1.name}
+        player2Name={activeDisplayPlayers.player2.name}
       />
 
       {/* Pre-Match Briefing */}

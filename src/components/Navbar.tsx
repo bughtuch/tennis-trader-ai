@@ -20,6 +20,7 @@ const commonLinks = {
   markets: { href: "/markets", label: "Markets" },
   trading: { href: "/classic-trading", label: "Trading" },
   paper: { href: "/paper", label: "Paper Trade" },
+  vault: { href: "/vault", label: "Vault" },
   dna: { href: "/trading-dna", label: "DNA" },
   settings: { href: "/settings", label: "Settings" },
 };
@@ -121,8 +122,8 @@ export default function Navbar() {
 
   const isSubscriber = subscriptionLoaded && subscriptionStatus === "active";
   const navLinks = isSubscriber
-    ? [commonLinks.home, commonLinks.markets, commonLinks.trading, commonLinks.paper, commonLinks.dna, commonLinks.settings]
-    : [commonLinks.home, commonLinks.markets, commonLinks.paper, commonLinks.dna, commonLinks.settings];
+    ? [commonLinks.home, commonLinks.markets, commonLinks.trading, commonLinks.paper, commonLinks.vault, commonLinks.dna, commonLinks.settings]
+    : [commonLinks.home, commonLinks.markets, commonLinks.paper, commonLinks.vault, commonLinks.dna, commonLinks.settings];
 
   async function handleLogout() {
     const supabase = createClient();

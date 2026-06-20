@@ -21,6 +21,7 @@ import GameMatrix from "@/components/GameMatrix";
 import AutomationRules from "@/components/AutomationRules";
 import LiveScoreBar from "@/components/LiveScoreBar";
 import AIMarketView from "@/components/AIMarketView";
+import TradingVaultWidget from "@/components/vault/TradingVaultWidget";
 import { calculateOptimisedGreenUp } from "@/lib/tradingMaths";
 import { validateAndExecute, type ActionName, type TradeActionParams } from "@/lib/tradeActions";
 import { inferSurface, buildMatchContext, formatMatchContextForPrompt, type StructuredAISignal } from "@/lib/tennisContext";
@@ -2248,6 +2249,11 @@ function TradingPage() {
         isInPlay={!!marketBook?.inplay}
         isSuspended={marketBook?.status === "SUSPENDED"}
         liveScore={liveScore}
+      />
+
+      <TradingVaultWidget
+        player1Name={activeDisplayPlayers.player1.name}
+        player2Name={activeDisplayPlayers.player2.name}
       />
 
       {/* Pre-Match Briefing */}

@@ -14,6 +14,7 @@ import ClassicPositionPanel from "@/components/classic/ClassicPositionPanel";
 import ClassicTrustPanel from "@/components/classic/ClassicTrustPanel";
 import ClassicAIPanel from "@/components/classic/ClassicAIPanel";
 import AIMarketView from "@/components/AIMarketView";
+import TradingVaultWidget from "@/components/vault/TradingVaultWidget";
 import ClassicTradeTools from "@/components/classic/ClassicTradeTools";
 import { calculateLiabilityReduction } from "@/components/classic/ClassicLiabilityTools";
 import { calculateMarketHedge } from "@/components/classic/ClassicMarketHedge";
@@ -1237,6 +1238,11 @@ function ClassicTradingPage() {
         isInPlay={!!marketBook?.inplay}
         isSuspended={marketBook?.status === "SUSPENDED"}
         liveScore={liveScore}
+        variant="light"
+      />
+      <TradingVaultWidget
+        player1Name={displayPlayers.player1.name}
+        player2Name={displayPlayers.player2.name}
         variant="light"
       />
       <ClassicAIPanel
