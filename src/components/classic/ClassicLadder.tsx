@@ -44,6 +44,7 @@ interface ClassicLadderProps {
   ticksEachSide?: number;
   stopLossPrice?: number | null;
   autoCenter?: boolean;
+  onCancelUnmatched?: (price: number, side: "BACK" | "LAY") => void;
 }
 
 /* ─── Component ─── */
@@ -65,6 +66,7 @@ export default function ClassicLadder({
   ticksEachSide = 8,
   stopLossPrice,
   autoCenter = true,
+  onCancelUnmatched,
 }: ClassicLadderProps) {
   /* ─── Recenter state ─── */
   const [manualCenter, setManualCenter] = useState<number | null>(null);
@@ -328,7 +330,16 @@ export default function ClassicLadder({
                     {row.backSize > 0 ? `£${row.backSize}` : ""}
                   </span>
                   {hasUnmatchedBack && (
-                    <span className="absolute top-0.5 left-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 z-10" />
+                    <span className="absolute top-0 left-0 z-20 flex items-center gap-0.5 px-1 py-0.5 bg-amber-400 text-[9px] font-bold text-amber-900 rounded-br leading-none">
+                      £{unmatchedAtPrice!.backSize}
+                      {onCancelUnmatched && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onCancelUnmatched(row.price, "BACK"); }}
+                          className="ml-0.5 text-amber-700 hover:text-red-700 font-bold"
+                          title="Cancel unmatched back"
+                        >&times;</button>
+                      )}
+                    </span>
                   )}
                 </button>
 
@@ -381,7 +392,16 @@ export default function ClassicLadder({
                     {row.laySize > 0 ? `£${row.laySize}` : ""}
                   </span>
                   {hasUnmatchedLay && (
-                    <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 z-10" />
+                    <span className="absolute top-0 right-0 z-20 flex items-center gap-0.5 px-1 py-0.5 bg-amber-400 text-[9px] font-bold text-amber-900 rounded-bl leading-none">
+                      £{unmatchedAtPrice!.laySize}
+                      {onCancelUnmatched && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onCancelUnmatched(row.price, "LAY"); }}
+                          className="ml-0.5 text-amber-700 hover:text-red-700 font-bold"
+                          title="Cancel unmatched lay"
+                        >&times;</button>
+                      )}
+                    </span>
                   )}
                 </button>
               </div>

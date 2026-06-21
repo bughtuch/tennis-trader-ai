@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, type PendingOrder } from "@/lib/store";
 import { createClient } from "@/lib/supabase";
 import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
@@ -82,6 +82,41 @@ function formatVolume(v: number) {
   if (v >= 1_000_000) return `£${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `£${Math.round(v / 1_000)}K`;
   return `£${Math.round(v)}`;
+}
+
+function PendingOrderCountdown({ order, onExpire }: { order: PendingOrder; onExpire: (id: string) => void }) {
+  const [remaining, setRemaining] = useState(order.delaySeconds);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setRemaining((r) => {
+        if (r <= 1) { clearInterval(id); onExpire(order.id); return 0; }
+        return r - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [order.id, order.delaySeconds, onExpire]);
+
+  return (
+    <div className="flex items-center justify-between px-3 py-1.5 rounded bg-amber-50 border border-amber-200">
+      <div className="flex items-center gap-2">
+        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+          order.side === "BACK" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"
+        }`}>{order.side}</span>
+        <span className="text-xs text-gray-700 font-mono">
+          £{order.size} @ {order.price.toFixed(2)}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="w-16 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+          <div
+            className="h-full bg-amber-400 transition-all duration-1000"
+            style={{ width: `${(remaining / order.delaySeconds) * 100}%` }}
+          />
+        </div>
+        <span className="text-[10px] text-amber-600 font-mono font-semibold w-5 text-right">{remaining}s</span>
+      </div>
+    </div>
+  );
 }
 
 function calcPressure(runner: { ex?: { availableToBack?: { price: number; size: number }[]; availableToLay?: { price: number; size: number }[] } } | null) {
@@ -372,6 +407,8 @@ function ClassicTradingPage() {
     fetchUnmatchedOrders,
     cancelOrder,
     addPendingOrder,
+    pendingOrders,
+    removePendingOrder,
     subscriptionStatus,
     subscriptionLoaded,
     fetchSubscriptionStatus,
@@ -597,6 +634,27 @@ function ClassicTradingPage() {
     }
     return map;
   }, [unmatchedOrders, runner1, marketId]);
+
+  /* ─── Cancel unmatched at price (ladder inline cancel) ─── */
+  const handleCancelUnmatchedP1 = useCallback(async (price: number, side: "BACK" | "LAY") => {
+    if (!marketId || !runner0) return;
+    const matching = unmatchedOrders.filter(
+      (o) => o.marketId === marketId && o.selectionId === runner0.selectionId && o.price === price && o.side === side
+    );
+    for (const o of matching) {
+      await cancelOrder({ marketId, betId: o.betId });
+    }
+  }, [marketId, runner0, unmatchedOrders, cancelOrder]);
+
+  const handleCancelUnmatchedP2 = useCallback(async (price: number, side: "BACK" | "LAY") => {
+    if (!marketId || !runner1) return;
+    const matching = unmatchedOrders.filter(
+      (o) => o.marketId === marketId && o.selectionId === runner1.selectionId && o.price === price && o.side === side
+    );
+    for (const o of matching) {
+      await cancelOrder({ marketId, betId: o.betId });
+    }
+  }, [marketId, runner1, unmatchedOrders, cancelOrder]);
 
   /* ─── Position aggregation per runner ─── */
   function getAggregatedPositionForRunner(selectionId: number | undefined) {
@@ -1607,12 +1665,12 @@ function ClassicTradingPage() {
       )}
 
       {/* ─── Gap below global navbar ─── */}
-      <div className="h-12" aria-hidden="true" />
+      <div className="h-2" aria-hidden="true" />
 
       {/* ─── Header ─── */}
       <header className="border-b border-gray-200 bg-white sticky top-14 z-40 shadow-sm">
         {/* Row 1: Nav + match + status */}
-        <div className="px-3 sm:px-4 py-2 flex items-center justify-between gap-x-3 gap-y-1 flex-wrap">
+        <div className="px-3 sm:px-4 py-1 flex items-center justify-between gap-x-3 gap-y-1 flex-wrap">
           {/* Left: navigation + match info */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Link
@@ -1742,7 +1800,7 @@ function ClassicTradingPage() {
         />
 
         {/* Row 3: Stake controls */}
-        <div className="px-3 sm:px-4 py-1.5 border-t border-gray-100 flex items-center gap-2 sm:gap-3 flex-wrap">
+        <div className="px-3 sm:px-4 py-1 border-t border-gray-100 flex items-center gap-2 sm:gap-3 flex-wrap">
           <span className="text-[10px] font-semibold tracking-wider uppercase text-gray-500">STAKE</span>
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-gray-400 uppercase tracking-wider">Lay</span>
@@ -1820,6 +1878,15 @@ function ClassicTradingPage() {
             {tradingMode === "safe" ? "SAFE" : "PRO"}
           </button>
         </div>
+
+        {/* Pending order countdowns (Betfair in-play delay) */}
+        {pendingOrders.length > 0 && (
+          <div className="px-3 sm:px-4 py-1 border-t border-amber-100 bg-amber-50/50 space-y-1">
+            {pendingOrders.map((po) => (
+              <PendingOrderCountdown key={po.id} order={po} onExpire={removePendingOrder} />
+            ))}
+          </div>
+        )}
       </header>
 
       {/* ─── Desktop layout: ladders dominant ─── */}
@@ -1857,6 +1924,7 @@ function ClassicTradingPage() {
               recenterTrigger={recenterTrigger}
               ticksEachSide={desktopTicks}
               stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
+              onCancelUnmatched={handleCancelUnmatchedP1}
             />
           </div>
 
@@ -1880,6 +1948,7 @@ function ClassicTradingPage() {
               recenterTrigger={recenterTrigger}
               ticksEachSide={desktopTicks}
               stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
+              onCancelUnmatched={handleCancelUnmatchedP2}
             />
           </div>
 
@@ -1918,6 +1987,7 @@ function ClassicTradingPage() {
             recenterTrigger={recenterTrigger}
             ticksEachSide={desktopTicks}
             stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
+            onCancelUnmatched={handleCancelUnmatchedP1}
           />
           <ClassicLadder
             runner={runner1}
@@ -1937,6 +2007,7 @@ function ClassicTradingPage() {
             recenterTrigger={recenterTrigger}
             ticksEachSide={desktopTicks}
             stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
+            onCancelUnmatched={handleCancelUnmatchedP2}
           />
         </div>
         {/* AI + Positions + Trust row below ladders */}
@@ -1996,6 +2067,7 @@ function ClassicTradingPage() {
                 recenterTrigger={recenterTrigger}
                 ticksEachSide={mobileTicks}
                 stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
+                onCancelUnmatched={handleCancelUnmatchedP1}
               />
               <ClassicLadder
                 runner={runner1}
@@ -2015,6 +2087,7 @@ function ClassicTradingPage() {
                 recenterTrigger={recenterTrigger}
                 ticksEachSide={mobileTicks}
                 stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
+                onCancelUnmatched={handleCancelUnmatchedP2}
               />
               </div>
             </div>
