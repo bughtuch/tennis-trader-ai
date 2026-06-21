@@ -47,6 +47,35 @@ interface ClassicLadderProps {
   onCancelUnmatched?: (price: number, side: "BACK" | "LAY") => void;
 }
 
+/* ─── Mini Price Chart ─── */
+
+function LadderMiniChart({ history }: { history: { price: number; ts: number }[] }) {
+  if (history.length < 3) return null;
+  const prices = history.map(h => h.price);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 0.01;
+  const W = 200, H = 32;
+
+  const points = history.map((pt, i) => {
+    const x = (i / (history.length - 1)) * W;
+    const y = H - ((pt.price - min) / range) * (H - 6) - 3;
+    return `${x},${y}`;
+  }).join(" ");
+
+  const color = prices[prices.length - 1] < prices[0] ? "#22c55e"
+    : prices[prices.length - 1] > prices[0] ? "#ef4444" : "#9ca3af";
+
+  return (
+    <div className="px-2 py-0.5 border-b border-gray-100">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[32px]" preserveAspectRatio="none">
+        <polyline points={points} fill="none" stroke={color}
+          strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      </svg>
+    </div>
+  );
+}
+
 /* ─── Component ─── */
 
 export default function ClassicLadder({
@@ -77,6 +106,9 @@ export default function ClassicLadder({
   const prevLTPRef = useRef<number>(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /* ─── Price history for mini-chart ─── */
+  const priceHistoryRef = useRef<{ price: number; ts: number }[]>([]);
+
   const currentLTP = (runner as { lastTradedPrice?: number } | null)?.lastTradedPrice ?? 0;
 
   useEffect(() => {
@@ -90,6 +122,13 @@ export default function ClassicLadder({
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
       flashTimerRef.current = setTimeout(() => setFlashDir(null), 600);
       prevLTPRef.current = currentLTP;
+    }
+    // Accumulate price history for mini-chart
+    if (currentLTP > 0) {
+      const hist = priceHistoryRef.current;
+      if (hist.length === 0 || hist[hist.length - 1].price !== currentLTP) {
+        priceHistoryRef.current = [...hist.slice(-59), { price: currentLTP, ts: Date.now() }];
+      }
     }
   }, [currentLTP]);
 
@@ -271,6 +310,9 @@ export default function ClassicLadder({
           )}
         </div>
       )}
+
+      {/* Mini price chart */}
+      <LadderMiniChart history={priceHistoryRef.current} />
 
       {/* Column headers */}
       <div className="grid grid-cols-[1fr_auto_auto_1fr] text-center text-[10px] font-semibold tracking-[0.12em] uppercase border-b border-gray-200 bg-gray-50">

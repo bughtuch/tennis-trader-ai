@@ -1189,6 +1189,20 @@ function ClassicTradingPage() {
           }
           break;
         }
+        case "z":
+          if (s.isLive && s.marketId) {
+            const backs = s.unmatchedOrders.filter((o: { side: string; marketId: string }) => o.side === "BACK" && o.marketId === s.marketId);
+            for (const o of backs) s.cancelOrder({ marketId: s.marketId, betId: o.betId });
+            if (backs.length) s.setToast({ message: `Cancelling ${backs.length} back order(s)`, type: "success" });
+          }
+          break;
+        case "x":
+          if (s.isLive && s.marketId) {
+            const lays = s.unmatchedOrders.filter((o: { side: string; marketId: string }) => o.side === "LAY" && o.marketId === s.marketId);
+            for (const o of lays) s.cancelOrder({ marketId: s.marketId, betId: o.betId });
+            if (lays.length) s.setToast({ message: `Cancelling ${lays.length} lay order(s)`, type: "success" });
+          }
+          break;
         case "c":
           if (s.isLive && s.marketId && s.unmatchedOrders.length > 0) {
             s.cancelOrder({ marketId: s.marketId });
@@ -2104,7 +2118,9 @@ function ClassicTradingPage() {
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">B</kbd><span>Back</span>
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">L</kbd><span>Lay</span>
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">G</kbd><span>Green</span>
-          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">C</kbd><span>Cancel</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">Z</kbd><span>Cancel Backs</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">X</kbd><span>Cancel Lays</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">C</kbd><span>Cancel All</span>
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">R</kbd><span>Recenter</span>
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">1-5</kbd><span>Stake</span>
           <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 font-mono text-gray-600">⌘K</kbd><span>Search</span>
