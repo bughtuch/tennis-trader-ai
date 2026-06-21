@@ -109,6 +109,11 @@ export default function ClassicLadder({
   /* ─── Price history for mini-chart ─── */
   const priceHistoryRef = useRef<{ price: number; ts: number }[]>([]);
 
+  /* ─── Session Hi/Lo tracking ─── */
+  const sessionHighRef = useRef<number>(0);
+  const sessionLowRef = useRef<number>(0);
+  const prevRunnerIdRef = useRef<number | undefined>(undefined);
+
   const currentLTP = (runner as { lastTradedPrice?: number } | null)?.lastTradedPrice ?? 0;
 
   useEffect(() => {
@@ -129,6 +134,28 @@ export default function ClassicLadder({
       if (hist.length === 0 || hist[hist.length - 1].price !== currentLTP) {
         priceHistoryRef.current = [...hist.slice(-59), { price: currentLTP, ts: Date.now() }];
       }
+    }
+  }, [currentLTP]);
+
+  /* ─── Reset hi/lo + history when runner changes ─── */
+  useEffect(() => {
+    const selId = runner?.selectionId;
+    if (selId !== prevRunnerIdRef.current) {
+      prevRunnerIdRef.current = selId;
+      sessionHighRef.current = 0;
+      sessionLowRef.current = 0;
+      priceHistoryRef.current = [];
+    }
+  }, [runner?.selectionId]);
+
+  /* ─── Update session hi/lo on LTP change ─── */
+  useEffect(() => {
+    if (currentLTP <= 0) return;
+    if (sessionHighRef.current === 0 || currentLTP > sessionHighRef.current) {
+      sessionHighRef.current = currentLTP;
+    }
+    if (sessionLowRef.current === 0 || currentLTP < sessionLowRef.current) {
+      sessionLowRef.current = currentLTP;
     }
   }, [currentLTP]);
 
@@ -335,6 +362,11 @@ export default function ClassicLadder({
             const hasUnmatchedLay = (unmatchedAtPrice?.laySize ?? 0) > 0;
             const isStopLoss = stopLossPrice != null && row.price === roundToTick(stopLossPrice);
 
+            // Session Hi/Lo markers
+            const hasHiLo = sessionHighRef.current > 0 && sessionLowRef.current > 0 && sessionHighRef.current !== sessionLowRef.current;
+            const isSessionHigh = hasHiLo && row.price === roundToTick(sessionHighRef.current);
+            const isSessionLow = hasHiLo && row.price === roundToTick(sessionLowRef.current);
+
             // Flash: only on LTP row
             const isFlashRow = row.isLastTraded && flashDir != null;
             const flashBg = isFlashRow
@@ -387,12 +419,20 @@ export default function ClassicLadder({
 
                 {/* PRICE + VOLUME cell */}
                 <div
-                  className={`h-full flex flex-col items-center justify-center font-mono [font-variant-numeric:tabular-nums] w-[60px] sm:w-[68px] ${
+                  className={`h-full relative flex flex-col items-center justify-center font-mono [font-variant-numeric:tabular-nums] w-[60px] sm:w-[68px] ${
                     row.isLastTraded
                       ? "bg-green-50 text-green-700 ring-1 ring-inset ring-green-200"
                       : "bg-gray-50 text-gray-700"
                   }`}
                 >
+                  {isSessionHigh && (
+                    <span className="absolute left-0.5 top-0 text-[8px] font-bold text-red-500 leading-none"
+                      title={`Session High: ${sessionHighRef.current.toFixed(2)}`}>H</span>
+                  )}
+                  {isSessionLow && (
+                    <span className="absolute left-0.5 bottom-0 text-[8px] font-bold text-green-600 leading-none"
+                      title={`Session Low: ${sessionLowRef.current.toFixed(2)}`}>L</span>
+                  )}
                   <span className="text-xs font-bold leading-tight">{row.price.toFixed(2)}</span>
                   {row.tradedVolume > 0 && (
                     <span className="text-[9px] text-gray-400 font-mono leading-none">
