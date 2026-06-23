@@ -81,10 +81,14 @@ function mapBetfairToMarket(
   const runners = cat.runners;
   if (!runners || runners.length < 2) return null;
 
+  // Filter out closed/settled markets entirely
+  if (book?.status === "CLOSED") return null;
+
   const compName = cat.competition?.name ?? "";
   const eventName = cat.event?.name ?? "";
   const startTimeStr = cat.marketStartTime ?? cat.event?.openDate;
-  const isLive = startTimeStr ? new Date(startTimeStr) <= new Date() : false;
+  // Use Betfair's actual inplay flag from market book, fall back to time comparison
+  const isLive = book?.inplay === true;
   const matched = book?.totalMatched ?? cat.totalMatched ?? 0;
 
   // Get best back odds from market book
@@ -370,8 +374,8 @@ export default function MarketsPage() {
         </div>
       )}
 
-      {/* Resume Last Market */}
-      {lastMarket && (
+      {/* Resume Last Market — only show if market is still in the loaded list (not closed/stale) */}
+      {lastMarket && !loading && markets.some((m) => m.id === lastMarket.marketId) && (
         <div className="border-b border-gray-800/50 bg-gray-900/20">
           <div className="max-w-2xl md:max-w-4xl min-[1920px]:max-w-6xl mx-auto px-4 py-2">
             <button

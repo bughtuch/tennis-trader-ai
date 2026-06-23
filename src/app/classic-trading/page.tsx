@@ -471,6 +471,15 @@ function ClassicTradingPage() {
 
   const isLive = isConnected && !!marketId && !!marketBook;
 
+  /* ─── Detect stale/closed market and clear resume data ─── */
+  const [marketClosed, setMarketClosed] = useState(false);
+  useEffect(() => {
+    if (marketBook?.status === "CLOSED") {
+      setMarketClosed(true);
+      try { localStorage.removeItem("lastMarket"); } catch { /* SSR guard */ }
+    }
+  }, [marketBook?.status]);
+
   /* ─── Matched positions vs unmatched orders ─── */
   const { matchedPositions, unmatchedDisplayOrders, openPositions } = useMemo(() => {
     const nameMap = new Map<number, string>();
@@ -1081,22 +1090,34 @@ function ClassicTradingPage() {
       // Use cached markets if fetched within last 30s
       let markets: any[] = searchCacheRef.current?.markets ?? []; // eslint-disable-line @typescript-eslint/no-explicit-any
       if (markets.length === 0 || Date.now() - (searchCacheRef.current?.fetchedAt ?? 0) > 30_000) {
-        const token = typeof window !== "undefined" ? localStorage.getItem("betfair_token") : null;
         const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (token) headers["x-betfair-token"] = token;
-        const res = await fetch("/api/betfair/scanner", {
+        // Use markets endpoint (includes both live + upcoming) instead of scanner (in-play only)
+        const res = await fetch("/api/betfair/markets", {
           method: "POST",
           headers,
-          body: JSON.stringify({ previousSnapshot: {} }),
+          body: JSON.stringify({ action: "listMarkets" }),
         });
         const data = await res.json();
-        markets = data.markets ?? [];
+        // Map catalogue entries to search-friendly format
+        const catalogues: any[] = data.markets ?? []; // eslint-disable-line @typescript-eslint/no-explicit-any
+        markets = catalogues
+          .filter((cat: any) => cat.runners?.length >= 2) // eslint-disable-line @typescript-eslint/no-explicit-any
+          .map((cat: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+            marketId: cat.marketId,
+            eventId: cat.event?.id ?? "",
+            players: (cat.runners ?? []).map((r: any) => r.runnerName).join(" vs "), // eslint-disable-line @typescript-eslint/no-explicit-any
+            event: cat.event?.name ?? "",
+            competition: cat.competition?.name ?? "",
+            runner1: cat.runners?.[0]?.runnerName ?? "",
+            runner2: cat.runners?.[1]?.runnerName ?? "",
+            inPlay: cat.marketStartTime ? new Date(cat.marketStartTime) <= new Date() : false,
+          }));
         searchCacheRef.current = { markets, fetchedAt: Date.now() };
       }
-      // Filter by player name
+      // Filter by player name, event, or competition (e.g. "Challenger")
       const q = query.toLowerCase();
-      const filtered = markets.filter((m: { players: string; event: string }) =>
-        m.players.toLowerCase().includes(q) || m.event.toLowerCase().includes(q)
+      const filtered = markets.filter((m: { players: string; event: string; competition?: string }) =>
+        m.players.toLowerCase().includes(q) || m.event.toLowerCase().includes(q) || (m.competition ?? "").toLowerCase().includes(q)
       );
       setSearchResults(filtered);
     } catch { setSearchResults([]); }
@@ -1243,6 +1264,21 @@ function ClassicTradingPage() {
   const currentLTP = (activeRunnerForTools as { lastTradedPrice?: number } | null)?.lastTradedPrice ?? 0;
 
   /* ─── No market selected ─── */
+  if (marketClosed) {
+    return (
+      <main className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-8">
+        <h1 className="text-xl font-bold text-gray-900 mb-2">Classic Trader</h1>
+        <p className="text-sm text-gray-600 mb-4">Market has closed. Select a new market.</p>
+        <Link
+          href="/markets"
+          className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+        >
+          Select a Match
+        </Link>
+      </main>
+    );
+  }
+
   if (noMarket) {
     return (
       <main className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-8">

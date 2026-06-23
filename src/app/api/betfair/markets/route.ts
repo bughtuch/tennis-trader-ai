@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
             eventTypeIds: ["2"],
             marketTypeCodes: ["MATCH_ODDS"],
           },
-          maxResults: 50,
+          maxResults: 200,
           marketProjection: [
             "EVENT",
             "COMPETITION",
