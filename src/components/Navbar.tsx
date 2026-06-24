@@ -78,27 +78,8 @@ export default function Navbar() {
     }
   }, []);
 
-  // Betfair connection status from localStorage
-  const [betfairLive, setBetfairLive] = useState(false);
-
-  useEffect(() => {
-    function checkToken() {
-      try {
-        const token = localStorage.getItem("betfair_token");
-        if (!token) { setBetfairLive(false); return; }
-        const connectedAt = localStorage.getItem("betfair_connected_at");
-        if (connectedAt) {
-          const expiresAt = new Date(connectedAt).getTime() + 8 * 60 * 60 * 1000;
-          if (Date.now() > expiresAt) { setBetfairLive(false); return; }
-        }
-        setBetfairLive(true);
-      } catch { setBetfairLive(false); }
-    }
-    checkToken();
-    const id = setInterval(checkToken, 10_000);
-    window.addEventListener("storage", checkToken);
-    return () => { clearInterval(id); window.removeEventListener("storage", checkToken); };
-  }, []);
+  // Betfair connection status — use Zustand store as single source of truth
+  // (isConnected is set by restoreSession from Supabase and updated by keep-alive)
 
   // Scanner alert badge count
   const [scannerAlertCount, setScannerAlertCount] = useState(0);
@@ -202,7 +183,7 @@ export default function Navbar() {
           {/* Right Side */}
           <div className="hidden lg:flex items-center gap-3">
             <div className="flex items-center gap-2 text-xs">
-              {betfairLive ? (
+              {isConnected ? (
                 <>
                   <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                   <span className="text-green-400">Live</span>

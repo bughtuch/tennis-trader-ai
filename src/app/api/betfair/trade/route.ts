@@ -288,7 +288,7 @@ export async function POST(req: NextRequest) {
 
     if (action === "listCurrentOrders") {
       const orderParams: Record<string, unknown> = {
-        orderProjection: "EXECUTABLE",
+        orderProjection: "ALL",
       };
       if (marketId) orderParams.marketIds = [marketId];
       if (marketIds) orderParams.marketIds = marketIds;

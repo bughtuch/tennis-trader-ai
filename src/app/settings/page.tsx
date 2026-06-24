@@ -223,6 +223,8 @@ function SettingsPage() {
       setSubscriptionStatus(data.subscription_status ?? "inactive");
       setStreakProtection(data.streak_protection_enabled ?? true);
       setStreakThresholdVal(String(data.streak_threshold ?? 3));
+      setSessionTimeLimit(String(data.session_time_limit ?? "4hr"));
+      setWarningPercent(data.warning_percent ?? 75);
       setProfileLoaded(true);
 
       // Betfair connection state from Supabase (source of truth)
@@ -407,6 +409,8 @@ function SettingsPage() {
       .update({
         daily_loss_limit: Number(dailyLossLimit),
         max_single_trade: Number(maxSingleTrade),
+        session_time_limit: sessionTimeLimit,
+        warning_percent: Number(warningPercent),
       })
       .eq("id", user.id);
 

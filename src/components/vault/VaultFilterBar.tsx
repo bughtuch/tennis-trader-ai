@@ -43,7 +43,7 @@ export default function VaultFilterBar({
       <select
         value={activeFilter}
         onChange={e => onActiveChange(e.target.value)}
-        className="px-2 py-1 rounded text-[11px] bg-gray-800/50 text-gray-400 border border-gray-700/30 focus:outline-none focus:border-blue-500/50"
+        className="px-2 py-1 rounded text-[11px] bg-gray-800/50 text-gray-200 border border-gray-700/30 focus:outline-none focus:border-blue-500/50"
       >
         <option value="all">All Notes</option>
         <option value="active">Active</option>
@@ -54,7 +54,7 @@ export default function VaultFilterBar({
       <select
         value={playerFilter}
         onChange={e => onPlayerChange(e.target.value)}
-        className="px-2 py-1 rounded text-[11px] bg-gray-800/50 text-gray-400 border border-gray-700/30 focus:outline-none focus:border-blue-500/50 max-w-[140px]"
+        className="px-2 py-1 rounded text-[11px] bg-gray-800/50 text-gray-200 border border-gray-700/30 focus:outline-none focus:border-blue-500/50 max-w-[140px]"
       >
         <option value="">All Players</option>
         {players.map(p => <option key={p} value={p}>{p}</option>)}
@@ -64,7 +64,7 @@ export default function VaultFilterBar({
       <select
         value={tagFilter}
         onChange={e => onTagChange(e.target.value)}
-        className="px-2 py-1 rounded text-[11px] bg-gray-800/50 text-gray-400 border border-gray-700/30 focus:outline-none focus:border-blue-500/50"
+        className="px-2 py-1 rounded text-[11px] bg-gray-800/50 text-gray-200 border border-gray-700/30 focus:outline-none focus:border-blue-500/50"
       >
         <option value="">All Tags</option>
         {allTags.map(t => <option key={t} value={t}>{t}</option>)}
@@ -74,7 +74,7 @@ export default function VaultFilterBar({
       <select
         value={priorityFilter}
         onChange={e => onPriorityChange(e.target.value)}
-        className="px-2 py-1 rounded text-[11px] bg-gray-800/50 text-gray-400 border border-gray-700/30 focus:outline-none focus:border-blue-500/50"
+        className="px-2 py-1 rounded text-[11px] bg-gray-800/50 text-gray-200 border border-gray-700/30 focus:outline-none focus:border-blue-500/50"
       >
         <option value="">Any Priority</option>
         <option value="high">{"\u2605\u2605\u2605"} High</option>

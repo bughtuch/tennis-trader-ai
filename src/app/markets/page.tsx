@@ -88,7 +88,8 @@ function mapBetfairToMarket(
   const eventName = cat.event?.name ?? "";
   const startTimeStr = cat.marketStartTime ?? cat.event?.openDate;
   // Use Betfair's actual inplay flag from market book, fall back to time comparison
-  const isLive = book?.inplay === true;
+  // when book is unavailable (batch fetch failure)
+  const isLive = book ? book.inplay === true : (startTimeStr ? new Date(startTimeStr) <= new Date() : false);
   const matched = book?.totalMatched ?? cat.totalMatched ?? 0;
 
   // Get best back odds from market book

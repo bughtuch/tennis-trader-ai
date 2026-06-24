@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useAppStore } from "@/lib/store";
 
 const INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
 
@@ -23,9 +24,17 @@ export default function BetfairKeepAlive() {
       lastPingRef.current = now;
 
       try {
-        await fetch("/api/betfair/keep-alive", { method: "POST" });
+        const res = await fetch("/api/betfair/keep-alive", { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+          // Keep-alive succeeded — ensure store reflects connected state
+          useAppStore.setState({ isConnected: true });
+        } else {
+          // Keep-alive failed (token revoked/expired) — mark disconnected
+          useAppStore.setState({ isConnected: false, sessionExpiry: null });
+        }
       } catch {
-        // Network error — retry next interval
+        // Network error — don't change state, retry next interval
       }
     }
 

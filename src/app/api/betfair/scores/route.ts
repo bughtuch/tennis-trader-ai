@@ -525,38 +525,63 @@ async function tryApiTennis(
 
   console.log(`[API-Tennis Fallback] API returned ${data.result.length} live events`);
 
-  // Match by player name — strict then last-name fallback
-  const p1Lower = player1.toLowerCase();
-  const p2Lower = player2.toLowerCase();
+  // Match by player name — normalize diacritics, then strict → last-name → initial-aware
+  function normalize(s: string): string {
+    return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+  const p1Norm = normalize(player1);
+  const p2Norm = normalize(player2);
+  const p1Last = p1Norm.split(" ").pop() || "";
+  const p2Last = p2Norm.split(" ").pop() || "";
 
   function playersMatchStrict(home: string, away: string): boolean {
+    const h = normalize(home);
+    const a = normalize(away);
     return (
-      (home.includes(p1Lower) && away.includes(p2Lower)) ||
-      (home.includes(p2Lower) && away.includes(p1Lower))
+      (h.includes(p1Norm) && a.includes(p2Norm)) ||
+      (h.includes(p2Norm) && a.includes(p1Norm))
     );
   }
 
   function playersMatchLastName(home: string, away: string): boolean {
-    const homeLast = home.split(" ").pop() || "";
-    const awayLast = away.split(" ").pop() || "";
-    const p1Last = p1Lower.split(" ").pop() || "";
-    const p2Last = p2Lower.split(" ").pop() || "";
-    if (p1Last.length < 3 || p2Last.length < 3) return false;
+    const hLast = normalize(home).split(" ").pop() || "";
+    const aLast = normalize(away).split(" ").pop() || "";
+    if (p1Last.length < 2 || p2Last.length < 2) return false;
     return (
-      (homeLast.includes(p1Last) && awayLast.includes(p2Last)) ||
-      (homeLast.includes(p2Last) && awayLast.includes(p1Last))
+      (hLast.includes(p1Last) && aLast.includes(p2Last)) ||
+      (hLast.includes(p2Last) && aLast.includes(p1Last))
+    );
+  }
+
+  // Handle initial-style names: "E. Rybakina" matches "Elena Rybakina"
+  function playersMatchInitial(home: string, away: string): boolean {
+    const hNorm = normalize(home);
+    const aNorm = normalize(away);
+    function initialMatch(apiName: string, betfairName: string): boolean {
+      const apiLast = apiName.split(" ").pop() || "";
+      const bfLast = betfairName.split(" ").pop() || "";
+      if (apiLast.length < 2 || bfLast.length < 2) return false;
+      if (apiLast !== bfLast) return false;
+      // First char of first name must match
+      const apiFirst = apiName.split(" ")[0] || "";
+      const bfFirst = betfairName.split(" ")[0] || "";
+      return apiFirst.length > 0 && bfFirst.length > 0 && apiFirst[0] === bfFirst[0];
+    }
+    return (
+      (initialMatch(hNorm, p1Norm) && initialMatch(aNorm, p2Norm)) ||
+      (initialMatch(hNorm, p2Norm) && initialMatch(aNorm, p1Norm))
     );
   }
 
   let matches = data.result.filter((m: any) => {
     const { home, away } = getPlayerNames(m);
-    return playersMatchStrict(home.toLowerCase(), away.toLowerCase());
+    return playersMatchStrict(home, away);
   });
 
   if (matches.length === 0) {
     matches = data.result.filter((m: any) => {
       const { home, away } = getPlayerNames(m);
-      return playersMatchLastName(home.toLowerCase(), away.toLowerCase());
+      return playersMatchLastName(home, away);
     });
     if (matches.length > 0) {
       console.log(`[API-Tennis Fallback] Last-name fallback matched ${matches.length} events`);
@@ -564,16 +589,26 @@ async function tryApiTennis(
   }
 
   if (matches.length === 0) {
-    const liveNames = data.result.slice(0, 5).map((m: any) => {
+    matches = data.result.filter((m: any) => {
+      const { home, away } = getPlayerNames(m);
+      return playersMatchInitial(home, away);
+    });
+    if (matches.length > 0) {
+      console.log(`[API-Tennis Fallback] Initial-aware fallback matched ${matches.length} events`);
+    }
+  }
+
+  if (matches.length === 0) {
+    const liveNames = data.result.slice(0, 8).map((m: any) => {
       const { home, away } = getPlayerNames(m);
       return `"${home}" vs "${away}"`;
     });
-    console.warn(`[API-Tennis Fallback] No player match. Looking for "${player1}" vs "${player2}". Live (first 5): ${liveNames.join("; ")}`);
+    console.warn(`[API-Tennis Fallback] NO MATCH. Betfair names: "${player1}" vs "${player2}". Normalized: "${p1Norm}" / "${p2Norm}". Live events (first 8): ${liveNames.join("; ")}`);
     return null;
   }
   if (matches.length > 1) {
-    console.warn(`[API-Tennis Fallback] Ambiguous match — ${matches.length} events for "${player1}" vs "${player2}"`);
-    return null;
+    console.warn(`[API-Tennis Fallback] Ambiguous — ${matches.length} events for "${player1}" vs "${player2}". Using first.`);
+    matches = [matches[0]];
   }
 
   const match = matches[0];
@@ -585,12 +620,12 @@ async function tryApiTennis(
     )
   ));
 
-  // Determine player order
+  // Determine player order (using same normalization as matching)
   const { home: homePlayer } = getPlayerNames(match);
-  const homeLower = homePlayer.toLowerCase();
+  const homeNorm = normalize(homePlayer);
   const p1IsHome =
-    homeLower.includes(p1Lower) ||
-    (p1Lower.split(" ").pop()!.length >= 3 && (homeLower.split(" ").pop() || "").includes(p1Lower.split(" ").pop()!));
+    homeNorm.includes(p1Norm) ||
+    (p1Last.length >= 2 && (homeNorm.split(" ").pop() || "").includes(p1Last));
 
   const sets = extractSetScores(match, p1IsHome);
   const gameScore = extractGameScore(match, p1IsHome);
