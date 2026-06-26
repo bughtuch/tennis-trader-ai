@@ -468,6 +468,7 @@ function ClassicTradingPage() {
     if (marketBook?.status === "CLOSED") {
       setMarketClosed(true);
       try { localStorage.removeItem("lastMarket"); } catch { /* SSR guard */ }
+      useAppStore.setState({ unmatchedOrders: [] });
     }
   }, [marketBook?.status]);
 

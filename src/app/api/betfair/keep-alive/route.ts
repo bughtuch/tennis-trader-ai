@@ -59,10 +59,11 @@ export async function POST(req: NextRequest) {
       // Non-critical — keep-alive still succeeded
     }
 
-    // If Betfair rotated the token, update the cookie
-    const response = NextResponse.json({ success: true });
-    if (data.token && data.token !== sessionToken) {
-      response.cookies.set("betfair_session", data.token, {
+    // If Betfair rotated the token, update the cookie and notify client
+    const rotatedToken = (data.token && data.token !== sessionToken) ? data.token : undefined;
+    const response = NextResponse.json({ success: true, ...(rotatedToken && { newToken: rotatedToken }) });
+    if (rotatedToken) {
+      response.cookies.set("betfair_session", rotatedToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",

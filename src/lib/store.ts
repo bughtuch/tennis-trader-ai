@@ -83,6 +83,18 @@ function getBetfairUserHeaders(): Record<string, string> {
   return headers;
 }
 
+function handleSessionExpired() {
+  try {
+    localStorage.removeItem("betfair_token");
+    localStorage.removeItem("betfair_token_type");
+    localStorage.removeItem("betfair_refresh_token");
+    localStorage.removeItem("betfair_username");
+    localStorage.removeItem("betfair_connected_at");
+    document.cookie = "betfair_session=; Max-Age=0; path=/;";
+  } catch { /* SSR guard */ }
+  useAppStore.setState({ isConnected: false, username: null, sessionExpiry: null });
+}
+
 /* ─── Store ─── */
 
 interface AppState {
@@ -274,6 +286,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (data.success) {
         set({ markets: data.markets ?? [], marketsLoading: false });
       } else {
+        if (data.code === "SESSION_EXPIRED") handleSessionExpired();
         set({ marketsError: data.error, marketsLoading: false });
       }
     } catch {
@@ -297,6 +310,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (data.success && data.marketBooks?.[0]) {
         set({ marketBook: data.marketBooks[0], marketBookLoading: false });
       } else {
+        if (data.code === "SESSION_EXPIRED") handleSessionExpired();
         set({ marketBookLoading: false });
       }
     } catch {
@@ -330,6 +344,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
         return { success: true, betId };
       }
+      if (data.code === "SESSION_EXPIRED") handleSessionExpired();
       let errorMsg = data.error ?? "Trade failed";
       // Enhance INSUFFICIENT_FUNDS with liability context
       if (errorMsg.includes("INSUFFICIENT_FUNDS") || errorMsg.includes("BET_ACTION_ERROR")) {
@@ -364,6 +379,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (data.success) {
         set({ unmatchedOrders: data.currentOrders ?? [], unmatchedOrdersLoading: false });
       } else {
+        if (data.code === "SESSION_EXPIRED") handleSessionExpired();
         set({ unmatchedOrdersLoading: false });
       }
     } catch {
@@ -384,6 +400,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         await get().fetchUnmatchedOrders(marketId);
         return true;
       }
+      if (data.code === "SESSION_EXPIRED") handleSessionExpired();
       return false;
     } catch {
       return false;

@@ -337,16 +337,19 @@ function SettingsPage() {
         setBetfairExpiry(new Date(Date.now() + 8 * 3600000).toISOString());
         setBetfairUsername("Connected via OAuth");
         // Also persist to Supabase profile
-        const supabase = createClient();
-        supabase.auth.getUser().then(({ data: { user: u } }) => {
-          if (u) {
-            supabase.from("profiles").update({
-              betfair_session_token: bt,
-              betfair_connected: true,
-              betfair_connected_at: new Date().toISOString(),
-            }).eq("id", u.id);
-          }
-        });
+        (async () => {
+          try {
+            const supabase = createClient();
+            const { data: { user: u } } = await supabase.auth.getUser();
+            if (u) {
+              await supabase.from("profiles").update({
+                betfair_session_token: bt,
+                betfair_connected: true,
+                betfair_connected_at: new Date().toISOString(),
+              }).eq("id", u.id);
+            }
+          } catch { /* non-critical — localStorage still valid */ }
+        })();
       }
       setSaveMessage("Betfair connected successfully!");
       setTimeout(() => setSaveMessage(null), 5000);

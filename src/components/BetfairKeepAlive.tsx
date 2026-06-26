@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useAppStore } from "@/lib/store";
+import { createClient } from "@/lib/supabase";
 
 const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes (was 20 — C3+H1 fix)
 
@@ -42,10 +43,26 @@ export default function BetfairKeepAlive() {
         if (data.success) {
           // Keep-alive succeeded — ensure store reflects connected state
           useAppStore.setState({ isConnected: true });
+          // Sync rotated token to localStorage so x-betfair-token header stays current
+          if (data.newToken) {
+            try { localStorage.setItem("betfair_token", data.newToken); } catch { /* SSR guard */ }
+          }
         } else {
           // Keep-alive failed (token revoked/expired) — clear all token stores
           clearBetfairTokens();
           useAppStore.setState({ isConnected: false, username: null, sessionExpiry: null });
+          // Clear Supabase profile to prevent stale reconnection
+          try {
+            const supabase = createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await supabase.from("profiles").update({
+                betfair_connected: false,
+                betfair_session_token: null,
+                betfair_connected_at: null,
+              }).eq("id", user.id);
+            }
+          } catch { /* non-critical */ }
         }
       } catch {
         // Network error — don't change state, retry next interval
