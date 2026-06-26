@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppStore, type PendingOrder } from "@/lib/store";
 import { createClient } from "@/lib/supabase";
-import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
 import { validateAndExecute, type TradeActionParams } from "@/lib/tradeActions";
 import { BETFAIR_MIN_STAKE, moveByTicks, calculateLayStakeFromLiability } from "@/lib/tradingMaths";
@@ -458,16 +457,8 @@ function ClassicTradingPage() {
     }
   }, [subscriptionLoaded, subscriptionStatus, marketId, eventId, p1Name, p2Name, p1Flag, p2Flag, tournament, router]);
 
-  /* ─── Betfair connection ─── */
-  const { isConnected: betfairHookConnected } = useBetfairToken();
-  const [isConnected, setIsConnected] = useState(false);
-
-  useEffect(() => {
-    if (betfairHookConnected) {
-      setIsConnected(true);
-      useAppStore.setState({ isConnected: true });
-    }
-  }, [betfairHookConnected]);
+  /* ─── Betfair connection (single source: Zustand store) ─── */
+  const isConnected = useAppStore((s) => s.isConnected);
 
   const isLive = isConnected && !!marketId && !!marketBook;
 
@@ -563,16 +554,17 @@ function ClassicTradingPage() {
   /* ─── Poll unmatched orders ─── */
   const unmatchedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
+    // Clear stale orders from previous market immediately
+    useAppStore.setState({ unmatchedOrders: [] });
     if (!isConnected || !marketId) return;
-    const timer = setTimeout(() => {
-      fetchUnmatchedOrders(marketId);
-      unmatchedIntervalRef.current = setInterval(() => fetchUnmatchedOrders(marketId), 3000);
-    }, 1500);
+    // Fetch immediately, then poll at 1s in-play / 3s pre-match
+    fetchUnmatchedOrders(marketId);
+    const interval = marketBook?.inplay ? 1000 : 3000;
+    unmatchedIntervalRef.current = setInterval(() => fetchUnmatchedOrders(marketId), interval);
     return () => {
-      clearTimeout(timer);
       if (unmatchedIntervalRef.current) clearInterval(unmatchedIntervalRef.current);
     };
-  }, [isConnected, marketId, fetchUnmatchedOrders]);
+  }, [isConnected, marketId, marketBook?.inplay, fetchUnmatchedOrders]);
 
   /* ─── Toast on trade success/error ─── */
   useEffect(() => {
@@ -580,6 +572,7 @@ function ClassicTradingPage() {
       setToast({ message: lastTradeSuccess, type: "success" });
       clearTradeMessages();
       fetchTrades();
+      if (marketId) fetchUnmatchedOrders(marketId);
       const t = setTimeout(() => setToast(null), 4000);
       return () => clearTimeout(t);
     }
@@ -589,7 +582,7 @@ function ClassicTradingPage() {
       const t = setTimeout(() => setToast(null), 8000);
       return () => clearTimeout(t);
     }
-  }, [lastTradeSuccess, tradeError, clearTradeMessages, fetchTrades]);
+  }, [lastTradeSuccess, tradeError, clearTradeMessages, fetchTrades, fetchUnmatchedOrders, marketId]);
 
   /* ─── Runners and player odds ─── */
   const runner0 = isLive ? marketBook.runners?.[0] ?? null : null;
@@ -728,19 +721,25 @@ function ClassicTradingPage() {
     return null;
   }, [p1Pressure, p2Pressure, p1Short, p2Short]);
 
-  /* ─── Unrealized P&L per runner ─── */
+  /* ─── Unrealized P&L per runner (outcome-based, not averaged) ─── */
   function getUnrealizedPnl(playerKey: "player1" | "player2"): number | null {
     const playerName = displayPlayers[playerKey].name;
-    const currentOdds = displayPlayers[playerKey].odds;
     const positions = openPositions.filter((p) => p.player === playerName);
-    if (positions.length === 0 || !currentOdds || currentOdds <= 0) return null;
-    let total = 0;
+    if (positions.length === 0) return null;
+    // Calculate P&L per outcome: if this runner wins vs loses
+    let ifWins = 0, ifLoses = 0;
     for (const pos of positions) {
       if (!pos.entry_price || !pos.stake) continue;
-      const greenStake = (pos.stake * pos.entry_price) / currentOdds;
-      total += pos.side === "BACK" ? (greenStake - pos.stake) : (pos.stake - greenStake);
+      if (pos.side === "BACK") {
+        ifWins += pos.stake * (pos.entry_price - 1);
+        ifLoses -= pos.stake;
+      } else {
+        ifWins -= pos.stake * (pos.entry_price - 1);
+        ifLoses += pos.stake;
+      }
     }
-    return Math.round(total * 100) / 100;
+    // Show worst-case P&L (what trader is guaranteed if they do nothing)
+    return Math.round(Math.min(ifWins, ifLoses) * 100) / 100;
   }
 
   /* ─── Outcome P&L ─── */
@@ -1145,7 +1144,7 @@ function ClassicTradingPage() {
   };
 
   useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
+    async function handleKeyDown(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
         // Only handle Escape in inputs
@@ -1167,6 +1166,7 @@ function ClassicTradingPage() {
 
       switch (e.key.toLowerCase()) {
         case "b": {
+          if (s.marketBook?.status === "SUSPENDED") break;
           const runner = s.lastClickedRunner === "player1" ? s.runner0 : s.runner1;
           const bestBack = s.lastClickedRunner === "player1" ? s.p1BackPrice : s.p2BackPrice;
           if (bestBack && s.marketId && runner && s.isConnected) {
@@ -1189,6 +1189,7 @@ function ClassicTradingPage() {
           break;
         }
         case "l": {
+          if (s.marketBook?.status === "SUSPENDED") break;
           const runner = s.lastClickedRunner === "player1" ? s.runner0 : s.runner1;
           const bestLay = s.lastClickedRunner === "player1" ? s.p1LayPrice : s.p2LayPrice;
           if (bestLay && s.marketId && runner && s.isConnected) {
@@ -1213,21 +1214,29 @@ function ClassicTradingPage() {
         case "z":
           if (s.isLive && s.marketId) {
             const backs = s.unmatchedOrders.filter((o: { side: string; marketId: string }) => o.side === "BACK" && o.marketId === s.marketId);
-            for (const o of backs) s.cancelOrder({ marketId: s.marketId, betId: o.betId });
-            if (backs.length) s.setToast({ message: `Cancelling ${backs.length} back order(s)`, type: "success" });
+            if (backs.length) {
+              const results = await Promise.all(backs.map((o: { betId: string }) => s.cancelOrder({ marketId: s.marketId!, betId: o.betId })));
+              const cancelled = results.filter(Boolean).length;
+              s.setToast({ message: cancelled > 0 ? `Cancelled ${cancelled} back order(s)` : "Cancel failed", type: cancelled > 0 ? "success" : "error" });
+            }
           }
           break;
         case "x":
           if (s.isLive && s.marketId) {
             const lays = s.unmatchedOrders.filter((o: { side: string; marketId: string }) => o.side === "LAY" && o.marketId === s.marketId);
-            for (const o of lays) s.cancelOrder({ marketId: s.marketId, betId: o.betId });
-            if (lays.length) s.setToast({ message: `Cancelling ${lays.length} lay order(s)`, type: "success" });
+            if (lays.length) {
+              const results = await Promise.all(lays.map((o: { betId: string }) => s.cancelOrder({ marketId: s.marketId!, betId: o.betId })));
+              const cancelled = results.filter(Boolean).length;
+              s.setToast({ message: cancelled > 0 ? `Cancelled ${cancelled} lay order(s)` : "Cancel failed", type: cancelled > 0 ? "success" : "error" });
+            }
           }
           break;
         case "c":
           if (s.isLive && s.marketId && s.unmatchedOrders.length > 0) {
-            s.cancelOrder({ marketId: s.marketId });
-            s.setToast({ message: "Cancelling all unmatched orders...", type: "success" });
+            const allOrders = s.unmatchedOrders.filter((o: { marketId: string }) => o.marketId === s.marketId);
+            const results = await Promise.all(allOrders.map((o: { betId: string }) => s.cancelOrder({ marketId: s.marketId!, betId: o.betId })));
+            const cancelled = results.filter(Boolean).length;
+            s.setToast({ message: cancelled > 0 ? `Cancelled ${cancelled} order(s)` : "Cancel failed", type: cancelled > 0 ? "success" : "error" });
           }
           break;
         case "g": {
@@ -1809,11 +1818,16 @@ function ClassicTradingPage() {
               <span className="text-gray-400 text-[10px]">Connecting</span>
             )}
             {/* Stream indicator */}
-            <div className={`w-2 h-2 rounded-full shrink-0 ${
-              streamStatus === "connected" ? "bg-green-500" :
-              streamStatus === "connecting" ? "bg-amber-400 animate-pulse" :
-              "bg-gray-400"
-            }`} />
+            <div className="flex items-center gap-1">
+              <div className={`w-2 h-2 rounded-full shrink-0 ${
+                streamStatus === "connected" ? "bg-green-500" :
+                streamStatus === "connecting" ? "bg-amber-400 animate-pulse" :
+                "bg-gray-400"
+              }`} />
+              {isConnected && marketId && streamStatus !== "connected" && streamStatus !== "connecting" && (
+                <span className="text-[9px] text-amber-400 font-mono">POLLING</span>
+              )}
+            </div>
             {/* Session P&L */}
             <span className={`font-mono font-semibold text-[11px] ${sessionPnl >= 0 ? "text-green-600" : "text-red-600"}`}>
               {sessionPnl >= 0 ? "+" : ""}£{sessionPnl.toFixed(2)}
@@ -1975,6 +1989,7 @@ function ClassicTradingPage() {
               ticksEachSide={desktopTicks}
               stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
               onCancelUnmatched={handleCancelUnmatchedP1}
+              stakeBelowMin={stakeBelowMin}
             />
           </div>
 
@@ -1999,6 +2014,7 @@ function ClassicTradingPage() {
               ticksEachSide={desktopTicks}
               stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
               onCancelUnmatched={handleCancelUnmatchedP2}
+              stakeBelowMin={stakeBelowMin}
             />
           </div>
 
@@ -2036,6 +2052,7 @@ function ClassicTradingPage() {
             pressure={p1Pressure}
             recenterTrigger={recenterTrigger}
             ticksEachSide={desktopTicks}
+            stakeBelowMin={stakeBelowMin}
             stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
             onCancelUnmatched={handleCancelUnmatchedP1}
           />
@@ -2056,6 +2073,7 @@ function ClassicTradingPage() {
             pressure={p2Pressure}
             recenterTrigger={recenterTrigger}
             ticksEachSide={desktopTicks}
+            stakeBelowMin={stakeBelowMin}
             stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
             onCancelUnmatched={handleCancelUnmatchedP2}
           />
@@ -2116,6 +2134,7 @@ function ClassicTradingPage() {
                 pressure={p1Pressure}
                 recenterTrigger={recenterTrigger}
                 ticksEachSide={mobileTicks}
+                stakeBelowMin={stakeBelowMin}
                 stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
                 onCancelUnmatched={handleCancelUnmatchedP1}
               />
@@ -2136,6 +2155,7 @@ function ClassicTradingPage() {
                 pressure={p2Pressure}
                 recenterTrigger={recenterTrigger}
                 ticksEachSide={mobileTicks}
+                stakeBelowMin={stakeBelowMin}
                 stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
                 onCancelUnmatched={handleCancelUnmatchedP2}
               />

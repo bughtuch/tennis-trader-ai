@@ -360,9 +360,26 @@ function SettingsPage() {
   }, [searchParams, restoreSession, loadProfile, setAuthError]);
 
   /* Save settings to Supabase */
+  function validateNumeric(label: string, value: string, min = 0): number | null {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < min) {
+      setSaveMessage(`Invalid ${label}: must be a number >= ${min}`);
+      setSaving(false);
+      return null;
+    }
+    return n;
+  }
+
   async function handleSaveSettings() {
     setSaving(true);
     setSaveMessage(null);
+
+    const stake = validateNumeric("default stake", defaultStake, 0);
+    const exposure = validateNumeric("max exposure", maxExposure, 0);
+    const sl = validateNumeric("stop loss", stopLoss, 0);
+    const greenUp = validateNumeric("auto green-up", autoGreenUp, 0);
+    const threshold = validateNumeric("streak threshold", streakThreshold, 1);
+    if (stake === null || exposure === null || sl === null || greenUp === null || threshold === null) return;
 
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -375,14 +392,14 @@ function SettingsPage() {
     const { error } = await supabase
       .from("profiles")
       .update({
-        default_stake: Number(defaultStake),
-        max_exposure: Number(maxExposure),
-        stop_loss: Number(stopLoss),
-        auto_green_up_target: Number(autoGreenUp),
+        default_stake: stake,
+        max_exposure: exposure,
+        stop_loss: sl,
+        auto_green_up_target: greenUp,
         ai_guardian_enabled: aiGuardian,
         ai_signals_enabled: aiSignals,
         streak_protection_enabled: streakProtection,
-        streak_threshold: Number(streakThreshold),
+        streak_threshold: threshold,
       })
       .eq("id", user.id);
 
@@ -396,6 +413,11 @@ function SettingsPage() {
     setSaving(true);
     setSaveMessage(null);
 
+    const dailyLimit = validateNumeric("daily loss limit", dailyLossLimit, 0);
+    const maxTrade = validateNumeric("max single trade", maxSingleTrade, 0);
+    const warnPct = validateNumeric("warning percent", String(warningPercent), 0);
+    if (dailyLimit === null || maxTrade === null || warnPct === null) return;
+
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -407,10 +429,10 @@ function SettingsPage() {
     const { error } = await supabase
       .from("profiles")
       .update({
-        daily_loss_limit: Number(dailyLossLimit),
-        max_single_trade: Number(maxSingleTrade),
+        daily_loss_limit: dailyLimit,
+        max_single_trade: maxTrade,
         session_time_limit: sessionTimeLimit,
-        warning_percent: Number(warningPercent),
+        warning_percent: warnPct,
       })
       .eq("id", user.id);
 
@@ -642,7 +664,7 @@ function SettingsPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">API status</span>
-                  <span className="text-green-400">Healthy</span>
+                  <span className={isExpired ? "text-amber-400" : "text-green-400"}>{isExpired ? "Session expired" : "Connected"}</span>
                 </div>
               </div>
               <button

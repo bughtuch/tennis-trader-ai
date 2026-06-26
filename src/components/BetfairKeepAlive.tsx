@@ -3,7 +3,20 @@
 import { useEffect, useRef } from "react";
 import { useAppStore } from "@/lib/store";
 
-const INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
+const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes (was 20 — C3+H1 fix)
+
+function clearBetfairTokens() {
+  try {
+    localStorage.removeItem("betfair_token");
+    localStorage.removeItem("betfair_token_type");
+    localStorage.removeItem("betfair_refresh_token");
+    localStorage.removeItem("betfair_username");
+    localStorage.removeItem("betfair_connected_at");
+  } catch { /* SSR guard */ }
+  try {
+    document.cookie = "betfair_session=; Max-Age=0; path=/;";
+  } catch { /* SSR guard */ }
+}
 
 export default function BetfairKeepAlive() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -18,9 +31,9 @@ export default function BetfairKeepAlive() {
         return;
       }
 
-      // Prevent pings closer than 15 minutes apart
+      // Prevent pings closer than 4 minutes apart
       const now = Date.now();
-      if (now - lastPingRef.current < 15 * 60 * 1000) return;
+      if (now - lastPingRef.current < 4 * 60 * 1000) return;
       lastPingRef.current = now;
 
       try {
@@ -30,8 +43,9 @@ export default function BetfairKeepAlive() {
           // Keep-alive succeeded — ensure store reflects connected state
           useAppStore.setState({ isConnected: true });
         } else {
-          // Keep-alive failed (token revoked/expired) — mark disconnected
-          useAppStore.setState({ isConnected: false, sessionExpiry: null });
+          // Keep-alive failed (token revoked/expired) — clear all token stores
+          clearBetfairTokens();
+          useAppStore.setState({ isConnected: false, username: null, sessionExpiry: null });
         }
       } catch {
         // Network error — don't change state, retry next interval
@@ -41,7 +55,7 @@ export default function BetfairKeepAlive() {
     // Initial ping after 5 seconds (don't block page load, give time for token to be set)
     const initialTimeout = setTimeout(ping, 5000);
 
-    // Then every 20 minutes
+    // Then every 5 minutes
     timerRef.current = setInterval(ping, INTERVAL_MS);
 
     return () => {

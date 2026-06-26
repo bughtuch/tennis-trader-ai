@@ -63,8 +63,14 @@ export async function POST(req: NextRequest) {
       priority?: string;
     };
 
-    if (!player_name?.trim() || !content?.trim()) {
-      return NextResponse.json({ success: false, error: "player_name and content are required" }, { status: 400 });
+    if (typeof player_name !== "string" || !player_name.trim()) {
+      return NextResponse.json({ success: false, error: "player_name is required" }, { status: 400 });
+    }
+    if (typeof content !== "string" || !content.trim()) {
+      return NextResponse.json({ success: false, error: "content is required" }, { status: 400 });
+    }
+    if (tags !== undefined && (!Array.isArray(tags) || tags.some((t: unknown) => typeof t !== "string"))) {
+      return NextResponse.json({ success: false, error: "tags must be an array of strings" }, { status: 400 });
     }
 
     const validPriority = ["low", "medium", "high"];

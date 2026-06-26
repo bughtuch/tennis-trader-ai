@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useAppStore } from "@/lib/store";
 import MatchSelectionGuide from "@/components/MatchSelectionGuide";
 import SubscribeGate from "@/components/SubscribeGate";
@@ -144,7 +143,7 @@ interface LastMarket {
 
 export default function MarketsPage() {
   const router = useRouter();
-  const { isConnected: betfairConnected, token: betfairToken } = useBetfairToken();
+  const betfairConnected = useAppStore((s) => s.isConnected);
   const { subscriptionStatus, subscriptionLoaded, fetchSubscriptionStatus } = useAppStore();
   const tradePath = subscriptionLoaded && subscriptionStatus === "active" ? "/classic-trading" : "/paper";
   const [upgradeBannerDismissed, setUpgradeBannerDismissed] = useState(false);

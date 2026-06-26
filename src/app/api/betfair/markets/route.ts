@@ -60,6 +60,12 @@ export async function POST(req: NextRequest) {
       const responseText = await res.text();
 
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          return NextResponse.json(
+            { success: false, error: "Betfair session expired. Please reconnect in Settings.", code: "SESSION_EXPIRED" },
+            { status: 401 }
+          );
+        }
         return NextResponse.json(
           { success: false, error: `Betfair API error: HTTP ${res.status}` },
           { status: res.status }
@@ -118,6 +124,12 @@ export async function POST(req: NextRequest) {
       const responseText = await res.text();
 
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          return NextResponse.json(
+            { success: false, error: "Betfair session expired. Please reconnect in Settings.", code: "SESSION_EXPIRED" },
+            { status: 401 }
+          );
+        }
         return NextResponse.json(
           { success: false, error: `Betfair API error: HTTP ${res.status}` },
           { status: res.status }

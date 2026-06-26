@@ -25,6 +25,7 @@ export default function VaultPage() {
   const [tagFilter, setTagFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [recentOnly, setRecentOnly] = useState(false);
+  const [vaultError, setVaultError] = useState<string | null>(null);
 
   // Auth check
   useEffect(() => {
@@ -75,39 +76,64 @@ export default function VaultPage() {
 
   // Handlers
   async function handleSaveNote(note: { player_name: string; content: string; tags: string[]; form_status: string | null; priority: string }) {
-    const res = await fetch("/api/vault/notes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(note),
-    });
-    const data = await res.json();
-    if (data.success) {
-      fetchNotes();
-      fetchPlayers();
+    setVaultError(null);
+    try {
+      const res = await fetch("/api/vault/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(note),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchNotes();
+        fetchPlayers();
+      } else {
+        setVaultError(data.error ?? "Failed to save note");
+      }
+    } catch {
+      setVaultError("Network error — note not saved");
     }
   }
 
   async function handleToggleActive(id: string, active: boolean) {
-    await fetch(`/api/vault/notes/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: active }),
-    });
-    fetchNotes();
+    setVaultError(null);
+    try {
+      const res = await fetch(`/api/vault/notes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: active }),
+      });
+      if (!res.ok) setVaultError("Failed to update note status");
+      fetchNotes();
+    } catch {
+      setVaultError("Network error — update failed");
+    }
   }
 
   async function handleDelete(id: string) {
-    await fetch(`/api/vault/notes/${id}`, { method: "DELETE" });
-    fetchNotes();
+    setVaultError(null);
+    try {
+      const res = await fetch(`/api/vault/notes/${id}`, { method: "DELETE" });
+      if (!res.ok) setVaultError("Failed to delete note");
+      fetchNotes();
+    } catch {
+      setVaultError("Network error — delete failed");
+    }
   }
 
   async function handleUpdatePriority(id: string, priority: string) {
-    await fetch(`/api/vault/notes/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ priority }),
-    });
-    fetchNotes();
+    setVaultError(null);
+    try {
+      const res = await fetch(`/api/vault/notes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority }),
+      });
+      if (!res.ok) setVaultError("Failed to update priority");
+      fetchNotes();
+    } catch {
+      setVaultError("Network error — update failed");
+    }
   }
 
   async function handleCreateCustomTag(tag: string) {
@@ -191,6 +217,14 @@ export default function VaultPage() {
             className="w-full px-3 py-2 text-sm bg-gray-800/50 border border-gray-700/50 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
           />
         </div>
+
+        {/* Error banner */}
+        {vaultError && (
+          <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center justify-between">
+            <span>{vaultError}</span>
+            <button onClick={() => setVaultError(null)} className="text-red-400 hover:text-red-300 ml-2 text-xs">Dismiss</button>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="mb-4">

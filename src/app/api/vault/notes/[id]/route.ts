@@ -10,10 +10,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!user) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
 
     const body = await req.json();
+    if (body.tags !== undefined && (!Array.isArray(body.tags) || body.tags.some((t: unknown) => typeof t !== "string"))) {
+      return NextResponse.json({ success: false, error: "tags must be an array of strings" }, { status: 400 });
+    }
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-    if (body.content !== undefined) updates.content = body.content.trim();
-    if (body.is_active !== undefined) updates.is_active = body.is_active;
+    if (body.content !== undefined && typeof body.content === "string") updates.content = body.content.trim();
+    if (body.is_active !== undefined) updates.is_active = Boolean(body.is_active);
     if (body.priority !== undefined && ["low", "medium", "high"].includes(body.priority)) {
       updates.priority = body.priority;
     }

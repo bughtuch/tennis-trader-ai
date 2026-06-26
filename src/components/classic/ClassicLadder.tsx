@@ -45,6 +45,7 @@ interface ClassicLadderProps {
   stopLossPrice?: number | null;
   autoCenter?: boolean;
   onCancelUnmatched?: (price: number, side: "BACK" | "LAY") => void;
+  stakeBelowMin?: boolean;
 }
 
 /* ─── Mini Price Chart ─── */
@@ -96,6 +97,7 @@ export default function ClassicLadder({
   stopLossPrice,
   autoCenter = true,
   onCancelUnmatched,
+  stakeBelowMin = false,
 }: ClassicLadderProps) {
   /* ─── Recenter state ─── */
   const [manualCenter, setManualCenter] = useState<number | null>(null);
@@ -384,7 +386,7 @@ export default function ClassicLadder({
                 {/* BACK cell */}
                 <button
                   onClick={() => onTrade(row.price, "BACK")}
-                  disabled={tradeLoading || !isConnected}
+                  disabled={tradeLoading || !isConnected || stakeBelowMin}
                   className={`h-full relative text-right pr-2 font-mono [font-variant-numeric:tabular-nums] text-xs transition-colors ${
                     row.isBestBack
                       ? "bg-blue-200 hover:bg-blue-300 font-semibold text-blue-900"
@@ -455,7 +457,7 @@ export default function ClassicLadder({
                 {/* LAY cell */}
                 <button
                   onClick={() => onTrade(row.price, "LAY")}
-                  disabled={tradeLoading || !isConnected}
+                  disabled={tradeLoading || !isConnected || stakeBelowMin}
                   className={`h-full relative text-left pl-2 font-mono [font-variant-numeric:tabular-nums] text-xs transition-colors ${
                     row.isBestLay
                       ? "bg-pink-200 hover:bg-pink-300 font-semibold text-pink-900"

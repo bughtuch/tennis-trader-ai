@@ -380,8 +380,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       const data = await res.json();
       if (data.success) {
-        // Refresh unmatched orders
-        get().fetchUnmatchedOrders(marketId);
+        // Await refetch so callers can verify cancellation
+        await get().fetchUnmatchedOrders(marketId);
         return true;
       }
       return false;

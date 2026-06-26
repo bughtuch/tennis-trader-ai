@@ -125,6 +125,12 @@ export async function POST(req: NextRequest) {
       const responseText = await res.text();
       if (!res.ok) {
         console.log("[trade] HTTP error:", res.status, responseText.slice(0, 500));
+        if (res.status === 401 || res.status === 403) {
+          return NextResponse.json(
+            { success: false, error: "Betfair session expired. Please reconnect in Settings.", code: "SESSION_EXPIRED" },
+            { status: 401 }
+          );
+        }
         return NextResponse.json(
           { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}` },
           { status: res.status }
@@ -243,6 +249,12 @@ export async function POST(req: NextRequest) {
       const responseText = await res.text();
       if (!res.ok) {
         console.log("[trade] cancelOrder HTTP error:", res.status, responseText.slice(0, 500));
+        if (res.status === 401 || res.status === 403) {
+          return NextResponse.json(
+            { success: false, error: "Betfair session expired. Please reconnect in Settings.", code: "SESSION_EXPIRED" },
+            { status: 401 }
+          );
+        }
         return NextResponse.json(
           { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}` },
           { status: res.status }
@@ -283,6 +295,20 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Check for partial cancellation failures
+      const cancelReports = data?.instructionReports ?? [];
+      const failures = cancelReports.filter((r: { status: string }) => r.status === "FAILURE");
+      if (failures.length > 0) {
+        const errorDetail = failures.map((f: { instruction?: { betId?: string }; errorCode?: string }) =>
+          `${f.instruction?.betId ?? "?"}: ${f.errorCode ?? "UNKNOWN"}`
+        ).join("; ");
+        console.log("[trade] cancelOrder PARTIAL FAILURE:", errorDetail);
+        return NextResponse.json(
+          { success: false, error: `Some orders failed to cancel: ${errorDetail}` },
+          { status: 400 }
+        );
+      }
+
       return NextResponse.json({ success: true, result: data });
     }
 
@@ -311,6 +337,12 @@ export async function POST(req: NextRequest) {
       const responseText = await res.text();
       if (!res.ok) {
         console.log("[trade] listCurrentOrders HTTP error:", res.status, responseText.slice(0, 500));
+        if (res.status === 401 || res.status === 403) {
+          return NextResponse.json(
+            { success: false, error: "Betfair session expired. Please reconnect in Settings.", code: "SESSION_EXPIRED" },
+            { status: 401 }
+          );
+        }
         return NextResponse.json(
           { success: false, error: `Betfair API error: HTTP ${res.status} — ${responseText.slice(0, 300)}` },
           { status: res.status }

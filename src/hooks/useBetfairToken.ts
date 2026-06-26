@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useAppStore } from "@/lib/store";
 
 interface BetfairToken {
   token: string | null;
@@ -8,42 +8,21 @@ interface BetfairToken {
   username: string | null;
 }
 
+/**
+ * Single source of truth: reads from Zustand store.
+ * Token is retrieved from localStorage for API headers only.
+ */
 export function useBetfairToken(): BetfairToken {
-  const [state, setState] = useState<BetfairToken>({
-    token: null,
-    isConnected: false,
-    username: null,
-  });
+  const isConnected = useAppStore((s) => s.isConnected);
+  const username = useAppStore((s) => s.username);
 
-  useEffect(() => {
-    try {
-      const token = localStorage.getItem("betfair_token");
-      const username = localStorage.getItem("betfair_username");
-      const connectedAt = localStorage.getItem("betfair_connected_at");
+  // Token is still in localStorage for API header use (httpOnly cookie is primary)
+  let token: string | null = null;
+  try {
+    if (isConnected) {
+      token = localStorage.getItem("betfair_token");
+    }
+  } catch { /* SSR guard */ }
 
-      console.log("[useBetfairToken] Betfair connected:", !!token);
-
-      if (token) {
-        // Check expiry only if connectedAt exists
-        if (connectedAt) {
-          const expired = Date.now() > new Date(connectedAt).getTime() + 8 * 3600000;
-          if (expired) {
-            localStorage.removeItem("betfair_token");
-            localStorage.removeItem("betfair_token_type");
-            localStorage.removeItem("betfair_refresh_token");
-            localStorage.removeItem("betfair_username");
-            localStorage.removeItem("betfair_connected_at");
-            setState({ token: null, isConnected: false, username: null });
-            return;
-          }
-        }
-        setState({ token, isConnected: true, username });
-        return;
-      }
-    } catch { /* SSR guard */ }
-
-    setState({ token: null, isConnected: false, username: null });
-  }, []);
-
-  return state;
+  return { token, isConnected, username };
 }

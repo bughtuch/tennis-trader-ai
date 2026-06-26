@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useAppStore, type PriceSize, type PendingOrder } from "@/lib/store";
 import { calculateGreenUp, calculateLiability, calculateLayStakeFromLiability, moveByTicks, roundToTick, BETFAIR_MIN_STAKE } from "@/lib/tradingMaths";
 import { createClient } from "@/lib/supabase";
-import { useBetfairToken } from "@/hooks/useBetfairToken";
 import { useBetfairStream } from "@/hooks/useBetfairStream";
 import RiskRewardPanel from "@/components/RiskRewardPanel";
 import ServeHoldStats from "@/components/ServeHoldStats";
@@ -603,16 +602,8 @@ function TradingPage() {
     }
   }, [subscriptionLoaded, subscriptionStatus, marketId, eventId, p1Name, p2Name, p1Flag, p2Flag, tournament, router]);
 
-  /* ─── Betfair connection: read from shared hook ─── */
-  const { isConnected: betfairHookConnected } = useBetfairToken();
-  const [isConnected, setIsConnected] = useState(false);
-
-  useEffect(() => {
-    if (betfairHookConnected) {
-      setIsConnected(true);
-      useAppStore.setState({ isConnected: true });
-    }
-  }, [betfairHookConnected]);
+  /* ─── Betfair connection (single source: Zustand store) ─── */
+  const isConnected = useAppStore((s) => s.isConnected);
 
   const isLive = isConnected && !!marketId && !!marketBook;
 
