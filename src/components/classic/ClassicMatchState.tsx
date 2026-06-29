@@ -160,10 +160,15 @@ export default function ClassicMatchState({
         <div className="flex items-center gap-1.5 ml-auto shrink-0">
           {isScoreStale ? (
             <span className="text-[10px] font-medium text-amber-600">Score feed delayed</span>
+          ) : scoreConfidence === "estimated" ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span className="text-[10px] font-semibold text-amber-600">ESTIMATED</span>
+            </>
           ) : (
             <>
               <span className="w-2 h-2 rounded-full bg-green-500" />
-              <span className="text-[10px] font-semibold text-green-700">HIGH</span>
+              <span className="text-[10px] font-semibold text-green-700">RELIABLE</span>
             </>
           )}
           {provider && (
