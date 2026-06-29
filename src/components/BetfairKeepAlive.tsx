@@ -2,22 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import { useAppStore } from "@/lib/store";
-import { createClient } from "@/lib/supabase";
 
-const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes (was 20 — C3+H1 fix)
-
-function clearBetfairTokens() {
-  try {
-    localStorage.removeItem("betfair_token");
-    localStorage.removeItem("betfair_token_type");
-    localStorage.removeItem("betfair_refresh_token");
-    localStorage.removeItem("betfair_username");
-    localStorage.removeItem("betfair_connected_at");
-  } catch { /* SSR guard */ }
-  try {
-    document.cookie = "betfair_session=; Max-Age=0; path=/;";
-  } catch { /* SSR guard */ }
-}
+const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 export default function BetfairKeepAlive() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -54,21 +40,11 @@ export default function BetfairKeepAlive() {
             try { localStorage.setItem("betfair_token", data.newToken); } catch { /* SSR guard */ }
           }
         } else {
-          // Keep-alive failed (token revoked/expired) — clear all token stores
-          clearBetfairTokens();
-          useAppStore.setState({ isConnected: false, username: null, sessionExpiry: null });
-          // Clear Supabase profile to prevent stale reconnection
-          try {
-            const supabase = createClient();
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-              await supabase.from("profiles").update({
-                betfair_connected: false,
-                betfair_session_token: null,
-                betfair_connected_at: null,
-              }).eq("id", user.id);
-            }
-          } catch { /* non-critical */ }
+          // Keep-alive failed — mark disconnected but preserve tokens for retry.
+          // Do NOT destroy localStorage/Supabase: the SSO keepAlive endpoint may reject
+          // vendor OAuth tokens even though the token works for Exchange API trades.
+          // Tokens are only destroyed on explicit user logout/disconnect.
+          useAppStore.setState({ isConnected: false, sessionExpiry: null });
         }
       } catch {
         // Network error — don't change state, retry next interval

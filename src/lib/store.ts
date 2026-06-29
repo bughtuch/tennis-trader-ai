@@ -258,12 +258,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         sessionLoading: false,
       });
     } catch {
-      // Preserve subscription state if already set by fetchSubscriptionStatus() backup
-      const current = get();
-      set({
-        sessionLoading: false,
-        ...(!current.subscriptionLoaded && { subscriptionLoaded: true, subscriptionStatus: "inactive" }),
-      });
+      set({ sessionLoading: false });
     }
   },
 
