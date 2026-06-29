@@ -12,7 +12,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const sessionToken = req.cookies.get("betfair_session")?.value;
+    const sessionToken =
+      req.headers.get("x-betfair-token") ??
+      req.cookies.get("betfair_session")?.value;
     if (!sessionToken) {
       return NextResponse.json(
         { success: false, error: "No session token provided" },
@@ -50,6 +52,7 @@ export async function POST(req: NextRequest) {
         await supabase
           .from("profiles")
           .update({
+            betfair_connected: true,
             betfair_connected_at: new Date().toISOString(),
             betfair_session_token: newToken,
           })
@@ -59,11 +62,13 @@ export async function POST(req: NextRequest) {
       // Non-critical — keep-alive still succeeded
     }
 
-    // If Betfair rotated the token, update the cookie and notify client
+    // Ensure cookie is always set (may be missing if token came via header)
+    const activeToken = data.token ?? sessionToken;
     const rotatedToken = (data.token && data.token !== sessionToken) ? data.token : undefined;
     const response = NextResponse.json({ success: true, ...(rotatedToken && { newToken: rotatedToken }) });
-    if (rotatedToken) {
-      response.cookies.set("betfair_session", rotatedToken, {
+    const cookieToken = req.cookies.get("betfair_session")?.value;
+    if (!cookieToken || rotatedToken) {
+      response.cookies.set("betfair_session", activeToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",

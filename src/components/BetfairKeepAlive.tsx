@@ -38,7 +38,13 @@ export default function BetfairKeepAlive() {
       lastPingRef.current = now;
 
       try {
-        const res = await fetch("/api/betfair/keep-alive", { method: "POST" });
+        // Send localStorage token as header — matches trade/stream/scanner pattern
+        const headers: Record<string, string> = {};
+        try {
+          const t = localStorage.getItem("betfair_token");
+          if (t) headers["x-betfair-token"] = t;
+        } catch { /* SSR guard */ }
+        const res = await fetch("/api/betfair/keep-alive", { method: "POST", headers });
         const data = await res.json();
         if (data.success) {
           // Keep-alive succeeded — ensure store reflects connected state
