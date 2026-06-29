@@ -40,11 +40,11 @@ export default function BetfairKeepAlive() {
             try { localStorage.setItem("betfair_token", data.newToken); } catch { /* SSR guard */ }
           }
         } else {
-          // Keep-alive failed — mark disconnected but preserve tokens for retry.
-          // Do NOT destroy localStorage/Supabase: the SSO keepAlive endpoint may reject
-          // vendor OAuth tokens even though the token works for Exchange API trades.
-          // Tokens are only destroyed on explicit user logout/disconnect.
-          useAppStore.setState({ isConnected: false, sessionExpiry: null });
+          // Keep-alive failed — do NOT change connection state.
+          // The SSO keepAlive endpoint rejects vendor OAuth tokens even though
+          // they work for Exchange API trades. If the token is truly invalid,
+          // actual API calls will return SESSION_EXPIRED and handleSessionExpired()
+          // will properly disconnect.
         }
       } catch {
         // Network error — don't change state, retry next interval
