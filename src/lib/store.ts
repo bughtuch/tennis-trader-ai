@@ -182,6 +182,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   restoreSession: async () => {
     set({ sessionLoading: true });
+
+    // Fast-path: check localStorage for Betfair token (synchronous, no Supabase latency).
+    // Restores isConnected immediately — replaces the useBetfairToken() safety net removed in Sprint A.
+    try {
+      const lsToken = typeof window !== "undefined" ? localStorage.getItem("betfair_token") : null;
+      const lsConnAt = typeof window !== "undefined" ? localStorage.getItem("betfair_connected_at") : null;
+      if (lsToken && lsConnAt) {
+        const expired = Date.now() > new Date(lsConnAt).getTime() + 8 * 3600000;
+        if (!expired) {
+          set({ isConnected: true, username: localStorage.getItem("betfair_username") ?? "Connected" });
+        }
+      }
+    } catch { /* SSR guard */ }
+
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -205,7 +219,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       if (!profile?.betfair_connected || !profile?.betfair_session_token) {
-        set({ isConnected: false, sessionLoading: false });
+        // Don't override localStorage fast-path — Supabase may be stale after OAuth.
+        // Keep-alive will verify the token and disconnect if truly invalid.
+        if (!get().isConnected) {
+          set({ isConnected: false, sessionLoading: false });
+        } else {
+          set({ sessionLoading: false });
+        }
         return;
       }
 
@@ -217,12 +237,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       const now = Date.now();
 
       if (connectedAt > 0 && now > expiresAt) {
-        // Session expired — clear it
-        set({ isConnected: false, sessionExpiry: null, sessionLoading: false });
-        await supabase
-          .from("profiles")
-          .update({ betfair_connected: false, betfair_session_token: null, betfair_connected_at: null })
-          .eq("id", user.id);
+        // Session expired per Supabase — but don't override if localStorage fast-path
+        // already confirmed a valid token (Supabase timestamp may be stale)
+        if (!get().isConnected) {
+          set({ isConnected: false, sessionExpiry: null, sessionLoading: false });
+          await supabase
+            .from("profiles")
+            .update({ betfair_connected: false, betfair_session_token: null, betfair_connected_at: null })
+            .eq("id", user.id);
+        } else {
+          set({ sessionLoading: false });
+        }
         return;
       }
 
@@ -233,7 +258,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         sessionLoading: false,
       });
     } catch {
-      set({ sessionLoading: false });
+      // Preserve subscription state if already set by fetchSubscriptionStatus() backup
+      const current = get();
+      set({
+        sessionLoading: false,
+        ...(!current.subscriptionLoaded && { subscriptionLoaded: true, subscriptionStatus: "inactive" }),
+      });
     }
   },
 
