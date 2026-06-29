@@ -320,7 +320,7 @@ function SettingsPage() {
     if (!betfairStatus) return;
 
     if (betfairStatus === "connected") {
-      // Save OAuth token from URL to localStorage
+      // Save OAuth token from URL to localStorage and persist to Supabase
       const bt = searchParams.get("bt");
       const btt = searchParams.get("btt") || "BEARER";
       const brt = searchParams.get("brt");
@@ -336,7 +336,13 @@ function SettingsPage() {
         setBetfairConnected(true);
         setBetfairExpiry(new Date(Date.now() + 8 * 3600000).toISOString());
         setBetfairUsername("Connected via OAuth");
-        // Also persist to Supabase profile
+        // Set Zustand store directly — don't rely on restoreSession() which reads stale Supabase
+        useAppStore.setState({
+          isConnected: true,
+          username: "Connected via OAuth",
+          sessionExpiry: new Date(Date.now() + 8 * 3600000).toISOString(),
+        });
+        // Persist to Supabase, then restore full session (subscription status, etc.)
         (async () => {
           try {
             const supabase = createClient();
@@ -349,11 +355,12 @@ function SettingsPage() {
               }).eq("id", u.id);
             }
           } catch { /* non-critical — localStorage still valid */ }
+          // Now Supabase is updated — restoreSession will read correct data
+          restoreSession();
         })();
       }
       setSaveMessage("Betfair connected successfully!");
       setTimeout(() => setSaveMessage(null), 5000);
-      restoreSession();
     } else if (betfairStatus === "error") {
       const message = searchParams.get("message") ?? "Connection failed";
       setAuthError(message);

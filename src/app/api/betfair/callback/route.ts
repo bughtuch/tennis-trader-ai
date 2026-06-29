@@ -76,7 +76,16 @@ export async function GET(req: NextRequest) {
     console.log("[callback] redirect URL has bt:", settingsUrl.searchParams.has("bt"));
     console.log("[callback] redirect URL bt length:", settingsUrl.searchParams.get("bt")?.length);
 
-    return NextResponse.redirect(settingsUrl);
+    // Set betfair_session httpOnly cookie so keep-alive and API routes work
+    const response = NextResponse.redirect(settingsUrl);
+    response.cookies.set("betfair_session", customerToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 8 * 60 * 60,
+      path: "/",
+    });
+    return response;
   } catch (err) {
     console.error("[callback] Error:", err);
     settingsUrl.searchParams.set("betfair", "error");
