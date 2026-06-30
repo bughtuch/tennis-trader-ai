@@ -1991,6 +1991,7 @@ function ClassicTradingPage() {
               stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
               onCancelUnmatched={handleCancelUnmatchedP1}
               stakeBelowMin={stakeBelowMin}
+              isSuspended={marketBook?.status === "SUSPENDED"}
             />
           </div>
 
@@ -2016,6 +2017,7 @@ function ClassicTradingPage() {
               stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
               onCancelUnmatched={handleCancelUnmatchedP2}
               stakeBelowMin={stakeBelowMin}
+              isSuspended={marketBook?.status === "SUSPENDED"}
             />
           </div>
 
@@ -2056,6 +2058,7 @@ function ClassicTradingPage() {
             stakeBelowMin={stakeBelowMin}
             stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
             onCancelUnmatched={handleCancelUnmatchedP1}
+            isSuspended={marketBook?.status === "SUSPENDED"}
           />
           <ClassicLadder
             runner={runner1}
@@ -2077,6 +2080,7 @@ function ClassicTradingPage() {
             stakeBelowMin={stakeBelowMin}
             stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
             onCancelUnmatched={handleCancelUnmatchedP2}
+            isSuspended={marketBook?.status === "SUSPENDED"}
           />
         </div>
         {/* AI + Positions + Trust row below ladders */}
@@ -2138,6 +2142,7 @@ function ClassicTradingPage() {
                 stakeBelowMin={stakeBelowMin}
                 stopLossPrice={stopLossEnabled && (p1Agg && p1Agg.netSide !== "FLAT") ? stopLossPrice : null}
                 onCancelUnmatched={handleCancelUnmatchedP1}
+                isSuspended={marketBook?.status === "SUSPENDED"}
               />
               <ClassicLadder
                 runner={runner1}
@@ -2159,6 +2164,7 @@ function ClassicTradingPage() {
                 stakeBelowMin={stakeBelowMin}
                 stopLossPrice={stopLossEnabled && (p2Agg && p2Agg.netSide !== "FLAT") ? stopLossPrice : null}
                 onCancelUnmatched={handleCancelUnmatchedP2}
+                isSuspended={marketBook?.status === "SUSPENDED"}
               />
               </div>
             </div>

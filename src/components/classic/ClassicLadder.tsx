@@ -46,6 +46,7 @@ interface ClassicLadderProps {
   autoCenter?: boolean;
   onCancelUnmatched?: (price: number, side: "BACK" | "LAY") => void;
   stakeBelowMin?: boolean;
+  isSuspended?: boolean;
 }
 
 /* ─── Mini Price Chart ─── */
@@ -98,6 +99,7 @@ export default function ClassicLadder({
   autoCenter = true,
   onCancelUnmatched,
   stakeBelowMin = false,
+  isSuspended = false,
 }: ClassicLadderProps) {
   /* ─── Recenter state ─── */
   const [manualCenter, setManualCenter] = useState<number | null>(null);
@@ -352,13 +354,14 @@ export default function ClassicLadder({
       </div>
 
       {/* Ladder rows */}
-      <div className="min-h-0">
+      <div className="min-h-0 relative">
         {ladderRows.length === 0 ? (
           <div className="py-8 text-center text-xs text-gray-400">
             {isConnected ? "Awaiting prices..." : "No connection"}
           </div>
-        ) : (
-          [...ladderRows].reverse().map((row) => {
+        ) : (<>
+          <div className={isSuspended ? "opacity-50" : ""}>
+          {[...ladderRows].reverse().map((row, idx) => {
             const unmatchedAtPrice = unmatchedByPrice.get(row.price);
             const hasUnmatchedBack = (unmatchedAtPrice?.backSize ?? 0) > 0;
             const hasUnmatchedLay = (unmatchedAtPrice?.laySize ?? 0) > 0;
@@ -380,20 +383,20 @@ export default function ClassicLadder({
                 key={row.price}
                 className={`grid grid-cols-[1fr_auto_auto_1fr] items-center border-b border-gray-100 last:border-b-0 transition-colors duration-300 ${flashBg} ${
                   isStopLoss ? "ring-1 ring-inset ring-red-400 ring-dashed" : ""
-                }`}
+                } ${idx % 2 === 1 ? "bg-gray-50/40" : ""}`}
                 style={{ height: "30px" }}
               >
                 {/* BACK cell */}
                 <button
                   onClick={() => onTrade(row.price, "BACK")}
-                  disabled={tradeLoading || !isConnected || stakeBelowMin}
-                  className={`h-full relative text-right pr-2 font-mono [font-variant-numeric:tabular-nums] text-xs transition-colors ${
+                  disabled={tradeLoading || !isConnected || isSuspended || stakeBelowMin}
+                  className={`h-full relative text-right pr-2 font-mono [font-variant-numeric:tabular-nums] text-[13px] transition-colors ${
                     row.isBestBack
                       ? "bg-blue-200 hover:bg-blue-300 font-semibold text-blue-900"
                       : row.backSize > 0
-                        ? "bg-blue-50 hover:bg-blue-100 text-blue-800"
+                        ? "bg-blue-100/70 hover:bg-blue-100 text-blue-800"
                         : "hover:bg-blue-50 text-gray-400"
-                  } ${tradeLoading || !isConnected ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                  } ${tradeLoading || !isConnected || isSuspended ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
                 >
                   {/* Depth bar */}
                   {row.backSize > 0 && (
@@ -421,10 +424,10 @@ export default function ClassicLadder({
 
                 {/* PRICE + VOLUME cell */}
                 <div
-                  className={`h-full relative flex flex-col items-center justify-center font-mono [font-variant-numeric:tabular-nums] w-[60px] sm:w-[68px] ${
+                  className={`h-full relative flex flex-col items-center justify-center font-mono [font-variant-numeric:tabular-nums] w-[60px] sm:w-[68px] border-x border-gray-200 ${
                     row.isLastTraded
                       ? "bg-green-50 text-green-700 ring-1 ring-inset ring-green-200"
-                      : "bg-gray-50 text-gray-700"
+                      : "bg-gray-100/50 text-gray-700"
                   }`}
                 >
                   {isSessionHigh && (
@@ -435,9 +438,9 @@ export default function ClassicLadder({
                     <span className="absolute left-0.5 bottom-0 text-[8px] font-bold text-green-600 leading-none"
                       title={`Session Low: ${sessionLowRef.current.toFixed(2)}`}>L</span>
                   )}
-                  <span className="text-xs font-bold leading-tight">{row.price.toFixed(2)}</span>
+                  <span className="text-[13px] font-bold leading-tight">{row.price.toFixed(2)}</span>
                   {row.tradedVolume > 0 && (
-                    <span className="text-[9px] text-gray-400 font-mono leading-none">
+                    <span className="text-[10px] text-gray-500 font-mono leading-none">
                       {formatTradedVolume(row.tradedVolume)}
                     </span>
                   )}
@@ -446,7 +449,7 @@ export default function ClassicLadder({
                 {/* P&L cell (hidden on mobile) */}
                 <div className="h-full w-[32px] hidden sm:flex items-center justify-center bg-gray-50/50">
                   {row.pnl != null && (
-                    <span className={`text-[9px] font-mono font-semibold ${
+                    <span className={`text-[10px] font-mono font-semibold ${
                       row.pnl >= 0 ? "text-green-600" : "text-red-600"
                     }`}>
                       {row.pnl >= 0 ? "+" : ""}{row.pnl.toFixed(0)}
@@ -457,14 +460,14 @@ export default function ClassicLadder({
                 {/* LAY cell */}
                 <button
                   onClick={() => onTrade(row.price, "LAY")}
-                  disabled={tradeLoading || !isConnected || stakeBelowMin}
-                  className={`h-full relative text-left pl-2 font-mono [font-variant-numeric:tabular-nums] text-xs transition-colors ${
+                  disabled={tradeLoading || !isConnected || isSuspended || stakeBelowMin}
+                  className={`h-full relative text-left pl-2 font-mono [font-variant-numeric:tabular-nums] text-[13px] transition-colors ${
                     row.isBestLay
                       ? "bg-pink-200 hover:bg-pink-300 font-semibold text-pink-900"
                       : row.laySize > 0
-                        ? "bg-pink-50 hover:bg-pink-100 text-pink-800"
+                        ? "bg-pink-100/70 hover:bg-pink-100 text-pink-800"
                         : "hover:bg-pink-50 text-gray-400"
-                  } ${tradeLoading || !isConnected ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                  } ${tradeLoading || !isConnected || isSuspended ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
                 >
                   {row.laySize > 0 && (
                     <div
@@ -490,8 +493,16 @@ export default function ClassicLadder({
                 </button>
               </div>
             );
-          })
-        )}
+          })}
+          </div>
+          {isSuspended && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span className="text-sm font-bold tracking-widest text-red-600 bg-white/80 px-3 py-1 rounded">
+                SUSPENDED
+              </span>
+            </div>
+          )}
+        </>)}
       </div>
 
       {/* Footer: status + recenter */}
