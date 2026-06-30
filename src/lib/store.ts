@@ -171,10 +171,29 @@ interface AppState {
   }) => Promise<boolean>;
 }
 
+// Synchronous localStorage check — matches the settings page fast-path.
+// Eliminates the async gap between store creation and restoreSession().
+function readLocalStorageConnection(): { isConnected: boolean; username: string | null } {
+  if (typeof window === "undefined") return { isConnected: false, username: null };
+  try {
+    const token = localStorage.getItem("betfair_token");
+    const connAt = localStorage.getItem("betfair_connected_at");
+    if (token && connAt) {
+      const expired = Date.now() > new Date(connAt).getTime() + 8 * 3600000;
+      if (!expired) {
+        return { isConnected: true, username: localStorage.getItem("betfair_username") ?? "Connected" };
+      }
+    }
+  } catch { /* SSR guard */ }
+  return { isConnected: false, username: null };
+}
+
+const _initialConn = readLocalStorageConnection();
+
 export const useAppStore = create<AppState>((set, get) => ({
   // ─── Auth ───
-  isConnected: false,
-  username: null,
+  isConnected: _initialConn.isConnected,
+  username: _initialConn.username,
   authError: null,
   setAuthError: (error) => set({ authError: error }),
   sessionExpiry: null,
